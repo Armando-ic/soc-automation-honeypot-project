@@ -9,7 +9,7 @@ See the design spec and plan (in the parent workspace `docs/superpowers/`):
 
 ## Resources
 - Resource group: `rg-honeypot` (Central US)
-- VNet: (Task 2)
+- VNet: `vnet-honeypot` · Central US · `10.66.0.0/24` · subnet `snet-honeypot` `10.66.0.0/27` · **Peerings: NONE (verified 2026-06-24)** · Private subnet: Enabled (egress only via the Task-4 public IP) · no overlap with SOC `10.0.0.0/16`
 - NSG + rules: (Task 3 → see `nsg-rules.md`)
 - VM: (Task 4)
 - Budget/spend cap: (Task 5)
