@@ -33,3 +33,7 @@ Thumbs.db
 .claude/
 CLAUDE.md
 scratch/
+
+
+# Local-only working folder (handoff notes, scratch, VM login secrets) — never publish
+Personal/
