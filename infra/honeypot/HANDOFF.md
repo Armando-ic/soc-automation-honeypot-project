@@ -39,32 +39,40 @@ d836c42 Task 3 — nsg-honeypot rules (attack surface + tight egress)
 - ✅ **Task 0** branch + scaffold · ✅ **Task 1** Total Regional vCPUs raised **20→28** · ✅ **Task 2**
   `vnet-honeypot` `10.66.0.0/24` (subnet `snet-honeypot` `10.66.0.0/27`), **peerings empty** ·
   ✅ **Task 3** `nsg-honeypot` (3 inbound RDP/SMB/web `Destination=Any`; 5 outbound tight egress).
-- 🔶 **Task 4 (provision `vm-honeypot-win`) — PAUSED on VM size** (see next section).
+- 🔷 **Task 4 (provision `vm-honeypot-win`) — UNBLOCKED, gated on Basv2 quota.** Size **decided =
+  `Standard_B2als_v2`**; AD-lab reclaim DONE; Basv2 quota request submitted (see updated sections below).
 - ⬜ **Tasks 5–10:** budget/spend-cap, clean snapshot, Sysmon, Splunk `honeypot` index + Universal
   Forwarder (+ open Splunk's NSG to the honeypot IP), e2e telemetry validation, finalize RUNBOOK.
 
-## ⏸️ Task 4 VM size — decide after the AD-VM reclaim
-Honeypot should be cheap B-series. **B2s (v1)** has BS-family quota (0/10) but is **capacity-restricted**
-in Central US on this freshly-paid sub. **Bsv2** (B2als_v2 etc.) has capacity but **0 quota** (separate
-family). Two options:
-- **`Standard_B2als_v2`** (2 vCPU/4 GiB AMD, ~$38/mo) + one quick **BSv2-family** quota bump to 4 — cheapest.
-- **`Standard_D2s_v4`** (2 vCPU) reusing **DSv4** quota freed by deleting the AD lab — no new request, ~$100+/mo.
+## ✅ Task 4 VM size — DECIDED (2026-06-24): `Standard_B2als_v2`
+**`Standard_B2als_v2`** (2 vCPU / 4 GiB AMD, ~$38/mo) — cheapest 24/7 option. Family = **Basv2**
+(usage/portal label; Quota REST resource name `standardBasv2Family`). **B2s (v1) ruled out** —
+capacity-restricted in Central US on this freshly-paid sub. Fallback if Basv2 capacity is tight:
+`Standard_D2s_v4` (~$100/mo) reusing the DSv4 quota freed below.
 
-VM settings (when ready): RG `rg-honeypot`, name `vm-honeypot-win`, image **`Windows Server 2022
-Datacenter - x64 Gen 2`** (NOT Win11 — BYOL), **NIC NSG = None** (rely on subnet `nsg-honeypot`),
-**Public IP = Standard + Static**, **Public inbound ports = None**, auto-shutdown **OFF**, no hardening.
+VM settings (Task 4 portal form): RG `rg-honeypot`, name `vm-honeypot-win`, image **`Windows Server 2022
+Datacenter - x64 Gen 2`** (full Desktop Experience — NOT Win11/BYOL, NOT Server Core/Azure Edition/smalldisk),
+size `Standard_B2als_v2`, **Public inbound ports = None**, VNet `vnet-honeypot` / subnet `snet-honeypot`,
+**NIC NSG = None** (rely on subnet `nsg-honeypot`), **Public IP = Standard + Static**, auto-shutdown **OFF**,
+no hardening. Admin password = STRONG (RDP service exposure is the surface, not a weak password) and lives
+ONLY in the gitignored secrets file — never committed/echoed.
 
-## 🎯 ACTIVE NEXT ACTION — delete the abandoned AD lab (user is done with it)
-- **DELETE `rg-sysadmin-lab`** — 4 VMs, all `Standard_D2s_v4` (2 vCPU each = **8 vCPU DSv4**), currently
-  Stopped(deallocated): **`CLIENT01`** (20.9.35.71), **`CLIENT02`** (40.78.186.104), **`DC01`**
-  (20.9.74.252), **`FS01`** (135.119.89.166). Deleting the whole resource group is fastest **if it holds
-  only AD-lab resources — confirm with user.**
-- **DO NOT TOUCH `rg-soc-v2-azure-central-us`** (the SOC stack the honeypot depends on):
-  `vm-soc-v2-splunk` (10.0.0.5 / public **20.236.193.253**, D4s_v3), `vm-soc-v2-n8n` (10.0.0.6, D2s_v3),
-  `vm-soc-v2-iris` (10.0.0.7, D2s_v3), `vm-soc-v2-win` (10.0.0.4, D4as_v7).
-- **IMPORTANT:** every VM was deallocated yet quota read 20/20 → **deallocation did NOT free vCPU quota
-  here. You must DELETE to reclaim quota + disk cost.** When deleting, **also check the boxes to delete
-  OS disks, NICs, and public IPs** (Azure orphans them by default). Verify quota usage drops afterward.
+## ✅ DONE (2026-06-24) — AD-lab reclaim + Basv2 quota request
+- **`rg-sysadmin-lab` DELETED** via `az group delete` (whole-RG delete took the 4 VMs + OS disks + NICs +
+  public IPs in one shot — the per-VM orphan caveat didn't apply). Was 4× `Standard_D2s_v4` (CLIENT01/
+  CLIENT02/DC01/FS01 = 8 vCPU DSv4, all deallocated). Verified it held ONLY AD-lab resources first.
+- **Quota after delete: Total Regional 20 → 12 / 28** (16 free); **DSv4 8 → 0 / 10**. (Confirmed
+  deallocation alone did NOT free quota — deletion did.)
+- **SOC stack `rg-soc-v2-azure-central-us` untouched** (4 VMs verified present): `vm-soc-v2-splunk`
+  (10.0.0.5 / public **20.236.193.253**), `vm-soc-v2-n8n`, `vm-soc-v2-iris`, `vm-soc-v2-win`.
+- **Basv2 quota request submitted** (0 → 4) via Quota REST API — request id
+  `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
+  (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
+
+## 🎯 ACTIVE NEXT ACTION — provision `vm-honeypot-win` (Task 4, portal-driven by USER)
+Once Basv2 limit ≥ 2: USER creates the VM in the portal per the settings above, turns auto-shutdown OFF,
+notes the **static public IP**, and Claude commits the README/RUNBOOK config-as-docs + adds the Splunk-NSG
+inbound 9997-from-honeypot-IP rule at Task 8.
 
 ## Key pipeline facts (Option A telemetry — decided)
 - Honeypot is **UN-peered**. Universal Forwarder → Splunk's **public** IP **`20.236.193.253:9997`**,
