@@ -41,8 +41,12 @@ d836c42 Task 3 — nsg-honeypot rules (attack surface + tight egress)
   ✅ **Task 3** `nsg-honeypot` (3 inbound RDP/SMB/web `Destination=Any`; 5 outbound tight egress).
 - 🔷 **Task 4 (provision `vm-honeypot-win`) — UNBLOCKED, gated on Basv2 quota.** Size **decided =
   `Standard_B2als_v2`**; AD-lab reclaim DONE; Basv2 quota request submitted (see updated sections below).
-- ⬜ **Tasks 5–10:** budget/spend-cap, clean snapshot, Sysmon, Splunk `honeypot` index + Universal
-  Forwarder (+ open Splunk's NSG to the honeypot IP), e2e telemetry validation, finalize RUNBOOK.
+- 🔷 **Tasks 7 & 8 artifacts PRE-STAGED** (during the quota wait, 2026-06-24): `sysmon-config.xml`
+  (SwiftOnSecurity v74, pinned commit `1836897`) and `splunk-inputs.conf` (Sysmon+Security+System →
+  `honeypot` index) committed. Only their **on-VM install** steps remain (gated on the VM).
+- ⬜ **Tasks 5, 6, 9, 10 + the 7/8 install steps:** budget/spend-cap ($60 on `rg-honeypot`), clean
+  snapshot (after Task 8), install Sysmon + Universal Forwarder on the VM, create Splunk `honeypot`
+  index + open Splunk's NSG to the honeypot IP (port 9997), e2e telemetry validation, finalize RUNBOOK.
 
 ## ✅ Task 4 VM size — DECIDED (2026-06-24): `Standard_B2als_v2`
 **`Standard_B2als_v2`** (2 vCPU / 4 GiB AMD, ~$38/mo) — cheapest 24/7 option. Family = **Basv2**
