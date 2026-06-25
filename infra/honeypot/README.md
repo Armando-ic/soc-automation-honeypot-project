@@ -12,7 +12,7 @@ See the design spec and plan (in the parent workspace `docs/superpowers/`):
 - VNet: `vnet-honeypot` · Central US · `10.66.0.0/24` · subnet `snet-honeypot` `10.66.0.0/27` · **Peerings: NONE (verified 2026-06-24)** · Private subnet: Enabled (egress only via the Task-4 public IP) · no overlap with SOC `10.0.0.0/16`
 - NSG: `nsg-honeypot` → see `nsg-rules.md` (associated to `snet-honeypot`; 3 inbound + 5 outbound, created 2026-06-24)
 - VM: `vm-honeypot-win` → **DONE 2026-06-25**, see `## VM (Task 4)` below. Public IP **`128.203.185.25`**.
-- Budget/spend cap: (Task 5)
+- Budget/spend cap: **DONE 2026-06-25** — `budget-honeypot-monthly` $60/mo on `rg-honeypot`, actual alerts 50/90/100% → `owner@example.com`. (Alert-only; not a hard auto-stop.)
 - Baseline snapshot: (Task 6/8)
 - Sysmon config: **authored & version-pinned** → see `sysmon-config.xml` (SwiftOnSecurity baseline; Task 7 — on-VM install pending the VM)
 - UF inputs: **authored** → see `splunk-inputs.conf` (Sysmon+WinEventLog → `honeypot` index; Task 8 — on-VM UF install + Splunk-side index/NSG pending the VM)

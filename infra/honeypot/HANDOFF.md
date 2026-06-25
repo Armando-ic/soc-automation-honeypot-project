@@ -74,10 +74,9 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 ACTIVE NEXT ACTION — Task 5 budget, then on-VM agent installs (Tasks 7–8)
-VM is live. Remaining Plan 0A work:
-1. **Task 5 (USER, portal):** Cost Management → Budgets → scope `rg-honeypot`, **$60/mo**, alerts 50/90/100% → `redactedsystem@gmail.com`.
-2. **RDP in** to `128.203.185.25` (creds in `Personal/honeypot-vm-creds.txt`) and confirm the login prompt is reachable from a non-Azure network (Task 4 Step 3 — proves the attack surface is live).
+## 🎯 ACTIVE NEXT ACTION — on-VM agent installs (Tasks 7–8)
+VM is live; ✅ **Task 5 budget DONE** (`budget-honeypot-monthly` $60/mo, 50/90/100% → `owner@example.com`);
+✅ **RDP reachability confirmed** (Task 4 Step 3) with admin pw reset to the user's chosen value. Remaining Plan 0A:
 3. **Task 7 (USER on VM):** install Sysmon with the repo's `sysmon-config.xml` (`sysmon64 -accepteula -i sysmon-config.xml`); disable Defender real-time protection so attacks proceed.
 4. **Task 8 (USER on VM + Splunk):** create Splunk `honeypot` index + confirm 9997 receiver; **add Splunk-NSG inbound 9997 from `128.203.185.25`/32**; install Universal Forwarder (outputs → `20.236.193.253:9997`) + `splunk-inputs.conf` + `Splunk_TA_microsoft_sysmon`.
 5. **Task 6 snapshot** (after Task 8), **Task 9** e2e validation, **Task 10** runbook.
