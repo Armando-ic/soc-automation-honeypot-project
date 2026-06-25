@@ -14,8 +14,8 @@ See the design spec and plan (in the parent workspace `docs/superpowers/`):
 - VM: (Task 4 — size **`Standard_B2als_v2`** decided 2026-06-24; pending Basv2 quota)
 - Budget/spend cap: (Task 5)
 - Baseline snapshot: (Task 6/8)
-- Sysmon config: (Task 7 → see `sysmon-config.xml`)
-- UF inputs: (Task 8 → see `splunk-inputs.conf`)
+- Sysmon config: **authored & version-pinned** → see `sysmon-config.xml` (SwiftOnSecurity baseline; Task 7 — on-VM install pending the VM)
+- UF inputs: **authored** → see `splunk-inputs.conf` (Sysmon+WinEventLog → `honeypot` index; Task 8 — on-VM UF install + Splunk-side index/NSG pending the VM)
 
 ## v2-azure environment (telemetry target — Option A)
 Honeypot stays UN-peered and forwards to Splunk's PUBLIC IP. Confirmed 2026-06-23:
