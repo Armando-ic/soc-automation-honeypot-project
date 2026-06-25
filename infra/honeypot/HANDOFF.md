@@ -39,8 +39,9 @@ d836c42 Task 3 — nsg-honeypot rules (attack surface + tight egress)
 - ✅ **Task 0** branch + scaffold · ✅ **Task 1** Total Regional vCPUs raised **20→28** · ✅ **Task 2**
   `vnet-honeypot` `10.66.0.0/24` (subnet `snet-honeypot` `10.66.0.0/27`), **peerings empty** ·
   ✅ **Task 3** `nsg-honeypot` (3 inbound RDP/SMB/web `Destination=Any`; 5 outbound tight egress).
-- 🔷 **Task 4 (provision `vm-honeypot-win`) — UNBLOCKED, gated on Basv2 quota.** Size **decided =
-  `Standard_B2als_v2`**; AD-lab reclaim DONE; Basv2 quota request submitted (see updated sections below).
+- ✅ **Task 4 `vm-honeypot-win` DONE (2026-06-25)** — `Standard_B2als_v2`, **Windows Server 2022** Gen2,
+  Standard security, public **`128.203.185.25`** (Static) / private `10.66.0.4`, NIC NSG=none, auto-shutdown
+  OFF, running. Admin creds in gitignored `Personal/honeypot-vm-creds.txt`. (See `## VM` in README.)
 - 🔷 **Tasks 7 & 8 artifacts PRE-STAGED** (during the quota wait, 2026-06-24): `sysmon-config.xml`
   (SwiftOnSecurity v74, pinned commit `1836897`) and `splunk-inputs.conf` (Sysmon+Security+System →
   `honeypot` index) committed. Only their **on-VM install** steps remain (gated on the VM).
@@ -73,10 +74,14 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 ACTIVE NEXT ACTION — provision `vm-honeypot-win` (Task 4, portal-driven by USER)
-Once Basv2 limit ≥ 2: USER creates the VM in the portal per the settings above, turns auto-shutdown OFF,
-notes the **static public IP**, and Claude commits the README/RUNBOOK config-as-docs + adds the Splunk-NSG
-inbound 9997-from-honeypot-IP rule at Task 8.
+## 🎯 ACTIVE NEXT ACTION — Task 5 budget, then on-VM agent installs (Tasks 7–8)
+VM is live. Remaining Plan 0A work:
+1. **Task 5 (USER, portal):** Cost Management → Budgets → scope `rg-honeypot`, **$60/mo**, alerts 50/90/100% → `redactedsystem@gmail.com`.
+2. **RDP in** to `128.203.185.25` (creds in `Personal/honeypot-vm-creds.txt`) and confirm the login prompt is reachable from a non-Azure network (Task 4 Step 3 — proves the attack surface is live).
+3. **Task 7 (USER on VM):** install Sysmon with the repo's `sysmon-config.xml` (`sysmon64 -accepteula -i sysmon-config.xml`); disable Defender real-time protection so attacks proceed.
+4. **Task 8 (USER on VM + Splunk):** create Splunk `honeypot` index + confirm 9997 receiver; **add Splunk-NSG inbound 9997 from `128.203.185.25`/32**; install Universal Forwarder (outputs → `20.236.193.253:9997`) + `splunk-inputs.conf` + `Splunk_TA_microsoft_sysmon`.
+5. **Task 6 snapshot** (after Task 8), **Task 9** e2e validation, **Task 10** runbook.
+Note: provisioning was done via `az` CLI (user-authorized), not the portal — but on-VM + Splunk steps still need the USER.
 
 ## Key pipeline facts (Option A telemetry — decided)
 - Honeypot is **UN-peered**. Universal Forwarder → Splunk's **public** IP **`20.236.193.253:9997`**,

@@ -11,7 +11,7 @@ See the design spec and plan (in the parent workspace `docs/superpowers/`):
 - Resource group: `rg-honeypot` (Central US)
 - VNet: `vnet-honeypot` · Central US · `10.66.0.0/24` · subnet `snet-honeypot` `10.66.0.0/27` · **Peerings: NONE (verified 2026-06-24)** · Private subnet: Enabled (egress only via the Task-4 public IP) · no overlap with SOC `10.0.0.0/16`
 - NSG: `nsg-honeypot` → see `nsg-rules.md` (associated to `snet-honeypot`; 3 inbound + 5 outbound, created 2026-06-24)
-- VM: (Task 4 — size **`Standard_B2als_v2`** decided 2026-06-24; pending Basv2 quota)
+- VM: `vm-honeypot-win` → **DONE 2026-06-25**, see `## VM (Task 4)` below. Public IP **`128.203.185.25`**.
 - Budget/spend cap: (Task 5)
 - Baseline snapshot: (Task 6/8)
 - Sysmon config: **authored & version-pinned** → see `sysmon-config.xml` (SwiftOnSecurity baseline; Task 7 — on-VM install pending the VM)
@@ -40,8 +40,22 @@ Honeypot stays UN-peered and forwards to Splunk's PUBLIC IP. Confirmed 2026-06-2
   8 vCPU DSv4, all deallocated). Whole-RG delete removed VMs + OS disks + NICs + public IPs in one shot.
   Result: **Total Regional 20 → 12 / 28** (16 free), **DSv4 8 → 0 / 10**. (Note: deallocation alone did
   NOT free vCPU quota — deletion did.) SOC RG `rg-soc-v2-azure-central-us` left untouched (4 VMs verified).
-- **Basv2 quota request submitted** 2026-06-24 (0 → 4) via Quota REST API, request id
-  `ae2f78c6-cace-43d1-9c3a-fdf02e70e580` — status InProgress at submit; VM deploy gated on it landing.
+- **Basv2 quota request** 2026-06-24 (0 → 4) via Quota REST API (req `ae2f78c6-…`) was **declined by
+  the auto-grant path** (`QuotaNotAvailableForResource`) even though the SKU is **unrestricted** in
+  Central US (all 3 zones). Resolved by a **free quota support request** → **granted 2026-06-25**
+  (Basv2 0 → 4; Total Regional umbrella also bumped to 32).
+
+## VM (Task 4 — DONE 2026-06-25)
+- `vm-honeypot-win` · `Standard_B2als_v2` (2 vCPU/4 GiB) · **Windows Server 2022 Datacenter Gen2**
+  (`2022-datacenter-g2`) · security type **Standard** · `rg-honeypot` / `vnet-honeypot` / `snet-honeypot`.
+- **Public IP (Standard, STATIC): `128.203.185.25`** · Private IP `10.66.0.4` · OS disk Standard SSD LRS.
+- **NIC NSG = none** (subnet `nsg-honeypot` governs) · **Auto-shutdown OFF** · **Hardening: NONE (intentional)** · Power: running.
+- Admin creds: in **gitignored `Personal/honeypot-vm-creds.txt`** (user `analyst`; password NOT recorded here).
+- Provisioned via `az vm create` (after the AD-lab reclaim freed quota). Note: a first attempt
+  accidentally used the Win Server **2025** image; deleted and recreated as **2022** per plan. Using
+  `--security-type Standard` via CLI required registering `Microsoft.Compute/UseStandardSecurityType`
+  (the portal does this silently).
+- **`128.203.185.25` is the source IP for Splunk's inbound 9997 NSG allow-rule at Task 8.**
 
 ## Rebuild
 Restore the clean snapshot (Task 6) + re-confirm the NSG association (Task 3) +
