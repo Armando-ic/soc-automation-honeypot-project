@@ -14,7 +14,7 @@ See the design spec and plan (in the parent workspace `docs/superpowers/`):
 - VM: `vm-honeypot-win` → **DONE 2026-06-25**, see `## VM (Task 4)` below. Public IP **`128.203.185.25`**.
 - Budget/spend cap: **DONE 2026-06-25** — `budget-honeypot-monthly` $60/mo on `rg-honeypot`, actual alerts 50/90/100% → `owner@example.com`. (Alert-only; not a hard auto-stop.)
 - Baseline snapshot: (Task 6/8)
-- Sysmon config: **authored & version-pinned** → see `sysmon-config.xml` (SwiftOnSecurity baseline; Task 7 — on-VM install pending the VM)
+- Sysmon config: **installed & logging (Task 7 DONE 2026-06-25)** → `sysmon-config.xml` (SwiftOnSecurity v74, schema 4.50) installed via Sysmon64 v15.21; Operational channel producing Id 1/22; Defender real-time disabled (intentional).
 - UF inputs: **authored** → see `splunk-inputs.conf` (Sysmon+WinEventLog → `honeypot` index; Task 8 — on-VM UF install + Splunk-side index/NSG pending the VM)
 
 ## v2-azure environment (telemetry target — Option A)
