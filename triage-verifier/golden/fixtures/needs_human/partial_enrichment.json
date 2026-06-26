@@ -1,0 +1,8 @@
+{ "name": "partial_enrichment", "expected": { "passed": true, "fails_check": null },
+  "result": { "schema_version": "v1", "alert_summary": "Outbound to a domain that VirusTotal could not resolve.",
+    "severity": "medium", "severity_rationale": "Enrichment incomplete; verdict uncertain.",
+    "mitre_techniques": [{ "id": "T1071.001", "name": "Web Protocols", "tactic": "command-and-control" }],
+    "iocs": { "ips": [], "domains": ["maybe-bad.example.net"], "file_hashes": [], "users": [], "hosts": ["vm-honeypot-win"] },
+    "iocs_enriched": [{ "value": "maybe-bad.example.net", "ioc_type": "domain", "verdict": "unknown", "source": "virustotal", "summary": "No data returned." }],
+    "recommended_actions": [{ "description": "Re-run enrichment; consider URLscan.", "priority": "medium" }],
+    "investigation_notes": "Human call pending fuller enrichment." } }

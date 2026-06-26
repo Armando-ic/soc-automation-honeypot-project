@@ -1,0 +1,8 @@
+{ "name": "external_logon", "expected": { "passed": true, "fails_check": null },
+  "result": { "schema_version": "v1", "alert_summary": "Successful external RDP logon for administrator from 198.51.100.7.",
+    "severity": "medium", "severity_rationale": "Successful external logon, source not yet confirmed malicious.",
+    "mitre_techniques": [{ "id": "T1021.001", "name": "Remote Desktop Protocol", "tactic": "lateral-movement" }],
+    "iocs": { "ips": ["198.51.100.7"], "domains": [], "file_hashes": [], "users": ["administrator"], "hosts": ["vm-honeypot-win"] },
+    "iocs_enriched": [{ "value": "198.51.100.7", "ioc_type": "ip", "verdict": "unknown", "source": "abuseipdb", "summary": "No reports." }],
+    "recommended_actions": [{ "description": "Confirm whether the logon was authorized.", "priority": "high" }],
+    "investigation_notes": "Verify geo/ASN of 198.51.100.7 against expected admin locations." } }

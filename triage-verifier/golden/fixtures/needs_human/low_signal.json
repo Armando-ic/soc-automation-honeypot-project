@@ -1,0 +1,6 @@
+{ "name": "low_signal", "expected": { "passed": true, "fails_check": null },
+  "result": { "schema_version": "v1", "alert_summary": "Single failed logon; likely noise.",
+    "severity": "low", "severity_rationale": "One failed attempt; below brute-force threshold.",
+    "mitre_techniques": [], "iocs": { "ips": ["203.0.113.55"], "domains": [], "file_hashes": [], "users": ["guest"], "hosts": ["vm-honeypot-win"] },
+    "iocs_enriched": [], "recommended_actions": [{ "description": "No action; monitor for escalation.", "priority": "low" }],
+    "investigation_notes": "Borderline; human may want to confirm it is not the start of a campaign." } }

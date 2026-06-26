@@ -1,0 +1,8 @@
+{ "name": "ambiguous_logon", "expected": { "passed": true, "fails_check": null },
+  "result": { "schema_version": "v1", "alert_summary": "Off-hours admin logon; could be legitimate maintenance.",
+    "severity": "medium", "severity_rationale": "Ambiguous; needs human judgment on whether maintenance was scheduled.",
+    "mitre_techniques": [{ "id": "T1021.001", "name": "Remote Desktop Protocol", "tactic": "lateral-movement" }],
+    "iocs": { "ips": ["198.51.100.23"], "domains": [], "file_hashes": [], "users": ["svc_admin"], "hosts": ["vm-honeypot-win"] },
+    "iocs_enriched": [{ "value": "198.51.100.23", "ioc_type": "ip", "verdict": "unknown", "source": "abuseipdb", "summary": "No reports." }],
+    "recommended_actions": [{ "description": "Confirm maintenance window with ops.", "priority": "medium" }],
+    "investigation_notes": "Human call: scheduled maintenance vs unauthorized access." } }

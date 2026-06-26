@@ -1,0 +1,8 @@
+{ "name": "mimikatz", "expected": { "passed": true, "fails_check": null },
+  "result": { "schema_version": "v1", "alert_summary": "LSASS access consistent with mimikatz on vm-honeypot-win.",
+    "severity": "critical", "severity_rationale": "Credential dumping with a known-malicious binary hash.",
+    "mitre_techniques": [{ "id": "T1003.001", "name": "LSASS Memory", "tactic": "credential-access" }],
+    "iocs": { "ips": [], "domains": [], "file_hashes": ["44d88612fea8a8f36de82e1278abb02f"], "users": ["administrator"], "hosts": ["vm-honeypot-win"] },
+    "iocs_enriched": [{ "value": "44d88612fea8a8f36de82e1278abb02f", "ioc_type": "file_hash", "verdict": "malicious", "source": "virustotal", "summary": "58/72 engines flag mimikatz." }],
+    "recommended_actions": [{ "description": "Isolate vm-honeypot-win via Falcon Contain.", "priority": "critical" }],
+    "investigation_notes": "Hash is the EICAR-adjacent test sample in the lab; treat as credential-theft drill." } }
