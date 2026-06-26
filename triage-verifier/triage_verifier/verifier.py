@@ -36,6 +36,7 @@ _BUCKET_FOR_TYPE = {"ip": "ips", "domain": "domains", "file_hash": "file_hashes"
 _SHAPE_FOR_TYPE = {"ip": _is_ip, "domain": _is_domain, "file_hash": _is_hash}
 
 from triage_verifier.attack_reference import AttackReference
+from triage_verifier.constants import BAD_VERDICTS, HIGH_SEVERITY_TACTICS
 from triage_verifier.models import CheckResult, CheckStatus, TriageVerificationReport
 from triage_verifier.normalizer import normalize_triage_result
 
@@ -61,10 +62,13 @@ class TriageVerifier:
             self._check_mitre_id_exists(norm),
             self._check_mitre_name_match(norm),
             self._check_mitre_tactic_valid(norm),
+            self._check_severity_supported(norm),
+            self._check_verdict_sourced(norm),
         ]
         return TriageVerificationReport(
             results=tuple(results),
             repair_events=tuple(repair_events),
+            provenance=self._build_provenance(norm),
         )
 
     # --- check 1 -------------------------------------------------------------
@@ -133,3 +137,44 @@ class TriageVerifier:
             return CheckResult("mitre_tactic_valid", CheckStatus.FAILED,
                                "tactic not valid for technique", tuple(offending))
         return CheckResult("mitre_tactic_valid", CheckStatus.PASSED)
+
+    # --- check 7 -------------------------------------------------------------
+    def _check_severity_supported(self, norm: dict) -> CheckResult:
+        severity = norm.get("severity")
+        if severity not in ("high", "critical"):
+            return CheckResult("severity_supported", CheckStatus.PASSED)
+        has_bad_ioc = any(e.get("verdict") in BAD_VERDICTS for e in norm["iocs_enriched"])
+        has_hot_tactic = any(
+            set(self._ref.tactics_for(t.get("id", ""))) & HIGH_SEVERITY_TACTICS
+            for t in norm["mitre_techniques"]
+        )
+        if has_bad_ioc or has_hot_tactic:
+            return CheckResult("severity_supported", CheckStatus.PASSED)
+        return CheckResult("severity_supported", CheckStatus.FAILED,
+                           "high/critical without malicious IOC or high-severity tactic",
+                           (f"severity:{severity}",))
+
+    # --- check 8 -------------------------------------------------------------
+    def _check_verdict_sourced(self, norm: dict) -> CheckResult:
+        offending = tuple(e.get("value", "") for e in norm["iocs_enriched"]
+                          if e.get("verdict") in BAD_VERDICTS and not (e.get("source") or "").strip())
+        if offending:
+            return CheckResult("verdict_sourced", CheckStatus.FAILED,
+                               "malicious/suspicious verdict without a source", offending)
+        return CheckResult("verdict_sourced", CheckStatus.PASSED)
+
+    # --- provenance ----------------------------------------------------------
+    def _build_provenance(self, norm: dict) -> tuple[dict, ...]:
+        prov: list[dict] = []
+        for t in norm["mitre_techniques"]:
+            tid = t.get("id", "")
+            prov.append({"item": tid, "kind": "technique",
+                         "grounded_in": "attack_reference" if self._ref.id_exists(tid) else "absent",
+                         "note": self._ref.name_for(tid) or ""})
+        observed = {v for bucket in norm["iocs"].values() for v in bucket}
+        for e in norm["iocs_enriched"]:
+            val = e.get("value", "")
+            prov.append({"item": val, "kind": "ioc",
+                         "grounded_in": "observed_iocs" if val in observed else "absent",
+                         "note": e.get("verdict", "")})
+        return tuple(prov)

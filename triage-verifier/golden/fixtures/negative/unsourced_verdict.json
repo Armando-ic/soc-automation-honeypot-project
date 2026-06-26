@@ -1,0 +1,6 @@
+{ "name": "unsourced_verdict", "expected": { "passed": false, "fails_check": "verdict_sourced" },
+  "result": { "schema_version": "v1", "alert_summary": "x", "severity": "low", "severity_rationale": "x",
+    "mitre_techniques": [],
+    "iocs": { "ips": ["203.0.113.10"], "domains": [], "file_hashes": [], "users": [], "hosts": [] },
+    "iocs_enriched": [{ "value": "203.0.113.10", "ioc_type": "ip", "verdict": "malicious", "source": "", "summary": "no source" }],
+    "recommended_actions": [], "investigation_notes": "x" } }

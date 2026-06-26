@@ -51,3 +51,21 @@ def test_positive_passes_mitre_checks(verifier):
     report = verifier.verify(load_fixture("positive", "rdp_bruteforce")["result"])
     for check in ("mitre_id_exists", "mitre_name_match", "mitre_tactic_valid"):
         assert status_of(report, check) == CheckStatus.PASSED
+
+
+def test_unsupported_critical_fails(verifier):
+    report = verifier.verify(load_fixture("negative", "unsupported_critical")["result"])
+    assert status_of(report, "severity_supported") == CheckStatus.FAILED
+
+
+def test_unsourced_verdict_fails(verifier):
+    report = verifier.verify(load_fixture("negative", "unsourced_verdict")["result"])
+    assert status_of(report, "verdict_sourced") == CheckStatus.FAILED
+
+
+def test_positive_passes_all_eight_and_has_provenance(verifier):
+    report = verifier.verify(load_fixture("positive", "rdp_bruteforce")["result"])
+    deterministic = [r for r in report.results if r.status != CheckStatus.NOT_APPLICABLE]
+    assert all(r.status == CheckStatus.PASSED for r in deterministic)
+    assert any(p["kind"] == "technique" for p in report.provenance)
+    assert any(p["kind"] == "ioc" for p in report.provenance)

@@ -1,0 +1,6 @@
+{ "name": "unsupported_critical", "expected": { "passed": false, "fails_check": "severity_supported" },
+  "result": { "schema_version": "v1", "alert_summary": "x", "severity": "critical",
+    "severity_rationale": "overclaimed", "mitre_techniques": [{ "id": "T1059.001", "name": "PowerShell", "tactic": "execution" }],
+    "iocs": { "ips": ["203.0.113.10"], "domains": [], "file_hashes": [], "users": [], "hosts": [] },
+    "iocs_enriched": [{ "value": "203.0.113.10", "ioc_type": "ip", "verdict": "clean", "source": "abuseipdb", "summary": "benign" }],
+    "recommended_actions": [], "investigation_notes": "x" } }
