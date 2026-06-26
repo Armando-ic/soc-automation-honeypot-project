@@ -1,0 +1,5 @@
+{ "name": "wrong_name", "expected": { "passed": false, "fails_check": "mitre_name_match" },
+  "result": { "schema_version": "v1", "alert_summary": "x", "severity": "low", "severity_rationale": "x",
+    "mitre_techniques": [{ "id": "T1059.001", "name": "Mimikatz", "tactic": "execution" }],
+    "iocs": { "ips": [], "domains": [], "file_hashes": [], "users": [], "hosts": [] },
+    "iocs_enriched": [], "recommended_actions": [], "investigation_notes": "x" } }

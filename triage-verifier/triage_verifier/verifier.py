@@ -12,6 +12,10 @@ _HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
 _DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9_-]{1,63}\.)+[A-Za-z]{2,}$")
 
 
+def _norm_name(s: str) -> str:
+    return " ".join(s.split()).lower()
+
+
 def _is_ip(value: str) -> bool:
     try:
         ipaddress.ip_address(value)
@@ -54,6 +58,9 @@ class TriageVerifier:
             self._check_schema_valid(norm),
             self._check_iocs_enriched_grounded(norm),
             self._check_ioc_type_consistent(norm),
+            self._check_mitre_id_exists(norm),
+            self._check_mitre_name_match(norm),
+            self._check_mitre_tactic_valid(norm),
         ]
         return TriageVerificationReport(
             results=tuple(results),
@@ -92,3 +99,37 @@ class TriageVerifier:
             return CheckResult("ioc_type_consistent", CheckStatus.FAILED,
                                "ioc_type mismatches value shape or bucket", tuple(offending))
         return CheckResult("ioc_type_consistent", CheckStatus.PASSED)
+
+    # --- check 4 -------------------------------------------------------------
+    def _check_mitre_id_exists(self, norm: dict) -> CheckResult:
+        offending = tuple(t.get("id", "") for t in norm["mitre_techniques"]
+                          if not self._ref.id_exists(t.get("id", "")))
+        if offending:
+            return CheckResult("mitre_id_exists", CheckStatus.FAILED,
+                               "technique id not in ATT&CK reference", offending)
+        return CheckResult("mitre_id_exists", CheckStatus.PASSED)
+
+    # --- check 5 -------------------------------------------------------------
+    def _check_mitre_name_match(self, norm: dict) -> CheckResult:
+        offending: list[str] = []
+        for t in norm["mitre_techniques"]:
+            official = self._ref.name_for(t.get("id", ""))
+            if official is not None and _norm_name(t.get("name", "")) != _norm_name(official):
+                offending.append(t.get("id", ""))
+        if offending:
+            return CheckResult("mitre_name_match", CheckStatus.FAILED,
+                               "technique name does not match ATT&CK", tuple(offending))
+        return CheckResult("mitre_name_match", CheckStatus.PASSED)
+
+    # --- check 6 -------------------------------------------------------------
+    def _check_mitre_tactic_valid(self, norm: dict) -> CheckResult:
+        offending: list[str] = []
+        for t in norm["mitre_techniques"]:
+            tid = t.get("id", "")
+            tactics = self._ref.tactics_for(tid)
+            if tactics and _norm_name(t.get("tactic", "")).replace(" ", "-") not in tactics:
+                offending.append(tid)
+        if offending:
+            return CheckResult("mitre_tactic_valid", CheckStatus.FAILED,
+                               "tactic not valid for technique", tuple(offending))
+        return CheckResult("mitre_tactic_valid", CheckStatus.PASSED)
