@@ -1,0 +1,11 @@
+{
+  "T1110": { "name": "Brute Force", "tactics": ["credential-access"] },
+  "T1110.001": { "name": "Password Guessing", "tactics": ["credential-access"] },
+  "T1003": { "name": "OS Credential Dumping", "tactics": ["credential-access"] },
+  "T1003.001": { "name": "LSASS Memory", "tactics": ["credential-access"] },
+  "T1059": { "name": "Command and Scripting Interpreter", "tactics": ["execution"] },
+  "T1059.001": { "name": "PowerShell", "tactics": ["execution"] },
+  "T1021.001": { "name": "Remote Desktop Protocol", "tactics": ["lateral-movement"] },
+  "T1071.001": { "name": "Web Protocols", "tactics": ["command-and-control"] },
+  "T1041": { "name": "Exfiltration Over C2 Channel", "tactics": ["exfiltration"] }
+}
