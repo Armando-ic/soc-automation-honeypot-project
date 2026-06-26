@@ -1,4 +1,4 @@
-# Honeypot Agentic-SOC Upgrade — HANDOFF (2026-06-24)
+# Honeypot Agentic-SOC Upgrade — HANDOFF (2026-06-26)
 
 **For the next fresh Claude instance. Read this first**, then the spec + Plan 0A.
 
@@ -42,12 +42,17 @@ d836c42 Task 3 — nsg-honeypot rules (attack surface + tight egress)
 - ✅ **Task 4 `vm-honeypot-win` DONE (2026-06-25)** — `Standard_B2als_v2`, **Windows Server 2022** Gen2,
   Standard security, public **`128.203.185.25`** (Static) / private `10.66.0.4`, NIC NSG=none, auto-shutdown
   OFF, running. Admin creds in gitignored `Personal/honeypot-vm-creds.txt`. (See `## VM` in README.)
-- 🔷 **Tasks 7 & 8 artifacts PRE-STAGED** (during the quota wait, 2026-06-24): `sysmon-config.xml`
-  (SwiftOnSecurity v74, pinned commit `1836897`) and `splunk-inputs.conf` (Sysmon+Security+System →
-  `honeypot` index) committed. Only their **on-VM install** steps remain (gated on the VM).
-- ⬜ **Tasks 5, 6, 9, 10 + the 7/8 install steps:** budget/spend-cap ($60 on `rg-honeypot`), clean
-  snapshot (after Task 8), install Sysmon + Universal Forwarder on the VM, create Splunk `honeypot`
-  index + open Splunk's NSG to the honeypot IP (port 9997), e2e telemetry validation, finalize RUNBOOK.
+- ✅ **Task 5 budget** `budget-honeypot-monthly` $60/mo (50/90/100% → `owner@example.com`).
+- ✅ **Task 7 Sysmon** installed (SwiftOnSecurity v74 via Sysmon64 v15.21) + Defender RT disabled.
+- ✅ **Task 8 UF** (10.4.0) forwarding to `20.236.193.253:9997`; Splunk `honeypot` index + 9997 receiver +
+  NSG `allow-uf-9997-from-honeypot` (prio 1030) all live.
+- ✅ **Task 9 e2e VALIDATED 2026-06-26** — `index=honeypot`: Security 6,130 + System 466 +
+  **Sysmon (XmlWinEventLog) 3,330**. (Two bugs fixed: egress port typo `997`→`9997`; Sysmon
+  `subscribeToEvtChannel errorCode=5` cleared via `wevtutil sl` + UF restart. See `RUNBOOK.md`.)
+- ✅ **Task 6 snapshot** `snap-honeypot-clean` (`rg-honeypot`, full) — clean instrumented baseline.
+- ✅ **Task 10 RUNBOOK** finalized (rebuild, lifecycle, malware, cost, hygiene, troubleshooting).
+
+## 🟢 PLAN 0A COMPLETE (2026-06-26) — honeypot host telemetry → Splunk `honeypot` index, validated.
 
 ## ✅ Task 4 VM size — DECIDED (2026-06-24): `Standard_B2als_v2`
 **`Standard_B2als_v2`** (2 vCPU / 4 GiB AMD, ~$38/mo) — cheapest 24/7 option. Family = **Basv2**
@@ -74,12 +79,20 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 ACTIVE NEXT ACTION — on-VM agent installs (Tasks 7–8)
-VM is live; ✅ **Task 5 budget DONE** (`budget-honeypot-monthly` $60/mo, 50/90/100% → `owner@example.com`);
-✅ **RDP reachability confirmed** (Task 4 Step 3) with admin pw reset to the user's chosen value. Remaining Plan 0A:
-3. **Task 7 (USER on VM):** install Sysmon with the repo's `sysmon-config.xml` (`sysmon64 -accepteula -i sysmon-config.xml`); disable Defender real-time protection so attacks proceed.
-4. **Task 8 (USER on VM + Splunk):** create Splunk `honeypot` index + confirm 9997 receiver; **add Splunk-NSG inbound 9997 from `128.203.185.25`/32**; install Universal Forwarder (outputs → `20.236.193.253:9997`) + `splunk-inputs.conf` + `Splunk_TA_microsoft_sysmon`.
-5. **Task 6 snapshot** (after Task 8), **Task 9** e2e validation, **Task 10** runbook.
+## 🎯 ACTIVE NEXT ACTION — Plan 0B (CrowdStrike Falcon), next session
+Plan 0A is done (honeypot telemetry flowing into Splunk `honeypot`). Next:
+- **0B — CrowdStrike Falcon:** 15-day trial; install the sensor on `vm-honeypot-win` in **detect-only**
+  (verify via `pattern_disposition_details` all-false); OAuth API creds (Alerts:Read + Hosts:Read/Write);
+  validate the `Contain` round-trip. See `infra/honeypot/crowdstrike-api-notes.md`. Sensor download +
+  install can be done via `az vm run-command` (no RDP needed) — see RUNBOOK "Remote ops note".
+- Then **0C** (verifier + eval harness, TDD) and **0D** (n8n wiring; fork `JSON/Analyze_Crowdstrike_detections.json`).
+- Optional 0A polish: install `Splunk_TA_microsoft_sysmon` on the Splunk indexer/SH for nicer Sysmon
+  field extraction (not blocking — raw XML already lands in `honeypot`).
+
+### Useful facts for next session
+- Honeypot admin: RDP/Run-Command to `128.203.185.25`, user `analyst`, pw in `Personal/honeypot-vm-creds.txt`.
+- Splunk auto-shuts 23:00 ET; START `vm-soc-v2-splunk` (portal) before expecting live ingestion. UF queues meanwhile.
+- I can run honeypot-VM commands via `az vm run-command invoke -g rg-honeypot -n vm-honeypot-win` (as SYSTEM, no RDP).
 Note: provisioning was done via `az` CLI (user-authorized), not the portal — but on-VM + Splunk steps still need the USER.
 
 ## Key pipeline facts (Option A telemetry — decided)

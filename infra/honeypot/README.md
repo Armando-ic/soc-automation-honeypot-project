@@ -13,9 +13,9 @@ See the design spec and plan (in the parent workspace `docs/superpowers/`):
 - NSG: `nsg-honeypot` → see `nsg-rules.md` (associated to `snet-honeypot`; 3 inbound + 5 outbound, created 2026-06-24)
 - VM: `vm-honeypot-win` → **DONE 2026-06-25**, see `## VM (Task 4)` below. Public IP **`128.203.185.25`**.
 - Budget/spend cap: **DONE 2026-06-25** — `budget-honeypot-monthly` $60/mo on `rg-honeypot`, actual alerts 50/90/100% → `owner@example.com`. (Alert-only; not a hard auto-stop.)
-- Baseline snapshot: (Task 6/8)
+- Baseline snapshot: **DONE 2026-06-26** — `snap-honeypot-clean` (`rg-honeypot`, full, Standard_LRS) — clean instrumented baseline (Sysmon+UF already working). Rebuild source; see `RUNBOOK.md`.
 - Sysmon config: **installed & logging (Task 7 DONE 2026-06-25)** → `sysmon-config.xml` (SwiftOnSecurity v74, schema 4.50) installed via Sysmon64 v15.21; Operational channel producing Id 1/22; Defender real-time disabled (intentional).
-- UF inputs: **authored** → see `splunk-inputs.conf` (Sysmon+WinEventLog → `honeypot` index; Task 8 — on-VM UF install + Splunk-side index/NSG pending the VM)
+- UF inputs: **DONE 2026-06-26** → `splunk-inputs.conf` deployed; UF 10.4.0 on the VM forwards to `20.236.193.253:9997`; Splunk `honeypot` index + 9997 receiver + NSG rule (`allow-uf-9997-from-honeypot`) all live.
 
 ## v2-azure environment (telemetry target — Option A)
 Honeypot stays UN-peered and forwards to Splunk's PUBLIC IP. Confirmed 2026-06-23:
@@ -56,6 +56,15 @@ Honeypot stays UN-peered and forwards to Splunk's PUBLIC IP. Confirmed 2026-06-2
   `--security-type Standard` via CLI required registering `Microsoft.Compute/UseStandardSecurityType`
   (the portal does this silently).
 - **`128.203.185.25` is the source IP for Splunk's inbound 9997 NSG allow-rule at Task 8.**
+
+## Telemetry validation (Tasks 8–9 — DONE 2026-06-26)
+End-to-end proof the honeypot host telemetry reaches Splunk. `index=honeypot | stats count by source sourcetype`:
+- `WinEventLog:Security` (sourcetype `WinEventLog`) — 6,130 (logon activity incl. internet brute-force)
+- `WinEventLog:System` (sourcetype `WinEventLog`) — 466
+- `XmlWinEventLog:Microsoft-Windows-Sysmon/Operational` (sourcetype `XmlWinEventLog`) — 3,330
+Two bring-up bugs were fixed to get here (both = silent zero-events): the egress NSG port typo `997`→`9997`,
+and the Sysmon `subscribeToEvtChannel errorCode=5` (stuck post-install subscription). Full diagnosis +
+fixes in `RUNBOOK.md → Troubleshooting`. **Plan 0A done.**
 
 ## Rebuild
 Restore the clean snapshot (Task 6) + re-confirm the NSG association (Task 3) +
