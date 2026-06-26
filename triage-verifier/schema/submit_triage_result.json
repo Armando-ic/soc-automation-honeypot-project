@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "submit_triage_result",
+  "type": "object",
+  "required": ["schema_version", "alert_summary", "severity", "severity_rationale", "mitre_techniques", "iocs", "iocs_enriched", "recommended_actions", "investigation_notes"],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["v1"] },
+    "alert_summary": { "type": "string" },
+    "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+    "severity_rationale": { "type": "string" },
+    "mitre_techniques": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "name", "tactic"], "properties": {
+        "id": { "type": "string" }, "name": { "type": "string" }, "tactic": { "type": "string" } } }
+    },
+    "iocs": {
+      "type": "object",
+      "required": ["ips", "domains", "file_hashes", "users", "hosts"],
+      "properties": {
+        "ips": { "type": "array", "items": { "type": "string" } },
+        "domains": { "type": "array", "items": { "type": "string" } },
+        "file_hashes": { "type": "array", "items": { "type": "string" } },
+        "users": { "type": "array", "items": { "type": "string" } },
+        "hosts": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "iocs_enriched": {
+      "type": "array",
+      "items": { "type": "object", "required": ["value", "ioc_type", "verdict", "source", "summary"], "properties": {
+        "value": { "type": "string" },
+        "ioc_type": { "type": "string", "enum": ["ip", "domain", "file_hash"] },
+        "verdict": { "type": "string", "enum": ["malicious", "suspicious", "clean", "unknown"] },
+        "source": { "type": "string" },
+        "summary": { "type": "string" } } }
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": { "type": "object", "required": ["description", "priority"], "properties": {
+        "description": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "critical"] } } }
+    },
+    "investigation_notes": { "type": "string" }
+  }
+}

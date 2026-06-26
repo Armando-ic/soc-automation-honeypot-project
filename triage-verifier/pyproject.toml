@@ -1,0 +1,33 @@
+[project]
+name = "triage-verifier"
+version = "0.1.0"
+description = "Credibility-gate verifier + eval harness for SOC triage output (honeypot Phase 0C)"
+requires-python = ">=3.12"
+dependencies = ["jsonschema>=4.21", "anthropic>=0.40"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "black>=24.0", "isort>=5.13", "mypy>=1.8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["triage_verifier*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
