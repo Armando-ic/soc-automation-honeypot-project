@@ -23,3 +23,11 @@ def load_fixture(category: str, name: str) -> dict:
 
 def status_of(report, check_name):
     return next((r.status for r in report.results if r.name == check_name), None)
+
+
+from triage_verifier.judge import StubJudge
+
+
+@pytest.fixture
+def verifier_with_judge():
+    return TriageVerifier.from_paths(SCHEMA, DATA, judge=StubJudge())

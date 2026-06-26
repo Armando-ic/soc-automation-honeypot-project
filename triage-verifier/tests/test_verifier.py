@@ -92,3 +92,9 @@ def test_enrichment_grounded_active_when_context_supplied(verifier):
     assert status_of(ok, "enrichment_grounded") == CheckStatus.PASSED
     bad = verifier.verify(result, enrichment_results={"203.0.113.10": "clean"})
     assert status_of(bad, "enrichment_grounded") == CheckStatus.FAILED
+
+
+def test_judge_result_present_but_non_blocking(verifier_with_judge):
+    report = verifier_with_judge.verify(load_fixture("positive", "rdp_bruteforce")["result"])
+    assert status_of(report, "judge") == CheckStatus.NEEDS_HUMAN
+    assert report.passed is True

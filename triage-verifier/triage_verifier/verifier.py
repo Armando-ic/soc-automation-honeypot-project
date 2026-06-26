@@ -65,6 +65,8 @@ class TriageVerifier:
             self._check_severity_supported(norm),
             self._check_verdict_sourced(norm),
         ]
+        if self._judge is not None:
+            results.append(self._judge.assess(norm, self._ref))
         results.append(self._check_mitre_in_retrieved(norm, retrieved))
         results.append(self._check_enrichment_grounded(norm, enrichment_results))
         return TriageVerificationReport(
