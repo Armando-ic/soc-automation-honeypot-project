@@ -79,9 +79,10 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-26) — 0B trial running · 0C planned & READY TO BUILD
-Plan 0A done. This session: researched + planned **both** 0B and 0C; Falcon trial submitted (clock running).
-**Fresh instance's primary task = execute Plan 0C subagent-driven.** 0B is in flight (waiting on the trial email).
+## 🎯 CURRENT STATE (2026-06-26) — 0A done · 0C ✅ BUILT · 0B trial running · 0D next
+Plan 0A done. Plan 0C **COMPLETE** (built subagent-driven this session — see below). Falcon 0B trial in flight
+(waiting on the trial email; USER does 0B Tasks 2–7 hands-on when it lands). **Next primary task = Plan 0D
+(n8n wiring), which consumes the 0C verifier.**
 
 **Plan 0B — CrowdStrike Falcon — PLANNED, trial in flight.**
 - Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT workspace).
@@ -97,14 +98,23 @@ Plan 0A done. This session: researched + planned **both** 0B and 0C; Falcon tria
 - Already committed (0B Task 0 + prep): `falcon-detect-only-policy.md`, `scripts/falcon-contain-roundtrip.ps1`.
   0B done-when: detect-only sensor + OAuth API + `Contain`→`Lift` captured. Keep/drop deferred to ~trial day 14.
 
-**Plan 0C — Triage verifier + eval harness — PLANNED, READY TO BUILD (do this now, subagent-driven).**
+**Plan 0C — Triage verifier + eval harness — ✅ COMPLETE (built 2026-06-26, subagent-driven).**
 - Spec: `docs/superpowers/specs/2026-06-26-triage-verifier-eval-design.md` (PARENT).
-- Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0c-triage-verifier.md` (PARENT) — **13 tasks (0–12),
-  TDD, complete code in every step.** Builds a NEW standalone package `triage-verifier/` in the repo: a pure
-  offline verifier porting the **SOP-RAG `PythonVerifier`** pattern (8 deterministic checks + advisory judge +
-  2 deferred Qdrant hooks) + golden fixtures + `eval.py` gate. No external deps — fully buildable now.
-- **Execute SUBAGENT-DRIVEN** (user's choice): one fresh subagent per task; review red→green→commit between
-  tasks (use `superpowers:subagent-driven-development`). Commits land in the repo on `ai-upgrade`.
+- Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0c-triage-verifier.md` (PARENT) — all 13 tasks (0–12)
+  executed via `superpowers:subagent-driven-development` (fresh implementer + task reviewer per task, opus
+  final whole-branch review). Built the standalone package **`triage-verifier/`** in the repo: pure offline
+  verifier (8 deterministic checks + advisory judge that never auto-approves + 2 deferred Qdrant hooks
+  reporting NOT_APPLICABLE until 0D) + 14 golden fixtures + `eval.py` gate. **35 pytest tests pass; `eval.py`
+  14/14 matched, exit 0.**
+- **Commits:** Plan 0C range `2d3eb88..80f1c9d` on `ai-upgrade` (13 task commits + 1 final-review hardening
+  fix `b134f20` + 1 gitignore cleanup `80f1c9d`). Final-review fix: decoupled `ioc_type_consistent` from
+  absent IOCs (grounding owns "absent") + tightened `eval.py` to enforce exactly-one-failure per negative
+  fixture (spec §8). Per-task ledger: `.superpowers/sdd/progress.md` (gitignored scratch).
+- **0D carry-forward (latent, 0C makes no live call):** `ClaudeJudge` prompt embeds `str(result)` (untrusted
+  LLM output) — when 0D wires the live call, keep judge status hardcoded `NEEDS_HUMAN` + treat judge notes as
+  untrusted display text. Also: `triage-verifier/` has no black/isort/mypy gate wired (configured in
+  pyproject but not enforced); a few plan-mandated cosmetic import-order/dead-name nits remain (a one-shot
+  `isort`+`black` pass would normalize them).
 - **Then 0D** — n8n wiring (fork `JSON/Analyze_Crowdstrike_detections.json`; Alerts API; Opus triage + the 0C
   verifier + enrichment + Qdrant + Iris + Discord + Falcon `Contain` + run-log). 0D supplies the
   `retrieved`/`enrichment_results` context that flips 0C's two deferred checks live, and runs the real ClaudeJudge.
@@ -130,7 +140,7 @@ cost) vs. accept batched overnight triage.
 ## Roadmap after 0A (0B & 0C now PLANNED — CURRENT STATE above is authoritative)
 - **0B — CrowdStrike Falcon:** plan written; trial running. (The earlier "/detects API · Alerts:Read+Hosts:RW
   · az-run-command install" framing is **SUPERSEDED** — see CURRENT STATE + the rewritten `crowdstrike-api-notes.md`.)
-- **0C — verifier + eval (TDD):** plan written (13 tasks); SOP-RAG `PythonVerifier` pattern; package `triage-verifier/`.
+- **0C — verifier + eval (TDD):** ✅ BUILT (`triage-verifier/`, 35 tests + `eval.py` 14/14; range `2d3eb88..80f1c9d`).
 - **0D — n8n wiring:** fork `JSON/Analyze_Crowdstrike_detections.json`; build on the **Alerts API**; replace the
   Jira/Slack tail with Opus triage + the 0C verifier + enrichment roster (GreyNoise/AbuseIPDB/VT/URLscan) +
   Qdrant + DFIR-Iris + Discord + Falcon `Contain` + run-log; tight poll (not daily); fix the VT URL typo.
