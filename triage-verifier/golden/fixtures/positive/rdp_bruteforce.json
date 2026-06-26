@@ -1,0 +1,15 @@
+{
+  "name": "rdp_bruteforce",
+  "expected": { "passed": true, "fails_check": null },
+  "result": {
+    "schema_version": "v1",
+    "alert_summary": "External RDP brute-force against vm-honeypot-win from 203.0.113.10.",
+    "severity": "high",
+    "severity_rationale": "Sustained external brute force with a malicious source IP per AbuseIPDB.",
+    "mitre_techniques": [{ "id": "T1110.001", "name": "Password Guessing", "tactic": "credential-access" }],
+    "iocs": { "ips": ["203.0.113.10"], "domains": [], "file_hashes": [], "users": ["administrator"], "hosts": ["vm-honeypot-win"] },
+    "iocs_enriched": [{ "value": "203.0.113.10", "ioc_type": "ip", "verdict": "malicious", "source": "abuseipdb", "summary": "Confidence 100, 480 reports." }],
+    "recommended_actions": [{ "description": "Block source IP 203.0.113.10 at the edge.", "priority": "high" }],
+    "investigation_notes": "Brute force only; no successful logon observed yet."
+  }
+}

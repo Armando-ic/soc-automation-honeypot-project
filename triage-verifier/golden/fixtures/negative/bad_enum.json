@@ -1,0 +1,10 @@
+{
+  "name": "bad_enum",
+  "expected": { "passed": false, "fails_check": "schema_valid" },
+  "result": {
+    "schema_version": "v1",
+    "alert_summary": "x", "severity": "SEV1", "severity_rationale": "x",
+    "mitre_techniques": [], "iocs": { "ips": [], "domains": [], "file_hashes": [], "users": [], "hosts": [] },
+    "iocs_enriched": [], "recommended_actions": [], "investigation_notes": "x"
+  }
+}
