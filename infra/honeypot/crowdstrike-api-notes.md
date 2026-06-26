@@ -1,60 +1,81 @@
 # CrowdStrike Falcon API — integration notes (for Plans 0B & 0D)
 
-Distilled from the official n8n template `JSON/Analyze_Crowdstrike_detections.json`
-(2023, "Analyze CrowdStrike detections → VirusTotal → Jira → Slack") plus CrowdStrike
-API knowledge. **Confirm exact endpoint versions/scopes against the live Falcon API
-docs / Swagger at build time** — versions drift, and our tenant's cloud differs.
+Field shapes distilled from the official n8n template `JSON/Analyze_Crowdstrike_detections.json`
+(2023), **confirmed and corrected against the live Falcon docs (developer.crowdstrike.com) on
+2026-06-26** via a research+verify pass. Where the template and current reality disagree, current
+reality wins — several template endpoints are now **dead** (see §3).
 
-> Provenance tags: **[TEMPLATE]** = verified from the n8n export. **[STD]** = standard
-> documented Falcon endpoint. **[VERIFY]** = modern direction; confirm current path/version.
+> **Provenance tags:**
+> **[CONFIRMED 2026-06-26]** = verified against current official docs this session.
+> **[TEMPLATE]** = from the 2023 n8n export — useful as a *field reference* only.
+> **[STALE]** = superseded / decommissioned — **do not build on this.**
 
 ---
 
-## 1. Auth — use n8n's native credential, no manual OAuth
+## 0. Trial & tier reality (decided for Plan 0B) [CONFIRMED 2026-06-26]
 
-- The HTTP Request nodes use `authentication: predefinedCredentialType`,
-  `nodeCredentialType: crowdStrikeOAuth2Api`. **[TEMPLATE]**
-- n8n manages the OAuth2 **client-credentials** flow (token mint + refresh) for you —
-  the same HTTP-Tool pattern already used for AbuseIPDB / VirusTotal. No manual
-  `POST /oauth2/token`. **[TEMPLATE]**
-- You create the credential from a Falcon **API client** (client_id + secret) with
-  explicit **API scopes**. Minimum scopes for our use **[STD / VERIFY]**:
-  - **Alerts: Read** (or legacy **Detections: Read**) — pull detections.
-  - **Hosts: Read** and **Hosts: Write** — required for the `Contain` / `Lift
-    Containment` device action.
-  - (Real Time Response / RTR is a *separate* scope set — not needed for network
-    containment; only if we later script on-host commands, which is Pro/Enterprise.)
+- The **15-day free, no-credit-card, self-service** trial still exists. Access is emailed **~24h**
+  after the form (not instant); newly-enabled modules can take **~30 min** to go live.
+- ⚠️ The trial **defaults to Falcon Go modules (NGAV only) — no EDR, no RTR.** Real EDR comes from
+  **self-enabling the free "Falcon Insight XDR" module** from the in-console **CrowdStrike Store**
+  during the trial. *Enable it first and confirm EDR detections + API access actually unlock in-trial*
+  (the trial-edition Insight unlock is the one thing not officially guaranteed).
+- **Sustained pricing (corrects the old "keep Go ~$30–60 for EDR" assumption — Go has NO EDR):**
+  - Falcon **Go** — $59.99/device/yr — NGAV + Device Control + Mobile. **No EDR.** (max 100 devices)
+  - Falcon **Pro** — $99.99/device/yr — adds firewall mgmt. **Still no EDR** (the standalone Pro
+    marketing page wrongly lists EDR — trust the official comparison table, not that page).
+  - Falcon **Enterprise** — $184.99/device/yr — **first tier with EDR (Insight XDR) + RTR.**
+  - → **Sustained EDR ≈ $185/device/yr, not $60.** All three are self-service, no sales contract.
+- **Plan 0B decision:** *trial-capture, decide keep/drop at trial end.* 0B provisions nothing paid.
 
-## 2. Cloud-specific base URL (gotcha)
+## 1. Auth [CONFIRMED 2026-06-26]
 
-The template hardcodes **`https://api.us-2.crowdstrike.com`**. **[TEMPLATE]** The API base
-is **per-cloud** — use whatever our Falcon tenant is provisioned in: **[STD]**
+- OAuth2 **client-credentials**: `POST {base}/oauth2/token` (form-encoded `client_id` + `client_secret`;
+  `member_cid` optional). **30-minute** token. Revoke early: `POST {base}/oauth2/revoke`.
+- **Create the API client** in the console: **Support and resources → API clients and keys → Add new
+  API client.** The **secret is shown once**; the **Base URL** (your cloud) is shown in the same window.
+- **n8n path:** the HTTP Request nodes use `authentication: predefinedCredentialType`,
+  `nodeCredentialType: crowdStrikeOAuth2Api` — n8n mints/refreshes the token for you (same HTTP-Tool
+  pattern as AbuseIPDB/VT). No manual `/oauth2/token`. **[TEMPLATE]**
+- **Scopes for our build** (one client, superset so 0D needs no new client):
+  **Alerts: Read, Alerts: Write, Hosts: Read, Hosts: Write, Event streams: Read.**
+  - **0B minimum:** Alerts: Read + Hosts: Read + Hosts: Write.
+  - **Do NOT** select the legacy **Detections** scope — its API is gone (§3).
+
+## 2. Cloud-specific base URL [CONFIRMED 2026-06-26]
+
+API base is **per-cloud**; the SDK auto-discovers it on auth for commercial clouds, but for raw HTTP
+we hardcode it. Read **your** cloud from the Base URL shown at API-client creation (or the console
+hostname, e.g. `falcon.us-2.crowdstrike.com` → us-2).
+
 - us-1 → `https://api.crowdstrike.com`
 - us-2 → `https://api.us-2.crowdstrike.com`
 - eu-1 → `https://api.eu-1.crowdstrike.com`
-- us-gov-1 → `https://api.laggar.gcw.crowdstrike.com`
+- us-gov-1 → `https://api.laggar.gcw.crowdstrike.com` · us-gov-2 → `https://api.us-gov-2.crowdstrike.mil`
 
-The dashboard/UI links are likewise per-cloud (template uses `falcon.us-2.crowdstrike.com`).
+> **Our tenant cloud = TBD** — record it here once the trial client is created (the template's hardcoded
+> `api.us-2.crowdstrike.com` is the template's tenant, not necessarily ours).
 
-## 3. Pull detections — two-step fetch
+## 3. Pull detections — Alerts API (legacy Detects API is DEAD) [CONFIRMED 2026-06-26]
 
-**Legacy Detects API (what the template uses):** **[TEMPLATE]**
-1. `GET /detects/queries/detects/v1?filter=status:'new'` → returns detection IDs in `resources[]`.
-2. `POST /detects/entities/summaries/GET/v1` body `{"ids":[<ids>]}` → full detection objects.
+> ⚠️ **The legacy `/detects/*` service collection was DECOMMISSIONED 2025-09-30 and now returns 404.**
+> The template's `GET /detects/queries/detects/v1` + `POST /detects/entities/summaries/GET/v1` calls
+> are **dead** — do not use them. **[STALE]** Build entirely on the **Alerts API**:
 
-**Modern Alerts API (preferred for new builds — the Detects API is deprecated):** **[VERIFY]**
-1. `GET /alerts/queries/alerts/v2?filter=<FQL>` → returns alert `composite_id`s.
-2. `POST /alerts/entities/alerts/v2` body `{"composite_ids":[…]}` → full alert objects.
-3. `PATCH /alerts/entities/alerts/v3` → update alert status (e.g. new→in_progress→closed).
+1. `GET {base}/alerts/queries/alerts/v2?filter=<FQL>` → alert **`composite_id`s** in `resources[]`. (Alerts: Read)
+2. `POST {base}/alerts/entities/alerts/v2` body `{"composite_ids":[…]}` → full alert objects. (Alerts: Read)
+3. `PATCH {base}/alerts/entities/alerts/v3` → update status (new→in_progress→closed). (Alerts: Write)
+   - Body uses `composite_ids` + an action-parameters payload — **confirm the exact body schema against
+     the live Alerts Swagger before hardcoding** (it is not a bare `ids` array).
+- Pagination beyond 10k: `POST {base}/alerts/combined/alerts/v1` with an `after` token.
 
-> **Decision for 0D:** build on the **Alerts API**; treat the template's Detects shape as
-> the field reference. Confirm exact v2/v3 paths + FQL filter fields against current docs.
+## 4. Alert/detection data shape (triage input + Sigma fodder)
 
-## 4. Detection data shape (triage input + Sigma fodder)
+Field reference from the template's *legacy Detects* response. **[TEMPLATE]** Most fields carry over to
+Alerts v2, but the top-level id is now `composite_id` (not `detection_id`) — **confirm field names
+against a real Alerts v2 response** when wiring 0D.
 
-Each detection `resource` has a `device` object and a `behaviors[]` array. **[TEMPLATE]**
-
-- `device`: `hostname`, `device_id` (← key for containment), `local_ip`, `external_ip`,
+- `device`: `hostname`, `device_id` (← the **AID**, key for containment), `local_ip`, `external_ip`,
   `os_version`, `platform_name`.
 - each `behaviors[]` entry:
   - file: `sha256`, `md5`, `filename`, `filepath`, `cmdline`, `alleged_filetype`
@@ -64,52 +85,81 @@ Each detection `resource` has a `device` object and a `behaviors[]` array. **[TE
   - IOC: `ioc_type`, `ioc_value`, `ioc_source`, `ioc_description`
   - lineage: `parent_details.parent_sha256`, `parent_details.parent_cmdline`
   - `control_graph_id` (→ builds the Falcon UI detection link)
-  - `pattern_disposition_details` (see §6)
-- detection-level: `max_severity_displayname` (Low/Medium/High/Critical), `detection_id`,
-  `quarantined_files[]`.
+  - `pattern_disposition_details` (see §6 — our detect-only signal)
+- detection-level: `max_severity_displayname` (Low/Medium/High/Critical), `quarantined_files[]`.
 
-The sample data includes a **mimikatz credential-theft** detection (`T1003`,
-`scenario: credential_theft`) — exactly the post-exploitation a honeypot attacker runs.
-`technique_id` flowing straight from the detection feeds our Qdrant MITRE RAG + Sigma generation.
+The template's sample is a **mimikatz credential-theft** detection (`T1003`, `scenario:
+credential_theft`) — exactly the post-exploitation a honeypot attacker runs. `technique_id` flows
+straight into the Qdrant MITRE RAG + Sigma generation (later phases).
 
-## 5. Response action — `Contain` / `Lift Containment` (job responsibility #5)
+## 5. Response action — Contain / Lift Containment (job responsibility #5) [CONFIRMED 2026-06-26]
 
-Network-isolate (or release) a host by `device_id`: **[STD]**
-- Contain: `POST /devices/entities/devices-actions/v2?action_name=contain` body `{"ids":["<device_id>"]}`
-- Release: `POST /devices/entities/devices-actions/v2?action_name=lift_containment` body `{"ids":["<device_id>"]}`
-- Needs **Hosts: Write** scope. In our SOAR this is the verifier-passed, high-severity,
-  human-gated auto-response step (spec §5.3). n8n exposes this as a device action; if the
-  native operation isn't present, call it via the HTTP Request node with the same OAuth credential.
+Network-isolate (or release) a host by **device_id (AID)**:
+- Contain: `POST {base}/devices/entities/devices-actions/v2?action_name=contain` body `{"ids":["<aid>"]}`
+- Release: `POST {base}/devices/entities/devices-actions/v2?action_name=lift_containment` body `{"ids":["<aid>"]}`
+- Scope **Hosts: Write**; **≤100 ids per call**. (Other actions: `hide_host`, `unhide_host`,
+  `detection_suppress`/`_unsuppress`.) A contained host can still reach the Falcon cloud.
+- **Resolve the AID first:** `GET {base}/devices/queries/devices/v1` (Hosts: Read) → `POST
+  {base}/devices/entities/devices/v2` body `{"ids":[…]}` for full host details.
+- In our SOAR this is the verifier-passed, high-severity, **human-gated** auto-response (spec §5.3).
 
-## 6. Detect-only verification (critical for the honeypot)
+## 6. Detect-only — a console PREVENTION-POLICY build, not an install flag [CONFIRMED 2026-06-26]
 
-We run Falcon in **detect-only** so the attack proceeds (full kill chain) while Falcon still
-detects. Verify via each behaviour's `pattern_disposition_details`: **[TEMPLATE]**
-- In the template's *sample* (prevention mode): `process_blocked: true`, `quarantine_file: true`.
-- **For our honeypot we want these `false`** (`process_blocked: false`, `quarantine_file: false`,
-  `kill_process: false`, etc.) — that's the signal the prevention policy is detect/monitor-only.
-- Falcon **Go** is set-and-forget NGAV, so its policy granularity for detect-only may be coarse —
-  **validate this during the 15-day trial** (a Pro/Enterprise trial gives finer policy control).
+We run Falcon **detect-only** so the attack proceeds (full kill chain) while Falcon still detects.
+This is **not** an install-time flag and **not a single toggle** — it is a prevention policy assigned
+to the host's group **after** the sensor appears:
+- **ML settings:** set each pair to **detection = MODERATE/AGGRESSIVE, prevention = DISABLED**
+  (`cloud_anti_malware`, `sensor_anti_malware`, `adware_and_pup`, the `_user_initiated`/`_microsoft_office`
+  variants). The vendor Terraform/Pulumi provider documents `detection=MODERATE`/`prevention=DISABLED`
+  as a supported config.
+- **Also turn OFF the separate boolean prevention switches** (exploit mitigation, ransomware,
+  credential dumping, suspicious processes/scripts, lateral movement, `quarantineOnWrite`, …) — disabling
+  the ML sliders alone does **not** yield a fully non-blocking sensor.
+- **Keep detection/visibility toggles ON** (`detectOnWrite`, `engineFullVisibility`, `additionalUserModeData`).
+- **Verify on a real detection:** each behaviour's `pattern_disposition_details` should be **all-false**
+  (`process_blocked: false`, `quarantine_file: false`, `kill_process: false`, …) — that's the proof the
+  policy is monitor-only.
 
-## 7. Honest caveats inherited from the template (do NOT copy blindly)
+## 7. Sensor install on Windows Server 2022 [CONFIRMED 2026-06-26]
 
-- **Legacy Detects API** (`"powered_by":"legacy-detects"`, 2023) — migrate to Alerts API (§3).
-- **Daily Schedule Trigger is far too slow for a honeypot** — use a tight poll (1–5 min) or the
-  **Event Streams / datafeed API** (`GET /sensors/entities/datafeed/v2`) **[VERIFY]** for near-real-time.
-- **VT URL typo** in the template (`{{ $json.dsha256 }}` — should be `sha256`); the author flagged it.
-- CrowdStrike/Jira/Slack nodes ship **disabled** with **pinned sample data** (safe-import pattern) —
-  re-enable + rebind credentials after import.
-- `continueOnFail: true` on the VT nodes is a good **resilience** pattern to keep (an enrichment
-  miss shouldn't kill triage).
+- **Silent command:** `WindowsSensor.exe /install /quiet /norestart CID=<your-CID-with-2char-checksum>`.
+  **No reboot** needed; runs fully non-interactively as SYSTEM.
+  - **Plan 0B installs HANDS-ON via RDP** (user preference — see memory `feedback_prefers_hands_on_doing`);
+    `az vm run-command` is a documented fallback, not the default.
+- **Installer + CID:** console → **Host setup and management → Sensor downloads** (the **CCID with
+  checksum** is on the right of that page). The download is **auth-gated** — no anonymous URL (a console
+  session, or API creds with **Sensor Download: Read**, is required to fetch the binary).
+- **Optional params:** `ProvToken=<token>` only if the tenant **requires** an install token (check
+  *Sensor update policies*); `GROUPING_TAGS`, `ProvNoWait`, `NO_START`, `/log` as needed.
+- **Egress:** sensor is **443-only** (TLS 1.2+) to `*.cloudsink.net` + a few `crowdstrike.com` FQDNs.
+  Our existing NSG `allow-web` (TCP 80,443 → Internet) **already covers it — no NSG change needed.**
 
-## 8. How this maps onto our plans
+## 8. Near-real-time ingestion options (for 0D) [CONFIRMED 2026-06-26]
 
-- **Plan 0B (Falcon):** auth = native `crowdStrikeOAuth2Api` credential (scopes: Alerts:Read,
-  Hosts:Read+Write); pin our tenant's **cloud base URL**; configure **detect-only** and verify via
-  `pattern_disposition_details` (§6); validate the `Contain` round-trip (§5).
-- **Plan 0D (n8n wiring):** fork this template as the **Falcon detections poll ("path b")** skeleton —
-  keep the OAuth credential, two-step fetch, split-per-detection/per-behaviour iteration, and
-  `continueOnFail` enrichment — then replace the Set→Jira→Slack tail with our **Claude Opus triage +
-  verifier gate + enrichment roster (GreyNoise/AbuseIPDB/URLscan beside VT) + Qdrant tool + DFIR-Iris +
-  Discord + Falcon `Contain` + run-log**. Swap the daily schedule for a tight poll/stream, build on the
-  **Alerts API**, and fix the VT typo.
+- **Tight poll** of the Alerts API (1–5 min), OR the **Event Streams datafeed** for near-real-time:
+  `GET {base}/sensors/entities/datafeed/v2?appId=<label>` (Event streams: Read); refresh session via
+  `POST {base}/sensors/entities/datafeed-actions/v1/<partition>?action_name=refresh_active_stream_session`.
+- The template's **daily Schedule Trigger is far too slow** for a honeypot — replace it.
+
+## 9. Honest caveats inherited from the template (do NOT copy blindly) [TEMPLATE]
+
+- Its `/detects/*` calls are **dead** (§3), its base URL is **us-2-specific** (§2), and its **daily
+  trigger** is too slow (§8) — all must change.
+- **VT URL typo** (`{{ $json.dsha256 }}` → should be `sha256`).
+- CrowdStrike/Jira/Slack nodes ship **disabled** with **pinned sample data** (safe-import) — re-enable +
+  rebind credentials after import.
+- `continueOnFail: true` on the VT nodes is a good **resilience** pattern to keep.
+
+## 10. How this maps onto our plans
+
+- **Plan 0B (Falcon):** start the trial → **enable Insight XDR** → create the API client (scopes in §1) →
+  **install the sensor by hand via RDP** (§7) → build + assign a **detect-only prevention policy** (§6) →
+  trigger a controlled test detection and verify `pattern_disposition_details` all-false → validate the
+  **OAuth + Alerts read + Hosts read + Contain→Lift** round-trip (§5). Record the tenant **cloud/base URL**
+  (§2) and **trial start/expiry**. No paid provisioning.
+- **Plan 0D (n8n wiring):** fork the template as the **Falcon detections poll** skeleton — keep the OAuth
+  credential, the split-per-behaviour iteration, and `continueOnFail` enrichment — but **rebuild the fetch
+  on the Alerts API** (§3), pin **our** cloud base URL (§2), swap the daily trigger for a tight poll/stream
+  (§8), and replace the Set→Jira→Slack tail with **Claude Opus triage + verifier gate + enrichment roster
+  (GreyNoise/AbuseIPDB/VT/URLscan) + Qdrant + DFIR-Iris + Discord + Falcon `Contain` + run-log**. Fix the
+  VT typo.
