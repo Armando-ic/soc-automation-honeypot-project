@@ -65,6 +65,8 @@ class TriageVerifier:
             self._check_severity_supported(norm),
             self._check_verdict_sourced(norm),
         ]
+        results.append(self._check_mitre_in_retrieved(norm, retrieved))
+        results.append(self._check_enrichment_grounded(norm, enrichment_results))
         return TriageVerificationReport(
             results=tuple(results),
             repair_events=tuple(repair_events),
@@ -178,3 +180,32 @@ class TriageVerifier:
                          "grounded_in": "observed_iocs" if val in observed else "absent",
                          "note": e.get("verdict", "")})
         return tuple(prov)
+
+    # --- deferred check: mitre_in_retrieved (0D supplies `retrieved`) ---------
+    def _check_mitre_in_retrieved(self, norm: dict, retrieved) -> CheckResult:
+        if retrieved is None:
+            return CheckResult("mitre_in_retrieved", CheckStatus.NOT_APPLICABLE,
+                               "no Qdrant retrieval context (wired in Plan 0D)")
+        retrieved_set = set(retrieved)
+        offending = tuple(t.get("id", "") for t in norm["mitre_techniques"]
+                          if t.get("id", "") not in retrieved_set)
+        if offending:
+            return CheckResult("mitre_in_retrieved", CheckStatus.FAILED,
+                               "cited technique not in retrieved set", offending)
+        return CheckResult("mitre_in_retrieved", CheckStatus.PASSED)
+
+    # --- deferred check: enrichment_grounded (0D supplies live results) -------
+    def _check_enrichment_grounded(self, norm: dict, enrichment_results) -> CheckResult:
+        if enrichment_results is None:
+            return CheckResult("enrichment_grounded", CheckStatus.NOT_APPLICABLE,
+                               "no live enrichment context (wired in Plan 0D)")
+        offending: list[str] = []
+        for e in norm["iocs_enriched"]:
+            if e.get("verdict") in BAD_VERDICTS:
+                actual = enrichment_results.get(e.get("value", ""))
+                if actual not in BAD_VERDICTS:
+                    offending.append(e.get("value", ""))
+        if offending:
+            return CheckResult("enrichment_grounded", CheckStatus.FAILED,
+                               "verdict not grounded in live enrichment", tuple(offending))
+        return CheckResult("enrichment_grounded", CheckStatus.PASSED)

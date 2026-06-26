@@ -69,3 +69,26 @@ def test_positive_passes_all_eight_and_has_provenance(verifier):
     assert all(r.status == CheckStatus.PASSED for r in deterministic)
     assert any(p["kind"] == "technique" for p in report.provenance)
     assert any(p["kind"] == "ioc" for p in report.provenance)
+
+
+def test_deferred_checks_not_applicable_by_default(verifier):
+    report = verifier.verify(load_fixture("positive", "rdp_bruteforce")["result"])
+    assert status_of(report, "mitre_in_retrieved") == CheckStatus.NOT_APPLICABLE
+    assert status_of(report, "enrichment_grounded") == CheckStatus.NOT_APPLICABLE
+    assert report.passed is True  # NOT_APPLICABLE does not block
+
+
+def test_mitre_in_retrieved_active_when_context_supplied(verifier):
+    result = load_fixture("positive", "rdp_bruteforce")["result"]
+    ok = verifier.verify(result, retrieved=["T1110.001"])
+    assert status_of(ok, "mitre_in_retrieved") == CheckStatus.PASSED
+    bad = verifier.verify(result, retrieved=["T1003"])
+    assert status_of(bad, "mitre_in_retrieved") == CheckStatus.FAILED
+
+
+def test_enrichment_grounded_active_when_context_supplied(verifier):
+    result = load_fixture("positive", "rdp_bruteforce")["result"]
+    ok = verifier.verify(result, enrichment_results={"203.0.113.10": "malicious"})
+    assert status_of(ok, "enrichment_grounded") == CheckStatus.PASSED
+    bad = verifier.verify(result, enrichment_results={"203.0.113.10": "clean"})
+    assert status_of(bad, "enrichment_grounded") == CheckStatus.FAILED
