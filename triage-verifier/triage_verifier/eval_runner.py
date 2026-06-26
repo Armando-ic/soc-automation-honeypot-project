@@ -21,7 +21,7 @@ def run_eval(fixtures_dir: str | Path, schema_path: str | Path, attack_ref_path:
         failed = [r.name for r in report.results if r.status == CheckStatus.FAILED]
         ok = report.passed == exp["passed"]
         if exp["fails_check"] is not None:
-            ok = ok and exp["fails_check"] in failed
+            ok = ok and failed == [exp["fails_check"]]
         else:
             ok = ok and not failed
         if not ok:

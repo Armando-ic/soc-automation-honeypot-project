@@ -95,12 +95,17 @@ class TriageVerifier:
 
     # --- check 3 -------------------------------------------------------------
     def _check_ioc_type_consistent(self, norm: dict) -> CheckResult:
+        observed = {v for vals in norm["iocs"].values() for v in vals}
         offending: list[str] = []
         for e in norm["iocs_enriched"]:
             value, ioc_type = e.get("value", ""), e.get("ioc_type", "")
             shape_ok = _SHAPE_FOR_TYPE.get(ioc_type, lambda _v: False)(value)
             bucket = _BUCKET_FOR_TYPE.get(ioc_type)
-            in_right_bucket = bucket is None or value in norm["iocs"].get(bucket, [])
+            in_right_bucket = (
+                bucket is None
+                or value not in observed
+                or value in norm["iocs"].get(bucket, [])
+            )
             if not shape_ok or not in_right_bucket:
                 offending.append(value)
         if offending:

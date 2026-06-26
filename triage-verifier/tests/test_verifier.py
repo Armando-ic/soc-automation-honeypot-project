@@ -98,3 +98,10 @@ def test_judge_result_present_but_non_blocking(verifier_with_judge):
     report = verifier_with_judge.verify(load_fixture("positive", "rdp_bruteforce")["result"])
     assert status_of(report, "judge") == CheckStatus.NEEDS_HUMAN
     assert report.passed is True
+
+
+def test_ungrounded_ioc_trips_only_grounding(verifier):
+    fx = load_fixture("negative", "ungrounded_ioc")
+    report = verifier.verify(fx["result"])
+    failed = [r.name for r in report.results if r.status == CheckStatus.FAILED]
+    assert failed == ["iocs_enriched_grounded"]
