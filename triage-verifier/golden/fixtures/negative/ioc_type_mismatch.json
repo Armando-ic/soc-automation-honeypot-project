@@ -1,0 +1,11 @@
+{
+  "name": "ioc_type_mismatch",
+  "expected": { "passed": false, "fails_check": "ioc_type_consistent" },
+  "result": {
+    "schema_version": "v1", "alert_summary": "x", "severity": "low", "severity_rationale": "x",
+    "mitre_techniques": [],
+    "iocs": { "ips": [], "domains": ["evil.example.com"], "file_hashes": [], "users": [], "hosts": [] },
+    "iocs_enriched": [{ "value": "evil.example.com", "ioc_type": "ip", "verdict": "clean", "source": "vt", "summary": "mis-typed" }],
+    "recommended_actions": [], "investigation_notes": "x"
+  }
+}

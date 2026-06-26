@@ -1,10 +1,35 @@
 """Pure credibility-gate verifier over submit_triage_result output."""
 from __future__ import annotations
 
+import ipaddress
 import json
+import re
 from pathlib import Path
 
 import jsonschema
+
+_HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
+_DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9_-]{1,63}\.)+[A-Za-z]{2,}$")
+
+
+def _is_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_hash(value: str) -> bool:
+    return len(value) in (32, 40, 64) and bool(_HEX_RE.match(value))
+
+
+def _is_domain(value: str) -> bool:
+    return not _is_ip(value) and bool(_DOMAIN_RE.match(value))
+
+
+_BUCKET_FOR_TYPE = {"ip": "ips", "domain": "domains", "file_hash": "file_hashes"}
+_SHAPE_FOR_TYPE = {"ip": _is_ip, "domain": _is_domain, "file_hash": _is_hash}
 
 from triage_verifier.attack_reference import AttackReference
 from triage_verifier.models import CheckResult, CheckStatus, TriageVerificationReport
@@ -25,7 +50,11 @@ class TriageVerifier:
 
     def verify(self, result: dict, *, retrieved=None, enrichment_results=None) -> TriageVerificationReport:
         norm, repair_events = normalize_triage_result(result)
-        results: list[CheckResult] = [self._check_schema_valid(norm)]
+        results: list[CheckResult] = [
+            self._check_schema_valid(norm),
+            self._check_iocs_enriched_grounded(norm),
+            self._check_ioc_type_consistent(norm),
+        ]
         return TriageVerificationReport(
             results=tuple(results),
             repair_events=tuple(repair_events),
@@ -38,3 +67,28 @@ class TriageVerifier:
             return CheckResult("schema_valid", CheckStatus.PASSED)
         offending = tuple("/".join(str(p) for p in e.path) or "<root>" for e in errors)
         return CheckResult("schema_valid", CheckStatus.FAILED, "schema violations", offending)
+
+    # --- check 2 -------------------------------------------------------------
+    def _check_iocs_enriched_grounded(self, norm: dict) -> CheckResult:
+        observed = {v for bucket in norm["iocs"].values() for v in bucket}
+        offending = tuple(e["value"] for e in norm["iocs_enriched"]
+                          if e.get("value") not in observed)
+        if offending:
+            return CheckResult("iocs_enriched_grounded", CheckStatus.FAILED,
+                               "enriched IOC not in observed iocs", offending)
+        return CheckResult("iocs_enriched_grounded", CheckStatus.PASSED)
+
+    # --- check 3 -------------------------------------------------------------
+    def _check_ioc_type_consistent(self, norm: dict) -> CheckResult:
+        offending: list[str] = []
+        for e in norm["iocs_enriched"]:
+            value, ioc_type = e.get("value", ""), e.get("ioc_type", "")
+            shape_ok = _SHAPE_FOR_TYPE.get(ioc_type, lambda _v: False)(value)
+            bucket = _BUCKET_FOR_TYPE.get(ioc_type)
+            in_right_bucket = bucket is None or value in norm["iocs"].get(bucket, [])
+            if not shape_ok or not in_right_bucket:
+                offending.append(value)
+        if offending:
+            return CheckResult("ioc_type_consistent", CheckStatus.FAILED,
+                               "ioc_type mismatches value shape or bucket", tuple(offending))
+        return CheckResult("ioc_type_consistent", CheckStatus.PASSED)
