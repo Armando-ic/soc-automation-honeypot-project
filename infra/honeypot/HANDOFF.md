@@ -79,21 +79,42 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 ACTIVE NEXT ACTION — Plan 0B (CrowdStrike Falcon), next session
-Plan 0A is done (honeypot telemetry flowing into Splunk `honeypot`). Next:
-- **0B — CrowdStrike Falcon:** 15-day trial; install the sensor on `vm-honeypot-win` in **detect-only**
-  (verify via `pattern_disposition_details` all-false); OAuth API creds (Alerts:Read + Hosts:Read/Write);
-  validate the `Contain` round-trip. See `infra/honeypot/crowdstrike-api-notes.md`. Sensor download +
-  install can be done via `az vm run-command` (no RDP needed) — see RUNBOOK "Remote ops note".
-- Then **0C** (verifier + eval harness, TDD) and **0D** (n8n wiring; fork `JSON/Analyze_Crowdstrike_detections.json`).
-- Optional 0A polish: install `Splunk_TA_microsoft_sysmon` on the Splunk indexer/SH for nicer Sysmon
-  field extraction (not blocking — raw XML already lands in `honeypot`).
+## 🎯 CURRENT STATE (2026-06-26) — 0B trial running · 0C planned & READY TO BUILD
+Plan 0A done. This session: researched + planned **both** 0B and 0C; Falcon trial submitted (clock running).
+**Fresh instance's primary task = execute Plan 0C subagent-driven.** 0B is in flight (waiting on the trial email).
 
-### Useful facts for next session
-- Honeypot admin: RDP/Run-Command to `128.203.185.25`, user `analyst`, pw in `Personal/honeypot-vm-creds.txt`.
+**Plan 0B — CrowdStrike Falcon — PLANNED, trial in flight.**
+- Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT workspace).
+- Falcon 15-day trial **SUBMITTED 2026-06-26** (no-CC self-service); access email ~24h out. When it lands,
+  the **USER does Tasks 2–7 HANDS-ON via RDP** — condensed checklist in `scratchpad/falcon-day2-quickstart.md`.
+  (Hands-on, NOT `az run-command` — user "learn by doing" preference; memory `feedback_prefers_hands_on_doing`.)
+- **Research corrected the spec (see the rewritten `crowdstrike-api-notes.md`):** legacy `/detects/*` API is
+  DEAD (404 since 2025-09-30) → build on the **Alerts API**; one API client, scopes **Alerts:R/W + Hosts:R/W +
+  Event streams:R**; real EDR = the free **Insight XDR** module enabled in-trial (the trial defaults to NGAV-only
+  Go modules); **sustained EDR ≈ Enterprise $185/dev/yr, NOT Go $60** (Go has no EDR); detect-only = a console
+  **prevention-policy build** (verify `pattern_disposition_details` all-false); the sensor is **443-only** → the
+  existing `allow-web` NSG already covers it (no NSG change). Decisions also recorded in honeypot spec §11.12.
+- Already committed (0B Task 0 + prep): `falcon-detect-only-policy.md`, `scripts/falcon-contain-roundtrip.ps1`.
+  0B done-when: detect-only sensor + OAuth API + `Contain`→`Lift` captured. Keep/drop deferred to ~trial day 14.
+
+**Plan 0C — Triage verifier + eval harness — PLANNED, READY TO BUILD (do this now, subagent-driven).**
+- Spec: `docs/superpowers/specs/2026-06-26-triage-verifier-eval-design.md` (PARENT).
+- Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0c-triage-verifier.md` (PARENT) — **13 tasks (0–12),
+  TDD, complete code in every step.** Builds a NEW standalone package `triage-verifier/` in the repo: a pure
+  offline verifier porting the **SOP-RAG `PythonVerifier`** pattern (8 deterministic checks + advisory judge +
+  2 deferred Qdrant hooks) + golden fixtures + `eval.py` gate. No external deps — fully buildable now.
+- **Execute SUBAGENT-DRIVEN** (user's choice): one fresh subagent per task; review red→green→commit between
+  tasks (use `superpowers:subagent-driven-development`). Commits land in the repo on `ai-upgrade`.
+- **Then 0D** — n8n wiring (fork `JSON/Analyze_Crowdstrike_detections.json`; Alerts API; Opus triage + the 0C
+  verifier + enrichment + Qdrant + Iris + Discord + Falcon `Contain` + run-log). 0D supplies the
+  `retrieved`/`enrichment_results` context that flips 0C's two deferred checks live, and runs the real ClaudeJudge.
+
+### Useful facts
+- Honeypot admin: RDP `128.203.185.25`, user `analyst`, pw ONLY in `Personal/honeypot-vm-creds.txt` (never echo/commit).
 - Splunk auto-shuts 23:00 ET; START `vm-soc-v2-splunk` (portal) before expecting live ingestion. UF queues meanwhile.
-- I can run honeypot-VM commands via `az vm run-command invoke -g rg-honeypot -n vm-honeypot-win` (as SYSTEM, no RDP).
-Note: provisioning was done via `az` CLI (user-authorized), not the portal — but on-VM + Splunk steps still need the USER.
+- `az vm run-command invoke -g rg-honeypot -n vm-honeypot-win` runs PowerShell as SYSTEM (no RDP) — kept as a FALLBACK; default to hands-on.
+- az CLI authenticated (sub `3718c265-...`, `owner@example.com`). On Git Bash, prefix az calls passing full `/subscriptions/...` IDs with `MSYS_NO_PATHCONV=1`.
+- **rg-soc-v2-azure-central-us (Splunk/n8n/Iris) is PROTECTED** — explicit consent before any security-loosening change; `rg-honeypot` is the free-to-modify sandbox.
 
 ## Key pipeline facts (Option A telemetry — decided)
 - Honeypot is **UN-peered**. Universal Forwarder → Splunk's **public** IP **`20.236.193.253:9997`**,
@@ -106,13 +127,10 @@ SOC VMs auto-shutdown **11 PM Eastern**, but the honeypot runs 24/7. Splunk must
 telemetry (the UF queues overnight otherwise → delayed triage). Decide: run Splunk (+ n8n) 24/7 (more
 cost) vs. accept batched overnight triage.
 
-## After Plan 0A
-- **0B — CrowdStrike Falcon:** 15-day trial, install sensor on the honeypot in **detect-only**
-  (verify via `pattern_disposition_details` all-false), OAuth API creds (scopes Alerts:Read +
-  Hosts:Read/Write), validate the `Contain` round-trip. See `crowdstrike-api-notes.md`.
-- **0C — pipeline software (TDD):** verifier credibility-gate (SOP-RAG pattern), prompt/schema,
-  lightweight eval harness (`golden/`, `eval.py`, `runs.jsonl`), run-log.
-- **0D — n8n wiring:** fork `JSON/Analyze_Crowdstrike_detections.json` (Falcon detections poll, OAuth
-  cred, two-step fetch, per-behaviour split, `continueOnFail`); build on the **Alerts API**; replace the
-  Jira/Slack tail with Opus triage + verifier + enrichment roster (GreyNoise/AbuseIPDB/VT/URLscan) +
+## Roadmap after 0A (0B & 0C now PLANNED — CURRENT STATE above is authoritative)
+- **0B — CrowdStrike Falcon:** plan written; trial running. (The earlier "/detects API · Alerts:Read+Hosts:RW
+  · az-run-command install" framing is **SUPERSEDED** — see CURRENT STATE + the rewritten `crowdstrike-api-notes.md`.)
+- **0C — verifier + eval (TDD):** plan written (13 tasks); SOP-RAG `PythonVerifier` pattern; package `triage-verifier/`.
+- **0D — n8n wiring:** fork `JSON/Analyze_Crowdstrike_detections.json`; build on the **Alerts API**; replace the
+  Jira/Slack tail with Opus triage + the 0C verifier + enrichment roster (GreyNoise/AbuseIPDB/VT/URLscan) +
   Qdrant + DFIR-Iris + Discord + Falcon `Contain` + run-log; tight poll (not daily); fix the VT URL typo.
