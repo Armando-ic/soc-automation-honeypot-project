@@ -79,14 +79,15 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-27) — 0A done · 0C ✅ BUILT · 0D ✅ DESIGNED (0D-1a plan ready) · 0B trial APPROVED, user setting up
-Plan 0A done. Plan 0C **COMPLETE** (built subagent-driven; see below). **Plan 0D fully DESIGNED this session**
-(spec approved + the 0D-1a implementation plan written & self-reviewed — see the Plan 0D block below).
-**Falcon trial APPROVED 2026-06-27 — USER is setting up the Falcon account now** (0B Tasks 2–7, hands-on).
-**Two ready next actions for a fresh instance:** (1) execute **Plan 0D-1a** (grounding-service, subagent-driven,
-NO CrowdStrike needed — the user chose split-build, recommended); (2) once 0B is validated, author **0D-1b**
-(n8n wiring, hands-on) + **0D-2** (Falcon trigger + Contain). The user had just been asked to pick the 0D-1a
-execution mode (subagent-driven recommended) when this session paused for context.
+## 🎯 CURRENT STATE (2026-06-27) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT (grounding-service) · 0D-1b/0D-2 next · 0B trial APPROVED, user setting up
+Plan 0A done. Plan 0C **COMPLETE**. **Plan 0D-1a ✅ BUILT this session** — subagent-driven (8 TDD tasks + 1
+cleanup commit, fresh implementer + reviewer per task, opus final whole-branch review). The `grounding-service/`
+FastAPI package now exists: 23 tests green/pristine, commits `ac1e8d8..71720f0` on ai-upgrade (NOT pushed; user
+chose "keep branch as-is"). Final review verdict: ready to merge. See the Plan 0D block for details + carry-forwards.
+**Falcon trial APPROVED 2026-06-27 — USER is setting up the Falcon account** (0B Tasks 2–7, hands-on).
+**Next actions for a fresh instance:** (1) author **Plan 0D-1b** (n8n wiring — hands-on checklist; the
+grounding-service it calls now exists; MUST carry the 2 Important items in the Plan 0D block); (2) once 0B is
+validated, author **0D-2** (Falcon Alerts trigger + Contain). Both spec'd in the 0D design doc §7.
 
 **Plan 0B — CrowdStrike Falcon — trial APPROVED 2026-06-27, USER setting up account.**
 - Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT workspace).
@@ -119,7 +120,7 @@ execution mode (subagent-driven recommended) when this session paused for contex
   untrusted display text. Also: `triage-verifier/` has no black/isort/mypy gate wired (configured in
   pyproject but not enforced); a few plan-mandated cosmetic import-order/dead-name nits remain (a one-shot
   `isort`+`black` pass would normalize them).
-**Plan 0D — SOAR wiring — ✅ DESIGNED 2026-06-27 (brainstorm → spec → 0D-1a plan). NOT yet built.**
+**Plan 0D — SOAR wiring — 0D-1a ✅ BUILT 2026-06-27; 0D-1b/0D-2 designed (spec §7), not built.**
 - Spec: `docs/superpowers/specs/2026-06-27-honeypot-phase0d-soar-wiring-design.md` (PARENT) — **approved.**
 - 0D-1a plan: `docs/superpowers/plans/2026-06-27-honeypot-phase0d1a-grounding-service.md` (PARENT) — **8 TDD
   tasks (0–7), complete code, self-reviewed; ready to execute subagent-driven. NOT started.**
@@ -132,12 +133,21 @@ execution mode (subagent-driven recommended) when this session paused for contex
   (non-circular ground truth); (6) one `/retrieve` call = authoritative `retrieved`; (7) triage model
   **`claude-opus-4-8`**, `submit_triage_result` schema unchanged; (8) bounded re-ground = one retry then
   needs-human; (9) Discord webhook replaces Slack, `/verify` writes the run-log, batched overnight accepted.
-- **0D-1a = the grounding-service** (`grounding-service/` package in the repo, depends on `triage-verifier`):
-  FastAPI `/retrieve` (Qdrant ATT&CK RAG → the verifier's `retrieved`), `/verify` (wraps 0C verifier + run-log
-  + judge w/ StubJudge fallback; flips the 2 deferred checks live), `/normalize` (enrichment response →
-  verdict). Fully offline-testable (FakeEmbedder, in-memory Qdrant, mocked judge), ~22 tests. **Build this
-  subagent-driven exactly like 0C** (same conventions: ai-upgrade branch, never `git add -A`, the
-  Co-Authored-By trailer; the `.superpowers/sdd/progress.md` ledger pattern).
+- **0D-1a = the grounding-service ✅ BUILT** (`grounding-service/` package, depends on `triage-verifier`):
+  FastAPI `/retrieve` (Qdrant ATT&CK RAG → verifier's `retrieved`), `/verify` (wraps 0C verifier + run-log +
+  judge w/ StubJudge fallback; flips the 2 deferred checks live), `/normalize` (enrichment → verdict). Offline
+  suite **23 tests green/pristine**. Commits `ac1e8d8..71720f0` (8 tasks + cleanup) on ai-upgrade. Final opus
+  review: ready to merge. Per-task ledger archived at `.superpowers/sdd/progress.md` (gitignored scratch).
+  **Accepted deviations (all sound):** retriever uses `query_points` (qdrant-client 1.18 removed `.search()`);
+  `_build_retriever` passes `check_compatibility=False` (eager compat-check would hang at the module-level
+  `app=build_default_app()` import); pyproject `filterwarnings` mutes the upstream Starlette TestClient warning.
+  **Deploy:** co-locate on `vm-soc-v2-n8n` — `docker run qdrant` (:6333 loopback), `scripts/ingest_attack.py`
+  to populate ATT&CK, `uvicorn grounding_service.main:app` (:8000); n8n calls it over loopback.
+  **⚠️ Two Important carry-forwards INTO 0D-1b** (both fail-safe today, they live in the n8n/integration layer):
+  (1) `/verify` should try/except the verifier call and **log + gate `verification_passed:false`** on a verifier
+  exception instead of returning 500 (preserves spec §5.5 "every event logged, never dropped"); (2) pin **ONE
+  canonical IOC-value form** shared by the `/normalize` enrichment key AND Opus `iocs_enriched[].value`, else the
+  `enrichment_grounded` check false-FAILs on case/defang/CIDR string drift (README limitation already notes this).
 - **0D-1b (n8n wiring) + 0D-2 (Falcon)** — authored AFTER 0D-1a is built: 0D-1b is a **hands-on** n8n checklist
   (Splunk saved-search trigger → enrichment HTTP nodes → `/normalize` → `/retrieve` → Opus → `/verify` → gate
   → Iris + Discord + run-log); 0D-2 grafts the Falcon Alerts-poll trigger + `Contain` (verifier-passed +
