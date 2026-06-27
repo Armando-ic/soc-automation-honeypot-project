@@ -17,7 +17,6 @@ class AttackRetriever:
         # Plan 0D-1a brief specifies client.search(...) but qdrant-client >=1.14
         # removed .search() entirely (AttributeError, not DeprecationWarning).
         # Using query_points(...).points — the direct functional replacement.
-        # Flagged as DONE_WITH_CONCERNS for adjudication.
         response = self._client.query_points(
             collection_name=self._collection, query=vector, limit=top_k
         )

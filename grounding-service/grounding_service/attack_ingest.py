@@ -30,7 +30,8 @@ def build_technique_docs(stix: dict) -> list[dict]:
             for ph in obj.get("kill_chain_phases", [])
             if ph.get("kill_chain_name") == "mitre-attack"
         ]
-        text = f"{name}. {obj.get('description', '')}".strip()
+        desc = obj.get("description", "")
+        text = f"{name}. {desc}".strip() if desc else name
         docs.append({"id": tid, "name": name, "tactics": tactics, "text": text})
     return docs
 

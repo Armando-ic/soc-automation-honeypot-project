@@ -35,3 +35,10 @@ def test_upsert_then_count():
     n = upsert_techniques(client, emb, "attack_techniques", docs)
     assert n == 3
     assert client.count("attack_techniques").count == 3
+
+
+def test_ensure_collection_idempotent():
+    client = QdrantClient(":memory:")
+    emb = FakeEmbedder(dim=8)
+    ensure_collection(client, "attack_techniques", emb.dim)
+    ensure_collection(client, "attack_techniques", emb.dim)  # second call must not raise

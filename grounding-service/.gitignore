@@ -4,3 +4,4 @@ __pycache__/
 runs.jsonl
 qdrant_storage/
 .mypy_cache/
+*.egg-info/

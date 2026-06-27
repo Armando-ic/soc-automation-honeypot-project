@@ -28,7 +28,8 @@ STIX_URL = (
 
 def _load_stix(arg: str | None) -> dict:
     if arg:
-        return json.loads(open(arg, encoding="utf-8").read())
+        with open(arg, encoding="utf-8") as fh:
+            return json.load(fh)
     with urllib.request.urlopen(STIX_URL) as resp:  # noqa: S310 (official MITRE source)
         return json.load(resp)
 

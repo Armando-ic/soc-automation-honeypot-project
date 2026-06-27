@@ -11,6 +11,7 @@ def test_greynoise_classifications():
     assert normalize_greynoise({"classification": "malicious"}) == "malicious"
     assert normalize_greynoise({"classification": "benign"}) == "clean"
     assert normalize_greynoise({}) == "unknown"
+    assert normalize_greynoise({"classification": "suspicious"}) == "suspicious"
 
 
 def test_abuseipdb_thresholds():
@@ -18,6 +19,9 @@ def test_abuseipdb_thresholds():
     assert normalize_abuseipdb({"data": {"abuseConfidenceScore": 40}}) == "suspicious"
     assert normalize_abuseipdb({"data": {"abuseConfidenceScore": 0}}) == "clean"
     assert normalize_abuseipdb({}) == "unknown"
+    assert normalize_abuseipdb({"data": {"abuseConfidenceScore": 85}}) == "malicious"
+    assert normalize_abuseipdb({"data": {"abuseConfidenceScore": 25}}) == "suspicious"
+    assert normalize_abuseipdb({"data": {"abuseConfidenceScore": 24}}) == "unknown"
 
 
 def test_virustotal_thresholds():
@@ -31,6 +35,9 @@ def test_virustotal_thresholds():
         {"data": {"attributes": {"last_analysis_stats": {"malicious": 0, "harmless": 70}}}}
     ) == "clean"
     assert normalize_virustotal({}) == "unknown"
+    assert normalize_virustotal(
+        {"data": {"attributes": {"last_analysis_stats": {"malicious": 3, "harmless": 0}}}}
+    ) == "malicious"
 
 
 def test_urlscan_verdict():
@@ -38,6 +45,7 @@ def test_urlscan_verdict():
     assert normalize_urlscan({"verdicts": {"overall": {"malicious": False, "score": 50}}}) == "suspicious"
     assert normalize_urlscan({"verdicts": {"overall": {"malicious": False, "score": 0}}}) == "clean"
     assert normalize_urlscan({}) == "unknown"
+    assert normalize_urlscan({"verdicts": {"overall": {"malicious": False, "score": 40}}}) == "suspicious"
 
 
 def test_build_enrichment_results_takes_worst_per_ioc():
