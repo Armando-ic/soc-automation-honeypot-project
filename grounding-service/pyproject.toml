@@ -37,3 +37,6 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v"
+filterwarnings = [
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
