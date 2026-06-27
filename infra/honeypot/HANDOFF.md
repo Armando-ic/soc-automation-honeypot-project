@@ -79,15 +79,19 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-26) — 0A done · 0C ✅ BUILT · 0B trial running · 0D next
-Plan 0A done. Plan 0C **COMPLETE** (built subagent-driven this session — see below). Falcon 0B trial in flight
-(waiting on the trial email; USER does 0B Tasks 2–7 hands-on when it lands). **Next primary task = Plan 0D
-(n8n wiring), which consumes the 0C verifier.**
+## 🎯 CURRENT STATE (2026-06-27) — 0A done · 0C ✅ BUILT · 0D ✅ DESIGNED (0D-1a plan ready) · 0B trial APPROVED, user setting up
+Plan 0A done. Plan 0C **COMPLETE** (built subagent-driven; see below). **Plan 0D fully DESIGNED this session**
+(spec approved + the 0D-1a implementation plan written & self-reviewed — see the Plan 0D block below).
+**Falcon trial APPROVED 2026-06-27 — USER is setting up the Falcon account now** (0B Tasks 2–7, hands-on).
+**Two ready next actions for a fresh instance:** (1) execute **Plan 0D-1a** (grounding-service, subagent-driven,
+NO CrowdStrike needed — the user chose split-build, recommended); (2) once 0B is validated, author **0D-1b**
+(n8n wiring, hands-on) + **0D-2** (Falcon trigger + Contain). The user had just been asked to pick the 0D-1a
+execution mode (subagent-driven recommended) when this session paused for context.
 
-**Plan 0B — CrowdStrike Falcon — PLANNED, trial in flight.**
+**Plan 0B — CrowdStrike Falcon — trial APPROVED 2026-06-27, USER setting up account.**
 - Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT workspace).
-- Falcon 15-day trial **SUBMITTED 2026-06-26** (no-CC self-service); access email ~24h out. When it lands,
-  the **USER does Tasks 2–7 HANDS-ON via RDP** — condensed checklist in `scratchpad/falcon-day2-quickstart.md`.
+- Falcon 15-day trial **APPROVED 2026-06-27** (submitted 2026-06-26, no-CC self-service). **USER is setting up
+  the account + doing Tasks 2–7 HANDS-ON via RDP** — condensed checklist in `scratchpad/falcon-day2-quickstart.md`.
   (Hands-on, NOT `az run-command` — user "learn by doing" preference; memory `feedback_prefers_hands_on_doing`.)
 - **Research corrected the spec (see the rewritten `crowdstrike-api-notes.md`):** legacy `/detects/*` API is
   DEAD (404 since 2025-09-30) → build on the **Alerts API**; one API client, scopes **Alerts:R/W + Hosts:R/W +
@@ -115,9 +119,29 @@ Plan 0A done. Plan 0C **COMPLETE** (built subagent-driven this session — see b
   untrusted display text. Also: `triage-verifier/` has no black/isort/mypy gate wired (configured in
   pyproject but not enforced); a few plan-mandated cosmetic import-order/dead-name nits remain (a one-shot
   `isort`+`black` pass would normalize them).
-- **Then 0D** — n8n wiring (fork `JSON/Analyze_Crowdstrike_detections.json`; Alerts API; Opus triage + the 0C
-  verifier + enrichment + Qdrant + Iris + Discord + Falcon `Contain` + run-log). 0D supplies the
-  `retrieved`/`enrichment_results` context that flips 0C's two deferred checks live, and runs the real ClaudeJudge.
+**Plan 0D — SOAR wiring — ✅ DESIGNED 2026-06-27 (brainstorm → spec → 0D-1a plan). NOT yet built.**
+- Spec: `docs/superpowers/specs/2026-06-27-honeypot-phase0d-soar-wiring-design.md` (PARENT) — **approved.**
+- 0D-1a plan: `docs/superpowers/plans/2026-06-27-honeypot-phase0d1a-grounding-service.md` (PARENT) — **8 TDD
+  tasks (0–7), complete code, self-reviewed; ready to execute subagent-driven. NOT started.**
+- **Locked design decisions (spec §9):** (1) **split** 0D into **0D-1** (Splunk-honeypot-triggered enriched
+  triage path, build NOW, no CrowdStrike) + **0D-2** (Falcon Alerts-poll trigger + `Contain`, deferred until
+  0B is set up); (2) verifier runs as a **FastAPI microservice** (Python package stays source of truth);
+  (3) Qdrant in 0D-1 = **MITRE RAG only**, repeat-noise throttled at the Splunk saved-search, defer
+  incident-similarity; (4) **co-locate** Qdrant + FastAPI on the existing **`vm-soc-v2-n8n`** (loopback; NO
+  new VM, NO protected-RG change); (5) **deterministic up-front enrichment** feeds both Opus and the verifier
+  (non-circular ground truth); (6) one `/retrieve` call = authoritative `retrieved`; (7) triage model
+  **`claude-opus-4-8`**, `submit_triage_result` schema unchanged; (8) bounded re-ground = one retry then
+  needs-human; (9) Discord webhook replaces Slack, `/verify` writes the run-log, batched overnight accepted.
+- **0D-1a = the grounding-service** (`grounding-service/` package in the repo, depends on `triage-verifier`):
+  FastAPI `/retrieve` (Qdrant ATT&CK RAG → the verifier's `retrieved`), `/verify` (wraps 0C verifier + run-log
+  + judge w/ StubJudge fallback; flips the 2 deferred checks live), `/normalize` (enrichment response →
+  verdict). Fully offline-testable (FakeEmbedder, in-memory Qdrant, mocked judge), ~22 tests. **Build this
+  subagent-driven exactly like 0C** (same conventions: ai-upgrade branch, never `git add -A`, the
+  Co-Authored-By trailer; the `.superpowers/sdd/progress.md` ledger pattern).
+- **0D-1b (n8n wiring) + 0D-2 (Falcon)** — authored AFTER 0D-1a is built: 0D-1b is a **hands-on** n8n checklist
+  (Splunk saved-search trigger → enrichment HTTP nodes → `/normalize` → `/retrieve` → Opus → `/verify` → gate
+  → Iris + Discord + run-log); 0D-2 grafts the Falcon Alerts-poll trigger + `Contain` (verifier-passed +
+  high-severity + human-gated) onto the same path. Both spec'd in the 0D design doc §7.
 
 ### Useful facts
 - Honeypot admin: RDP `128.203.185.25`, user `analyst`, pw ONLY in `Personal/honeypot-vm-creds.txt` (never echo/commit).
