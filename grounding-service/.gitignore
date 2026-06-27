@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+runs.jsonl
+qdrant_storage/
+.mypy_cache/
