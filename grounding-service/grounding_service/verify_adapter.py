@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from triage_verifier.judge import ClaudeJudge, StubJudge
+from triage_verifier.models import CheckResult, CheckStatus, TriageVerificationReport
 from triage_verifier.run_logger import RunLogger, build_run_record
 from triage_verifier.verifier import TriageVerifier
 
@@ -18,12 +19,19 @@ def build_report(
     client: object | None = None,
 ) -> dict:
     judge = ClaudeJudge(client, model=settings.model) if client is not None else StubJudge()
-    verifier = TriageVerifier.from_paths(
-        settings.schema_path, settings.attack_ref_path, judge=judge
-    )
-    report = verifier.verify(
-        result, retrieved=retrieved, enrichment_results=enrichment_results
-    )
+    try:
+        verifier = TriageVerifier.from_paths(
+            settings.schema_path, settings.attack_ref_path, judge=judge
+        )
+        report = verifier.verify(
+            result, retrieved=retrieved, enrichment_results=enrichment_results
+        )
+    except Exception as exc:  # never drop an event: log + gate false, never surface a 500
+        report = TriageVerificationReport(
+            results=(
+                CheckResult("verifier_error", CheckStatus.FAILED, f"verifier raised: {exc}"),
+            ),
+        )
     record = build_run_record(
         run_id=run_meta.get("run_id", ""),
         timestamp=run_meta.get("timestamp", ""),

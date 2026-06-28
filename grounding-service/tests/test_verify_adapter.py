@@ -53,3 +53,23 @@ def test_claude_client_used_when_supplied(tmp_path):
     judge = next(c for c in rep["check_results"] if c["name"] == "judge")
     assert judge["status"] == "needs_human"
     assert "advisory note" in judge["detail"]
+
+
+def test_verifier_exception_gates_false_and_logs(tmp_path, monkeypatch):
+    s = _settings(tmp_path)
+    # Force the verifier to blow up at construction (covers the wrapped call).
+    from grounding_service import verify_adapter
+
+    def boom(*a, **k):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(verify_adapter.TriageVerifier, "from_paths", boom)
+
+    rep = build_report(GOOD, retrieved=["T1110"],
+                       enrichment_results={"203.0.113.10": "malicious"}, run_meta=META, settings=s)
+
+    assert rep["verification_passed"] is False
+    assert "verifier_error" in [c["name"] for c in rep["check_results"]]
+    lines = (tmp_path / "runs.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1                                   # event logged, never dropped
+    assert json.loads(lines[0])["verification_passed"] is False

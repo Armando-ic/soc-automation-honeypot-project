@@ -45,3 +45,21 @@ def test_verify(client):
         "run_meta": {"run_id": "r1", "timestamp": "t", "tokens_in": 1, "tokens_out": 1, "latency_ms": 1},
     })
     assert r.json()["verification_passed"] is True
+
+
+def test_verify_returns_200_not_500_on_verifier_crash(seeded_retriever, tmp_path, monkeypatch):
+    from grounding_service import verify_adapter
+
+    def boom(*a, **k):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(verify_adapter.TriageVerifier, "from_paths", boom)
+    settings = Settings(runs_path=str(tmp_path / "runs.jsonl"))
+    c = TestClient(create_app(seeded_retriever, settings))
+    r = c.post("/verify", json={
+        "result": GOOD, "retrieved": ["T1110"],
+        "enrichment_results": {"203.0.113.10": "malicious"},
+        "run_meta": {"run_id": "r1", "timestamp": "t", "tokens_in": 1, "tokens_out": 1, "latency_ms": 1},
+    })
+    assert r.status_code == 200
+    assert r.json()["verification_passed"] is False
