@@ -79,15 +79,20 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-27) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT (grounding-service) · 0D-1b/0D-2 next · 0B trial APPROVED, user setting up
-Plan 0A done. Plan 0C **COMPLETE**. **Plan 0D-1a ✅ BUILT this session** — subagent-driven (8 TDD tasks + 1
-cleanup commit, fresh implementer + reviewer per task, opus final whole-branch review). The `grounding-service/`
-FastAPI package now exists: 23 tests green/pristine, commits `ac1e8d8..71720f0` on ai-upgrade (NOT pushed; user
-chose "keep branch as-is"). Final review verdict: ready to merge. See the Plan 0D block for details + carry-forwards.
-**Falcon trial APPROVED 2026-06-27 — USER is setting up the Falcon account** (0B Tasks 2–7, hands-on).
-**Next actions for a fresh instance:** (1) author **Plan 0D-1b** (n8n wiring — hands-on checklist; the
-grounding-service it calls now exists; MUST carry the 2 Important items in the Plan 0D block); (2) once 0B is
-validated, author **0D-2** (Falcon Alerts trigger + Contain). Both spec'd in the 0D design doc §7.
+## 🎯 CURRENT STATE (2026-06-28) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 (Deploy) ✅ DONE & LIVE · 0D-1b Phase 2 (Wire) next · 0B trial APPROVED
+Plan 0A done. Plan 0C **COMPLETE**. **Plan 0D-1a ✅ BUILT** (subagent-driven, 23 tests, commits
+`ac1e8d8..71720f0`, ready-to-merge). **0D-1b was SPLIT into Phase 1 (Deploy) + Phase 2 (Wire).**
+**Phase 1 (Deploy) ✅ DONE & VALIDATED LIVE this session (2026-06-28)** — grounding-service + Qdrant now run
+as containers on `vm-soc-v2-n8n` (network `soar-net`; the existing n8n container attached via `docker network
+connect`; both new containers `--restart unless-stopped`). ATT&CK ingested (**846 techniques**), and the n8n→service
+path is proven: `/health` ok, `/retrieve` returns real bge-small results (e.g. "rdp brute force" → RDP Hijacking
+/ Remote Desktop Protocol), `/normalize` + `/verify` work (gate live, both deferred checks pass, StubJudge,
+run-log written), and **VM deallocate→start reboot-survival confirmed** (containers auto-resume, volume persists
+846). The VM is left **deallocated** (cost-safe); next start auto-resumes everything.
+**Falcon trial APPROVED 2026-06-27 — USER setting up the Falcon account** (0B Tasks 2–7, hands-on).
+**Next actions for a fresh instance:** (1) author + execute **0D-1b Phase 2 (Wire)** — the n8n "honeypot-triage"
+workflow (USER drives the n8n UI; carry the 2 Important items + wire the live judge `ANTHROPIC_API_KEY`); (2)
+once 0B validated, author **0D-2** (Falcon Alerts trigger + Contain). See the Plan 0D block + spec §7.
 
 **Plan 0B — CrowdStrike Falcon — trial APPROVED 2026-06-27, USER setting up account.**
 - Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT workspace).
@@ -120,7 +125,19 @@ validated, author **0D-2** (Falcon Alerts trigger + Contain). Both spec'd in the
   untrusted display text. Also: `triage-verifier/` has no black/isort/mypy gate wired (configured in
   pyproject but not enforced); a few plan-mandated cosmetic import-order/dead-name nits remain (a one-shot
   `isort`+`black` pass would normalize them).
-**Plan 0D — SOAR wiring — 0D-1a ✅ BUILT 2026-06-27; 0D-1b/0D-2 designed (spec §7), not built.**
+**Plan 0D — SOAR wiring — 0D-1a ✅ BUILT · 0D-1b Phase 1 (Deploy) ✅ DONE & LIVE 2026-06-28 · Phase 2 (Wire) + 0D-2 next.**
+> **0D-1b Phase 1 (Deploy) artifacts/state:** spec `docs/superpowers/specs/2026-06-27-honeypot-phase0d1b-deploy-design.md`,
+> plan `docs/superpowers/plans/2026-06-27-honeypot-phase0d1b-phase1-deploy.md` (both PARENT). Code reached the VM
+> via a NEW **private** GitHub repo **`Armando-ic/soc-automation-honeypot-project`** (remote `honeypot`; the
+> public `Armando-ic/SOC-Automation-Project` = origin, untouched; secrets audit gitleaks-clean over 169 commits).
+> On `vm-soc-v2-n8n`: `docker network soar-net`; containers `qdrant` + `grounding-service` (built from
+> `grounding-service/Dockerfile` + `docker-compose.yml`, committed); n8n attached via `docker network connect`.
+> Source is at `/root/soc-src` on the VM. **Ingest fix this session (commit `dc43396`):** the one-shot embed of
+> the 846-technique corpus OOM-killed (~7 GiB) on the 8 GiB VM → `upsert_techniques` now batches (batch_size=64);
+> 23 tests still green. To re-ingest/refresh: `docker exec grounding-service python scripts/ingest_attack.py`.
+> **Live judge still deferred** — `ANTHROPIC_API_KEY` is NOT set on the VM (StubJudge); Phase 2 wires it (one-line
+> container env + recreate). **NOTE:** Phase-1 commits (`a9bad14`, `1fd83ac`, `dc43396`) were pushed to `honeypot`
+> but the HANDOFF commit for this update is local-only unless pushed.
 - Spec: `docs/superpowers/specs/2026-06-27-honeypot-phase0d-soar-wiring-design.md` (PARENT) — **approved.**
 - 0D-1a plan: `docs/superpowers/plans/2026-06-27-honeypot-phase0d1a-grounding-service.md` (PARENT) — **8 TDD
   tasks (0–7), complete code, self-reviewed; ready to execute subagent-driven. NOT started.**
