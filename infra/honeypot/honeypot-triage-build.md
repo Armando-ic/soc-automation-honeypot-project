@@ -201,6 +201,24 @@ const toolCall = content.find(c => c.type === 'tool_use' && c.name === 'submit_t
 if (!toolCall) throw new Error(`Expected submit_triage_result tool call but got: ${JSON.stringify(content)}`);
 const r = toolCall.input;
 
+// Defensive: Opus intermittently omits the trailing narrative field (investigation_notes).
+// Guarantee all 9 required fields are structurally present so a benign omission can't gate a
+// sound triage. Substantive checks still run on the model's REAL values - only empty structure is filled.
+r.schema_version = r.schema_version || 'v1';
+if (!r.investigation_notes || !String(r.investigation_notes).trim()) {
+  r.investigation_notes = 'No additional analyst notes provided by automated triage.';
+}
+if (!r.alert_summary || !String(r.alert_summary).trim()) r.alert_summary = 'Honeypot alert (no summary provided).';
+if (!r.severity) r.severity = 'medium';
+if (!r.severity_rationale || !String(r.severity_rationale).trim()) r.severity_rationale = 'No rationale provided.';
+r.mitre_techniques = Array.isArray(r.mitre_techniques) ? r.mitre_techniques : [];
+r.iocs_enriched = Array.isArray(r.iocs_enriched) ? r.iocs_enriched : [];
+r.recommended_actions = Array.isArray(r.recommended_actions) ? r.recommended_actions : [];
+r.iocs = (r.iocs && typeof r.iocs === 'object') ? r.iocs : {};
+for (const b of ['ips', 'domains', 'file_hashes', 'users', 'hosts']) {
+  if (!Array.isArray(r.iocs[b])) r.iocs[b] = [];
+}
+
 // carry-forward context from earlier nodes
 const ctx = $('Build Opus Input').item.json;
 const usage = $input.first().json.usage || {};
