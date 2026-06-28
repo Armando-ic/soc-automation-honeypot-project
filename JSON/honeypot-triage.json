@@ -1,0 +1,560 @@
+{
+  "name": "honeypot-triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "honeypot-triage",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "honeypot-triage"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse honeypot brute-force alert -> canonical IOCs + alert_text + enrichment plan (CF#2 canonical form).\nconst body = $input.first().json.body || {};\nconst r = body.result || {};\n\nconst canonIp = (v) => String(v || '').trim();                       // plain IPv4: no change\nconst isPrivate = (ip) =>\n  /^10\\./.test(ip) || /^192\\.168\\./.test(ip) ||\n  /^172\\.(1[6-9]|2\\d|3[0-1])\\./.test(ip) || /^127\\./.test(ip) || ip === '';\nconst canonDomain = (v) =>\n  String(v || '').trim().toLowerCase().replace(/\\[\\.\\]/g, '.').replace(/^hxxp/, 'http').replace(/\\.$/, '');\nconst canonHash = (v) => String(v || '').trim().toLowerCase();\n\nconst src_ip = canonIp(r.src_ip);\nconst host = r.ComputerName || r.dest || r.host || 'unknown-host';\nconst user = r.user || r.Account_Name || 'unknown-user';\nconst count = r.count || 'multiple';\n\nconst enrich_ips = (src_ip && !isPrivate(src_ip)) ? [src_ip] : [];\n\nconst alert_text =\n  `RDP/SMB brute force: ${count} failed Windows logons (EventCode 4625) ` +\n  `against user ${user} on host ${host} from external source IP ${src_ip}. ` +\n  `Repeated failed authentication, credential access, remote service login.`;\n\nreturn [{ json: {\n  run_id: String($execution.id),\n  timestamp: new Date().toISOString(),\n  search_name: body.search_name || '',\n  results_link: body.results_link || '',\n  src_ip, host, user, count,\n  enrich_ips,\n  observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },\n  alert_text,\n}}];"
+      },
+      "id": "parse-alert",
+      "name": "Parse Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.abuseipdb.com/api/v2/check",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ipAddress",
+              "value": "={{ $('Parse Alert').item.json.src_ip }}"
+            },
+            {
+              "name": "maxAgeInDays",
+              "value": "90"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "enrich_abuseipdb",
+      "name": "enrich_abuseipdb",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.greynoise.io/v3/community/{{ $('Parse Alert').item.json.src_ip }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "enrich_greynoise",
+      "name": "enrich_greynoise",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "GreyNoise account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble /normalize items from the two enrichment responses, keyed by the canonical src_ip.\nconst p = $('Parse Alert').item.json;\nconst ip = p.src_ip;\nconst abuse = $('enrich_abuseipdb').item.json;\nconst grey = $('enrich_greynoise').item.json;\nconst items = [];\nif (ip) {\n  items.push({ ioc: ip, provider: 'abuseipdb', response: abuse });\n  items.push({ ioc: ip, provider: 'greynoise', response: grey });\n}\nreturn [{ json: { ...p, items } }];"
+      },
+      "id": "build-normalize-body",
+      "name": "Build Normalize Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/normalize",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ items: $json.items }) }}",
+        "options": {}
+      },
+      "id": "normalize",
+      "name": "normalize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/retrieve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ alert_text: $('Parse Alert').item.json.alert_text, top_k: 8 }) }}",
+        "options": {}
+      },
+      "id": "retrieve",
+      "name": "retrieve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the Opus user message: alert + provided enrichment + candidate techniques + EXACT IOC strings to echo.\nconst p = $('Parse Alert').item.json;\nconst enrichment_results = $('normalize').item.json.enrichment_results || {};\nconst retr = $('retrieve').item.json || {};\nconst techniques = retr.techniques || [];\nconst retrieved_ids = retr.ids || [];\n\nconst candidates = techniques\n  .map(t => `- ${t.id}  ${t.name}  [tactics: ${(t.tactics || []).join(', ')}]`)\n  .join('\\n') || '(none)';\nconst enrichLines = Object.entries(enrichment_results)\n  .map(([ioc, verdict]) => `- ${ioc} => ${verdict}`)\n  .join('\\n') || '(none)';\nconst observedIps = (p.observed_iocs.ips || []).join(', ') || '(none)';\n\nconst opus_user_message =\n`Honeypot Splunk alert: ${p.search_name}\nHost: ${p.host}   User: ${p.user}   Failed logons: ${p.count}\nSplunk link: ${p.results_link}\n\nObserved IOCs (use these EXACT strings verbatim):\n  IPs: ${observedIps}\n  Users: ${(p.observed_iocs.users || []).join(', ')}\n  Hosts: ${(p.observed_iocs.hosts || []).join(', ')}\n\nEnrichment results (verdicts you MUST match; do not invent):\n${enrichLines}\n\nCandidate MITRE techniques (cite ONLY from these IDs):\n${candidates}\n\nSubmit your triage with submit_triage_result now.`;\n\nreturn [{ json: { ...p, enrichment_results, retrieved_ids, opus_user_message } }];"
+      },
+      "id": "build-opus-input",
+      "name": "Build Opus Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Submit your final SOC triage analysis. You MUST call this tool exactly once at the end of your investigation to deliver your structured findings. Do not respond with text after calling this tool.",
+        "jsCode": "return {\n  success: true,\n  message: \"Triage analysis received. Workflow will route to downstream consumers.\"\n};",
+        "specifyInputSchema": true,
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"schema_version\",\n    \"alert_summary\",\n    \"severity\",\n    \"severity_rationale\",\n    \"mitre_techniques\",\n    \"iocs\",\n    \"iocs_enriched\",\n    \"recommended_actions\",\n    \"investigation_notes\"\n  ],\n  \"properties\": {\n    \"schema_version\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"v1\"\n      ]\n    },\n    \"alert_summary\": {\n      \"type\": \"string\"\n    },\n    \"severity\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"low\",\n        \"medium\",\n        \"high\",\n        \"critical\"\n      ]\n    },\n    \"severity_rationale\": {\n      \"type\": \"string\"\n    },\n    \"mitre_techniques\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"id\",\n          \"name\",\n          \"tactic\"\n        ],\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\"\n          },\n          \"name\": {\n            \"type\": \"string\"\n          },\n          \"tactic\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"iocs\": {\n      \"type\": \"object\",\n      \"required\": [\n        \"ips\",\n        \"domains\",\n        \"file_hashes\",\n        \"users\",\n        \"hosts\"\n      ],\n      \"properties\": {\n        \"ips\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\"\n          }\n        },\n        \"domains\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\"\n          }\n        },\n        \"file_hashes\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\"\n          }\n        },\n        \"users\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\"\n          }\n        },\n        \"hosts\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"iocs_enriched\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"value\",\n          \"ioc_type\",\n          \"verdict\",\n          \"source\",\n          \"summary\"\n        ],\n        \"properties\": {\n          \"value\": {\n            \"type\": \"string\"\n          },\n          \"ioc_type\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"ip\",\n              \"domain\",\n              \"file_hash\"\n            ]\n          },\n          \"verdict\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"malicious\",\n              \"suspicious\",\n              \"clean\",\n              \"unknown\"\n            ]\n          },\n          \"source\": {\n            \"type\": \"string\"\n          },\n          \"summary\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"recommended_actions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"description\",\n          \"priority\"\n        ],\n        \"properties\": {\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"priority\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"low\",\n              \"medium\",\n              \"high\",\n              \"critical\"\n            ]\n          }\n        }\n      }\n    },\n    \"investigation_notes\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+      },
+      "id": "submit_triage_result",
+      "name": "submit_triage_result",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        1560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-opus-4-8",
+          "mode": "list",
+          "cachedResultName": "claude-opus-4-8"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.opus_user_message }}"
+            }
+          ]
+        },
+        "options": {
+          "system": "You are a Tier 1 SOC analyst triaging alerts from a honeypot monitored by Splunk. Enrichment and candidate MITRE techniques are ALREADY PROVIDED to you in the user message - you do not call any tools to gather them. Your only job is to reason over the provided context and submit one structured analysis.\n\nWorkflow:\n1. Read the alert details, the provided enrichment results, and the provided candidate MITRE techniques.\n2. Call submit_triage_result EXACTLY ONCE to deliver your findings. It is the only valid way to respond. Do not return free text after the tool call.\n\nRules:\n- mitre_techniques MUST be chosen ONLY from the provided candidate technique IDs. Do not cite any technique whose ID is not in the provided candidate list - even if it seems relevant. If none fit, return an empty mitre_techniques list and explain in investigation_notes.\n- For IOC values, use the EXACT strings provided in the \"Observed IOCs\" and \"Enrichment results\" sections, verbatim, in both iocs and iocs_enriched[].value. Do not reformat, re-case, defang, or normalize them.\n- iocs_enriched verdicts MUST match the provided enrichment results. Do not invent a malicious/suspicious verdict for an IOC the enrichment did not flag as malicious/suspicious. Set source to the provider that produced the verdict (e.g. \"abuseipdb\", \"greynoise\").\n- iocs lists must contain every distinct IOC observed, deduplicated. iocs_enriched contains only the IOCs that were actually enriched (the provided ones).\n- For each iocs_enriched item, set ioc_type to \"ip\", \"domain\", or \"file_hash\" matching the value.\n- Pick one severity (low/medium/high/critical); use severity_rationale for nuance. high/critical must be supported by a malicious/suspicious IOC verdict or a high-severity tactic in the cited techniques.\n- recommended_actions: specific and imperative (\"Block 203.0.113.10 at the perimeter firewall\"), 3-5 items.\n- investigation_notes: alternative hypotheses, missing data, MITRE rationale.\n\nSeverity calibration:\n- low: routine/expected or likely false positive\n- medium: deserves analyst attention but not page-worthy\n- high: active threat indicators present, escalate within working hours\n- critical: page on-call immediately, suspected active compromise"
+        }
+      },
+      "id": "opus-triage",
+      "name": "Opus triage",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        0
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "REPLACE_ME",
+          "name": "Anthropic account"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract submit_triage_result + build Iris alert_iocs, iris_description, Discord embed, /verify body.\nconst content = $input.first().json.content || [];\nconst toolCall = content.find(c => c.type === 'tool_use' && c.name === 'submit_triage_result');\nif (!toolCall) throw new Error(`Expected submit_triage_result tool call but got: ${JSON.stringify(content)}`);\nconst r = toolCall.input;\n\nconst ctx = $('Build Opus Input').item.json;\nconst usage = $input.first().json.usage || {};\nconst tokens_in = usage.input_tokens || 0;\nconst tokens_out = usage.output_tokens || 0;\n\nconst IRIS_IOC_TYPE_IDS = { ip: 79, domain: 20, md5: 90, sha1: 111, sha256: 113 };\nconst TLP_AMBER = 2;\nconst BULLET = '•', EMDASH = '—';\n\nfunction resolveIrisTypeId(iocType, value) {\n  if (iocType === 'ip') return IRIS_IOC_TYPE_IDS.ip;\n  if (iocType === 'domain') return IRIS_IOC_TYPE_IDS.domain;\n  if (iocType === 'file_hash') {\n    const v = String(value).trim().toLowerCase();\n    if (/^[0-9a-f]{32}$/.test(v)) return IRIS_IOC_TYPE_IDS.md5;\n    if (/^[0-9a-f]{40}$/.test(v)) return IRIS_IOC_TYPE_IDS.sha1;\n    if (/^[0-9a-f]{64}$/.test(v)) return IRIS_IOC_TYPE_IDS.sha256;\n  }\n  return null;\n}\n\nconst alert_iocs = [];\nfor (const item of (r.iocs_enriched || []).filter(i => i.verdict === 'malicious' || i.verdict === 'suspicious')) {\n  const typeId = resolveIrisTypeId(item.ioc_type, item.value);\n  if (typeId === null) continue;\n  alert_iocs.push({\n    ioc_value: item.value,\n    ioc_description: `${item.source}: ${item.summary}`,\n    ioc_tlp_id: TLP_AMBER,\n    ioc_type_id: typeId,\n    ioc_tags: 'soc-automation,honeypot,phase0d',\n  });\n}\n\nconst sevId = { low: 4, medium: 1, high: 5, critical: 6 }[r.severity] || 2;\nconst mitre = (r.mitre_techniques || []).map(t => `${t.id} (${t.name})`).join(', ') || 'none identified';\nconst enriched = (r.iocs_enriched || [])\n  .map(i => `${BULLET} \\`${i.value}\\` ${EMDASH} ${String(i.verdict).toUpperCase()} (${i.source}): ${i.summary}`)\n  .join('\\n') || '_none_';\nconst actions = (r.recommended_actions || [])\n  .map(a => `${BULLET} [${String(a.priority).toUpperCase()}] ${a.description}`)\n  .join('\\n') || '_none_';\n\nconst splunk_link = (ctx.results_link || '').replace('mydfir-splunk', '20.236.193.253')\n                                            .replace('192.168.129.131', '20.236.193.253');\n\nconst iris_description =\n`**Summary:** ${r.alert_summary}\n\n**Severity:** ${r.severity} ${EMDASH} ${r.severity_rationale}\n\n**MITRE Techniques:** ${mitre}\n\n**Enriched IOCs:**\n${enriched}\n\n**Recommended Actions:**\n${actions}\n\n**Investigation Notes:**\n${r.investigation_notes || '_none_'}\n\n---\nSplunk: ${splunk_link}`;\n\nconst verify_body = {\n  result: r,\n  retrieved: ctx.retrieved_ids || [],\n  enrichment_results: ctx.enrichment_results || {},\n  run_meta: { run_id: ctx.run_id, timestamp: ctx.timestamp, tokens_in, tokens_out, latency_ms: 0 },\n};\n\nconst top_mitre = (r.mitre_techniques && r.mitre_techniques[0])\n  ? `${r.mitre_techniques[0].id} ${r.mitre_techniques[0].name}` : 'n/a';\n\nconst discord_body = { embeds: [{\n  title: `✅ ${String(r.severity).toUpperCase()} — ${ctx.search_name || 'Honeypot brute force'}`,\n  description: `Host **${ctx.host}** • src_ip \\`${ctx.src_ip}\\`\\nMITRE: ${top_mitre}\\nVerifier: **passed**`,\n  color: 3066993,\n}]};\n\nreturn [{ json: {\n  ...r,\n  alert_name: ctx.search_name || 'Honeypot brute force',\n  severity_iris_id: sevId,\n  iris_description,\n  splunk_link,\n  alert_iocs,\n  verify_body,\n  top_mitre,\n  discord_body,\n  src_ip: ctx.src_ip,\n  host: ctx.host,\n} }];"
+      },
+      "id": "extract-result",
+      "name": "Extract Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.verify_body) }}",
+        "options": {}
+      },
+      "id": "verify",
+      "name": "verify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.verification_passed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "alert",
+        "operation": "create",
+        "alert_customer_id": 1,
+        "alert_severity_id": "={{ $('Extract Result').item.json.severity_iris_id }}",
+        "alert_title": "={{ $('Extract Result').item.json.alert_name }}",
+        "additionalFields": {
+          "__iocsCollectionJSON": "={{ $('Extract Result').item.json.alert_iocs }}",
+          "alert_description": "={{ $('Extract Result').item.json.iris_description }}"
+        },
+        "options": {}
+      },
+      "id": "add-new-alert",
+      "name": "Add new Alert",
+      "type": "n8n-nodes-dfir-iris.dfirIris",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -120
+      ],
+      "credentials": {
+        "dfirIrisApi": {
+          "id": "REPLACE_ME",
+          "name": "DFIR IRIS account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REPLACE_ME",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Extract Result').item.json.discord_body) }}",
+        "options": {}
+      },
+      "id": "discord",
+      "name": "Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2880,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "alert",
+        "operation": "create",
+        "alert_customer_id": 1,
+        "alert_severity_id": "={{ $('Extract Result').item.json.severity_iris_id }}",
+        "alert_title": "=[NEEDS-HUMAN] {{ $('Extract Result').item.json.alert_name }}",
+        "additionalFields": {
+          "__iocsCollectionJSON": "={{ $('Extract Result').item.json.alert_iocs }}",
+          "alert_description": "={{ '⚠️ NEEDS-HUMAN — verifier did not pass; re-grounding/auto-retry not enabled.\\n\\n' + $('Extract Result').item.json.iris_description }}"
+        },
+        "options": {}
+      },
+      "id": "needs-human-iris",
+      "name": "Needs-Human Iris",
+      "type": "n8n-nodes-dfir-iris.dfirIris",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        180
+      ],
+      "credentials": {
+        "dfirIrisApi": {
+          "id": "REPLACE_ME",
+          "name": "DFIR IRIS account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REPLACE_ME",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ embeds: [{ title: '⚠️ NEEDS-HUMAN — ' + ($('Extract Result').item.json.alert_name || 'Honeypot'), description: 'Host **' + $('Extract Result').item.json.host + '** • src_ip `' + $('Extract Result').item.json.src_ip + '`\\nVerifier: NOT passed — human review required', color: 15158332 }] }) }}",
+        "options": {}
+      },
+      "id": "needs-human-discord",
+      "name": "Needs-Human Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3120,
+        320
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Alert": {
+      "main": [
+        [
+          {
+            "node": "enrich_abuseipdb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enrich_abuseipdb": {
+      "main": [
+        [
+          {
+            "node": "enrich_greynoise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enrich_greynoise": {
+      "main": [
+        [
+          {
+            "node": "Build Normalize Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Normalize Body": {
+      "main": [
+        [
+          {
+            "node": "normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize": {
+      "main": [
+        [
+          {
+            "node": "retrieve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "retrieve": {
+      "main": [
+        [
+          {
+            "node": "Build Opus Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Opus Input": {
+      "main": [
+        [
+          {
+            "node": "Opus triage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "submit_triage_result": {
+      "ai_tool": [
+        [
+          {
+            "node": "Opus triage",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Opus triage": {
+      "main": [
+        [
+          {
+            "node": "Extract Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Result": {
+      "main": [
+        [
+          {
+            "node": "verify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "verify": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Add new Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Needs-Human Iris",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Needs-Human Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

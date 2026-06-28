@@ -42,9 +42,10 @@ Build in this order (positions are cosmetic). The integration-critical endpoints
    `unknown`, not fail the run).
 5. **Build Normalize Body** — `n8n-nodes-base.code` (Run Once for All Items). JS = Section C.2.
 6. **normalize** — `n8n-nodes-base.httpRequest`. POST `http://grounding-service:8000/normalize`; Specify Body =
-   Using JSON; Body = `={{ { "items": $json.items } }}`. Returns `{enrichment_results:{...}}`.
+   Using JSON; Body = `={{ JSON.stringify({ items: $json.items }) }}`. Returns `{enrichment_results:{...}}`.
+   (n8n's "Using JSON" body needs a JSON *string* — `={{ { ... } }}` coerces to `[object Object]`; wrap in `JSON.stringify`.)
 7. **retrieve** — `n8n-nodes-base.httpRequest`. POST `http://grounding-service:8000/retrieve`; Body (JSON) =
-   `={{ { "alert_text": $('Parse Alert').item.json.alert_text, "top_k": 8 } }}`. Returns `{techniques, ids}`.
+   `={{ JSON.stringify({ alert_text: $('Parse Alert').item.json.alert_text, top_k: 8 }) }}`. Returns `{techniques, ids}`.
 8. **Build Opus Input** — `n8n-nodes-base.code` (Run Once for All Items). JS = Section C.3.
 9. **submit_triage_result** — `@n8n/n8n-nodes-langchain.toolCode`. Copy verbatim from `JSON/SOC-Triage-v3.json`
    (description, jsCode, and the full `inputSchema` — **schema unchanged**).
@@ -55,14 +56,14 @@ Build in this order (positions are cosmetic). The integration-critical endpoints
     is deterministic now).
 11. **Extract Result** — `n8n-nodes-base.code` (Run Once for All Items). JS = Section C.4.
 12. **verify** — `n8n-nodes-base.httpRequest`. POST `http://grounding-service:8000/verify`; Body (JSON) =
-    `={{ $json.verify_body }}`. Returns the run record incl. `verification_passed`.
+    `={{ JSON.stringify($json.verify_body) }}`. Returns the run record incl. `verification_passed`.
 13. **Gate** — `n8n-nodes-base.if`. Condition (Boolean): `={{ $json.verification_passed }}` is `true`.
 14. **Add new Alert** — `n8n-nodes-dfir-iris.dfirIris`. Copy v3's config verbatim (resource alert / create;
     `alert_customer_id:1`; `alert_severity_id = {{ $json.severity_iris_id }}`; `alert_title = {{ $json.alert_name }}`;
     additionalFields `__iocsCollectionJSON = {{ $json.alert_iocs }}` (passed raw, not stringified — v3 Gotcha N1),
     `alert_description = {{ $json.iris_description }}`).
 15. **Discord** — `n8n-nodes-base.httpRequest`. POST `<Discord webhook URL>`; Body (JSON) =
-    `={{ $json.discord_body }}`. Keep the real URL OUT of the exported JSON (Task 9): either store it in a
+    `={{ JSON.stringify($('Extract Result').item.json.discord_body) }}`. Keep the real URL OUT of the exported JSON (Task 9): either store it in a
     credential, or replace with `https://discord.com/api/webhooks/REPLACE_ME` before commit.
 16. **Build Reground Input** — `n8n-nodes-base.code` (FAIL branch). JS = Section C.5 (first block).
 17. **Opus triage 2** — duplicate of node 10, Message content = `={{ $json.opus_user_message_reground }}`;
@@ -353,7 +354,7 @@ index=honeypot (EventCode=4625 OR source="XmlWinEventLog:Security" EventCode=462
 
 Discord → Server Settings → Integrations → Webhooks → New Webhook → pick the channel → Copy Webhook URL. Store
 it in `Personal/honeypot-secrets.txt` (gitignored). The embed payload is built by Extract Result (C.4); the
-Discord node (node 15) POSTs `={{ $json.discord_body }}` to the URL. Keep the URL out of the committed JSON.
+Discord node (node 15) POSTs `={{ JSON.stringify($('Extract Result').item.json.discord_body) }}` to the URL. Keep the URL out of the committed JSON.
 
 ---
 
