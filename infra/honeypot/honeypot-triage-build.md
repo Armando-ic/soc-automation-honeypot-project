@@ -359,16 +359,37 @@ Discord node (node 15) POSTs `={{ $json.discord_body }}` to the URL. Keep the UR
 
 ## Section F — Live judge
 
-On the VM, next to `grounding-service/docker-compose.yml`, create a gitignored `.env`:
+Create a gitignored `.env` **next to the compose file** at `grounding-service/.env` (the file is owned by
+root, so use `sudo`):
 
-```
-ANTHROPIC_API_KEY=<key>
+```bash
+sudo tee /root/soc-src/grounding-service/.env >/dev/null <<'EOF'
+ANTHROPIC_API_KEY=sk-ant-...
+EOF
+sudo chmod 600 /root/soc-src/grounding-service/.env
 ```
 
-Ensure compose references it (`env_file: [.env]` or `environment: ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}`),
-then `docker compose -f grounding-service/docker-compose.yml up -d --build`. `main.py` auto-switches
-`StubJudge → ClaudeJudge` when the key is present. The judge is **advisory only** — status hardcoded
-`NEEDS_HUMAN`, notes are untrusted display text, it never flips the gate.
+> **Location matters.** Compose interpolates `${ANTHROPIC_API_KEY}` (see `docker-compose.yml`) from a `.env`
+> in the **compose file's directory** (`grounding-service/`), NOT the directory you run `docker compose` from.
+> A repo-root `.env` is silently ignored → the judge stays `StubJudge`. Verified 2026-06-28.
+
+Then recreate so the container picks up the key:
+
+```bash
+cd /root/soc-src
+docker compose -f grounding-service/docker-compose.yml up -d --force-recreate
+```
+
+`main.py` auto-switches `StubJudge → ClaudeJudge` when the key is present. Verify it's live (a real model note,
+not the stub string):
+
+```bash
+docker exec grounding-service curl -s -X POST http://localhost:8000/verify -H 'Content-Type: application/json' \
+  -d '{"result":{"schema_version":"v1","alert_summary":"x","severity":"high","severity_rationale":"x","mitre_techniques":[{"id":"T1110","name":"Brute Force","tactic":"credential-access"}],"iocs":{"ips":["203.0.113.10"],"domains":[],"file_hashes":[],"users":[],"hosts":[]},"iocs_enriched":[{"value":"203.0.113.10","ioc_type":"ip","verdict":"malicious","source":"abuseipdb","summary":"x"}],"recommended_actions":[{"description":"block","priority":"high"}],"investigation_notes":"x"},"retrieved":["T1110"],"enrichment_results":{"203.0.113.10":"malicious"},"run_meta":{"run_id":"judgecheck","timestamp":"t","tokens_in":1,"tokens_out":1,"latency_ms":1}}' \
+  | python3 -c "import sys,json;j=[c for c in json.load(sys.stdin)['check_results'] if c['name']=='judge'][0];print('STUB' if j['detail'].strip()=='advisory: human review required' else 'LIVE'); print(j['status'])"
+```
+Expected: `LIVE` then `needs_human`. The judge is **advisory only** — status hardcoded `NEEDS_HUMAN`, notes are
+untrusted display text, it never flips the gate.
 
 ---
 
