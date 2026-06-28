@@ -9,3 +9,5 @@
 **/qdrant_storage/
 .playwright-mcp/
 Personal/
+.env
+**/.env

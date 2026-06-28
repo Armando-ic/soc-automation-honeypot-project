@@ -20,7 +20,9 @@ services:
     environment:
       QDRANT_URL: http://qdrant:6333
       RUNS_PATH: /data/runs.jsonl
-      # ANTHROPIC_API_KEY: <set in Phase 2 to enable the live advisory judge; unset => StubJudge>
+      # Live advisory judge (Phase 2): substituted from a gitignored .env in the dir compose is run from
+      # (repo root). Unset/empty => StubJudge. The value never lives in this committed file.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - grounding_runs:/data
     depends_on: [qdrant]
