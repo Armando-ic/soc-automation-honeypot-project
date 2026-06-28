@@ -79,7 +79,26 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-28) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 (Deploy) ✅ DONE & LIVE · 0D-1b Phase 2 (Wire) next · 0B trial APPROVED
+## 🎯 CURRENT STATE (2026-06-28) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) IN PROGRESS (Tasks 1–4 done)** · 0B trial APPROVED
+
+> ### 🟡 0D-1b Phase 2 (Wire) — IN PROGRESS (paused 2026-06-28, mid-session)
+> Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
+> `docs/superpowers/plans/2026-06-28-honeypot-phase0d1b-phase2-wire.md` (both PARENT, approved). Build method =
+> **fully hands-on** (USER builds the n8n workflow node-by-node from `infra/honeypot/honeypot-triage-build.md`),
+> trigger = **brute-force-only** (Splunk 4625 per-src_ip), notify = **Discord**, live judge = **wired**.
+> **DONE (commits `66c43ed`→`fa9824a` on `honeypot/ai-upgrade`):** Task 1 CF#1 (`/verify` logs+gates false on
+> verifier exception, never 500; 25 tests green) · Task 2 forked Opus prompt `triage-verifier/prompts/triage-honeypot.md` ·
+> Task 3 build runbook `infra/honeypot/honeypot-triage-build.md` · Task 4 VM rebuild — **live on `vm-soc-v2-n8n`**:
+> CF#1 baked, Qdrant 846, **live ClaudeJudge active** (real advisory prose, `needs_human`, never approves),
+> verified via `/verify`. **Gotcha (now documented):** the live-judge `.env` MUST sit at
+> `grounding-service/.env` (next to the compose file) — Compose ignores a repo-root `.env`; `up -d --force-recreate`
+> picks it up. `/root/soc-src` on the VM is a **transferred (non-git) tree** — sync changed files via base64 over
+> `az vm run-command` (no git auth on the VM).
+> **REMAINING (USER hands-on, runbook §B–H):** Task 5 GreyNoise + Discord n8n creds · Task 6 build the
+> `honeypot-triage` workflow node-by-node · Task 7 Splunk saved-search (runbook §D SPL) · Task 8 e2e (happy +
+> failure/re-ground→needs-human; verify `runs.jsonl`). **THEN (Claude):** Task 9 export → `JSON/honeypot-triage.json`
+> (sanitized) + commit · Task 10 flip this block to DONE. **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` deallocated
+> during the break — `az vm start` both before resuming; everything auto-resumes, judge survives reboot.**
 Plan 0A done. Plan 0C **COMPLETE**. **Plan 0D-1a ✅ BUILT** (subagent-driven, 23 tests, commits
 `ac1e8d8..71720f0`, ready-to-merge). **0D-1b was SPLIT into Phase 1 (Deploy) + Phase 2 (Wire).**
 **Phase 1 (Deploy) ✅ DONE & VALIDATED LIVE this session (2026-06-28)** — grounding-service + Qdrant now run
