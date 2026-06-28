@@ -79,26 +79,37 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-28) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) IN PROGRESS (Tasks 1–4 done)** · 0B trial APPROVED
+## 🎯 CURRENT STATE (2026-06-28) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) — n8n pipeline BUILT + e2e VALIDATED; Splunk auto-trigger (Task 7) remains** · 0B trial APPROVED
 
-> ### 🟡 0D-1b Phase 2 (Wire) — IN PROGRESS (paused 2026-06-28, mid-session)
+> ### 🟢 0D-1b Phase 2 (Wire) — n8n triage pipeline BUILT + e2e VALIDATED (2026-06-28)
 > Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
 > `docs/superpowers/plans/2026-06-28-honeypot-phase0d1b-phase2-wire.md` (both PARENT, approved). Build method =
-> **fully hands-on** (USER builds the n8n workflow node-by-node from `infra/honeypot/honeypot-triage-build.md`),
-> trigger = **brute-force-only** (Splunk 4625 per-src_ip), notify = **Discord**, live judge = **wired**.
-> **DONE (commits `66c43ed`→`fa9824a` on `honeypot/ai-upgrade`):** Task 1 CF#1 (`/verify` logs+gates false on
-> verifier exception, never 500; 25 tests green) · Task 2 forked Opus prompt `triage-verifier/prompts/triage-honeypot.md` ·
-> Task 3 build runbook `infra/honeypot/honeypot-triage-build.md` · Task 4 VM rebuild — **live on `vm-soc-v2-n8n`**:
-> CF#1 baked, Qdrant 846, **live ClaudeJudge active** (real advisory prose, `needs_human`, never approves),
-> verified via `/verify`. **Gotcha (now documented):** the live-judge `.env` MUST sit at
-> `grounding-service/.env` (next to the compose file) — Compose ignores a repo-root `.env`; `up -d --force-recreate`
-> picks it up. `/root/soc-src` on the VM is a **transferred (non-git) tree** — sync changed files via base64 over
-> `az vm run-command` (no git auth on the VM).
-> **REMAINING (USER hands-on, runbook §B–H):** Task 5 GreyNoise + Discord n8n creds · Task 6 build the
-> `honeypot-triage` workflow node-by-node · Task 7 Splunk saved-search (runbook §D SPL) · Task 8 e2e (happy +
-> failure/re-ground→needs-human; verify `runs.jsonl`). **THEN (Claude):** Task 9 export → `JSON/honeypot-triage.json`
-> (sanitized) + commit · Task 10 flip this block to DONE. **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` deallocated
-> during the break — `az vm start` both before resuming; everything auto-resumes, judge survives reboot.**
+> **fully hands-on** (USER built it in n8n; final shape captured as an importable JSON), trigger = **brute-force-only**
+> (Splunk 4625 per-src_ip), notify = **Discord**, live judge = **wired**.
+> **DONE (commits `66c43ed`→`366f702` on `honeypot/ai-upgrade`):** Task 1 CF#1 (`/verify` logs+gates false on
+> verifier exception, never 500; 25 tests green) · Task 2 forked + hardened Opus prompt `triage-verifier/prompts/triage-honeypot.md`
+> (mandates all 9 fields) · Task 3 build runbook `infra/honeypot/honeypot-triage-build.md` · Task 4 VM rebuild —
+> CF#1 baked, Qdrant 846, **live ClaudeJudge active** · Task 5 GreyNoise + Discord creds · Task 6 the 17-node
+> `honeypot-triage` workflow (importable **`JSON/honeypot-triage.json`**, sanitized) — Webhook→Parse→AbuseIPDB+
+> GreyNoise→`/normalize`→`/retrieve`→Opus(`claude-opus-4-8`,`submit_triage_result`)→Extract→`/verify`→Gate→
+> [PASS: Iris+Discord][FAIL: Needs-Human Iris+Discord].
+> **✅ e2e VALIDATED LIVE:** happy path `run_id 241` `verification_passed:true` — all 8 deterministic checks pass,
+> **both deferred checks live+pass** (`mitre_in_retrieved`, `enrichment_grounded`), live judge `needs_human`
+> (advisory), Iris alert + green Discord embed + `runs.jsonl` line. **Failure path proven** (`run_id 238/240` →
+> needs-human Iris+Discord). CF#2 IOC canonical-form held (IP matched across `iocs`/`iocs_enriched`/`enrichment_results`).
+> **Fixes found during e2e (all committed):** (a) n8n "Using JSON" body needs `JSON.stringify(...)` not a raw `={{ {…} }}` object;
+> (b) Opus reliably drops the trailing `investigation_notes` even when mandated → Extract Result now defensively fills
+> all 9 required fields (substantive checks still run on the model's real values); (c) un-pin the Opus node between
+> test runs or n8n replays stale output.
+> **Gotchas (documented):** live-judge `.env` MUST be at `grounding-service/.env` (Compose ignores a repo-root `.env`);
+> `/root/soc-src` is a **transferred (non-git) tree** — sync changed files via base64 over `az vm run-command`;
+> `run_meta` tokens log as 0 (langchain node doesn't expose usage — accepted).
+> **REMAINING:** **Task 7 — Splunk saved-search** (runbook §D SPL: `index=honeypot EventCode=4625`, per-src_ip,
+> ≥10/5min, RFC1918-excluded, webhook action → the n8n production URL) to make the loop **live-triggered** instead
+> of manual/replay. **OPTIONAL:** add the bounded one-shot **re-ground** branch (omitted from the importable JSON
+> for reliability; FAIL currently goes straight to needs-human — safe + logged). Then **0D-2** (Falcon trigger +
+> Contain) within the trial window. **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` were left RUNNING after this session —
+> deallocate to save cost (`az vm deallocate`), everything auto-resumes + judge survives reboot.**
 Plan 0A done. Plan 0C **COMPLETE**. **Plan 0D-1a ✅ BUILT** (subagent-driven, 23 tests, commits
 `ac1e8d8..71720f0`, ready-to-merge). **0D-1b was SPLIT into Phase 1 (Deploy) + Phase 2 (Wire).**
 **Phase 1 (Deploy) ✅ DONE & VALIDATED LIVE this session (2026-06-28)** — grounding-service + Qdrant now run
