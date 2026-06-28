@@ -1,0 +1,35 @@
+# Run from the repo root:
+#   docker network create soar-net          # once (external network, shared with n8n)
+#   docker compose -f grounding-service/docker-compose.yml up -d --build
+name: soar
+services:
+  qdrant:
+    image: qdrant/qdrant:latest          # pin to the pulled digest for reproducibility (see plan Task 5)
+    container_name: qdrant
+    restart: unless-stopped
+    networks: [soar-net]
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  grounding-service:
+    container_name: grounding-service
+    restart: unless-stopped
+    build:
+      context: ..                          # repo root, so triage-verifier/ is in context
+      dockerfile: grounding-service/Dockerfile
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      RUNS_PATH: /data/runs.jsonl
+      # ANTHROPIC_API_KEY: <set in Phase 2 to enable the live advisory judge; unset => StubJudge>
+    volumes:
+      - grounding_runs:/data
+    depends_on: [qdrant]
+    networks: [soar-net]
+
+networks:
+  soar-net:
+    external: true                         # created manually so the pre-existing n8n can join it too
+
+volumes:
+  qdrant_storage:
+  grounding_runs:
