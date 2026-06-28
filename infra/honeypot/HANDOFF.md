@@ -108,8 +108,9 @@ ONLY in the gitignored secrets file — never committed/echoed.
 > ≥10/5min, RFC1918-excluded, webhook action → the n8n production URL) to make the loop **live-triggered** instead
 > of manual/replay. **OPTIONAL:** add the bounded one-shot **re-ground** branch (omitted from the importable JSON
 > for reliability; FAIL currently goes straight to needs-human — safe + logged). Then **0D-2** (Falcon trigger +
-> Contain) within the trial window. **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` were left RUNNING after this session —
-> deallocate to save cost (`az vm deallocate`), everything auto-resumes + judge survives reboot.**
+> Contain) within the trial window. **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` DEALLOCATED at session end (cost-safe)
+> — `az vm start -g rg-soc-v2-azure-central-us -n <vm>` both to resume; everything auto-resumes + judge survives reboot.
+> The importable workflow is `JSON/honeypot-triage.json` (regenerate via `python infra/honeypot/build_honeypot_triage_workflow.py`).**
 Plan 0A done. Plan 0C **COMPLETE**. **Plan 0D-1a ✅ BUILT** (subagent-driven, 23 tests, commits
 `ac1e8d8..71720f0`, ready-to-merge). **0D-1b was SPLIT into Phase 1 (Deploy) + Phase 2 (Wire).**
 **Phase 1 (Deploy) ✅ DONE & VALIDATED LIVE this session (2026-06-28)** — grounding-service + Qdrant now run
