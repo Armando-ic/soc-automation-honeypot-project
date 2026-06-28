@@ -1,12 +1,21 @@
-# gitleaks config — extends the default ruleset with a single path-scoped allowlist.
+# gitleaks config — extends the default ruleset with path-scoped allowlists for
+# vendored upstream artifacts whose EXAMPLE data trips the generic-api-key detector.
 #
 # Why this file exists:
-#   The DFIR-Iris OpenAPI specification at JSON/IRIS-2.0.4-OpenAPI-specification.json
+#   (1) The DFIR-Iris OpenAPI specification at JSON/IRIS-2.0.4-OpenAPI-specification.json
 #   is an upstream-published artifact (vendored verbatim from the dfir-iris/iris-web
 #   project's API docs). It contains example tokens inside response-body schemas — placeholder
 #   data shipped publicly by the upstream maintainers, not real credentials belonging
 #   to this project. Without an allowlist, gitleaks' generic-api-key detector matches
 #   those example tokens as if they were live secrets.
+#
+#   (2) JSON/Analyze_Crowdstrike_detections.json is the official CrowdStrike n8n template
+#   (vendored upstream). Its example detection payloads embed file-analysis fields such as
+#   "authentihash" (a 64-hex Authenticode FILE HASH, e.g. line 1650) surrounded by other
+#   sample VirusTotal fields (reputation, total_votes, detectiteasy). gitleaks' generic-api-key
+#   ENTROPY heuristic matches that file hash as if it were an API key — it is not. The template's
+#   real n8n credentials are referenced by credential-ID, never by value, so the file holds no
+#   live secret. Verified: the matched string is a SHA-256-shaped file hash in example data.
 #
 # Verification that this is safe to allowlist:
 #   - The matched tokens (e.g. "ViYIIkN_LL062yNOcq2kJA3ZMscOAoHmLy8GEh_JYKBWwspLB_E65jhYLg9CsR0J-kP8DmmM3RO31_xixrG8rw"
@@ -25,7 +34,8 @@
 useDefault = true
 
 [allowlist]
-description = "Upstream DFIR-Iris OpenAPI spec contains example tokens (not real credentials)"
+description = "Vendored upstream artifacts with example tokens/hashes (not real credentials)"
 paths = [
   '''JSON/IRIS-2\.0\.4-OpenAPI-specification\.json''',
+  '''JSON/Analyze_Crowdstrike_detections\.json''',
 ]
