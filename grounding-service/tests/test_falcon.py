@@ -106,3 +106,34 @@ def test_map_trims_long_cmdline():
 def test_map_ignores_private_or_garbage_ip():
     assert map_alert(dict(BRUTE_FORCE, external_ip="10.0.0.5"))["result"]["src_ip"] == ""
     assert map_alert(dict(BRUTE_FORCE, external_ip="not-an-ip"))["result"]["src_ip"] == ""
+
+
+import pytest
+
+from grounding_service.falcon import select_contain_aid
+
+PIN = "9134deadbeef5865"
+
+
+def test_contain_guard_happy():
+    assert select_contain_aid([PIN], PIN) == PIN
+
+
+def test_contain_guard_rejects_zero_matches():
+    with pytest.raises(ValueError):
+        select_contain_aid([], PIN)
+
+
+def test_contain_guard_rejects_multiple_matches():
+    with pytest.raises(ValueError):
+        select_contain_aid([PIN, "other"], PIN)
+
+
+def test_contain_guard_rejects_wrong_aid():
+    with pytest.raises(ValueError):
+        select_contain_aid(["someoneelse"], PIN)
+
+
+def test_contain_guard_rejects_unconfigured_pin():
+    with pytest.raises(ValueError):
+        select_contain_aid([PIN], "")

@@ -124,3 +124,15 @@ def map_alert(alert: dict) -> dict:
         "alert_text": alert_text,
         "result": {"src_ip": src_ip, "user": user, "ComputerName": HOST_DEFAULT, "count": 1},
     }
+
+
+def select_contain_aid(resolved_ids, pinned_aid: str) -> str:
+    """Return the single safe AID to contain, or raise ValueError. Hostname is NOT a boundary; the pin is."""
+    if not pinned_aid:
+        raise ValueError("FALCON_PINNED_AID is not configured — refusing to contain")
+    ids = list(resolved_ids or [])
+    if len(ids) != 1:
+        raise ValueError(f"expected exactly one host for the hostname, got {len(ids)}")
+    if ids[0] != pinned_aid:
+        raise ValueError("resolved AID does not match the pinned honeypot AID — refusing to contain")
+    return ids[0]
