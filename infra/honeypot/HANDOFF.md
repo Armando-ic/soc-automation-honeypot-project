@@ -79,7 +79,7 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger (Task 7) BUILT & e2e VALIDATED; the loop is LIVE-TRIGGERED** · 0B trial APPROVED
+## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon IN PROGRESS (2026-06-29) — API client + sensor + XDR + detect-only policy BUILT; RESUME by verifying the policy flipped to Applied=1, then Task 6 (detect-only proof)**
 
 > ### 🟢 0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger BUILT + e2e VALIDATED (2026-06-28 wire; **2026-06-29 Task 7 live-trigger**)
 > Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
@@ -130,16 +130,44 @@ path is proven: `/health` ok, `/retrieve` returns real bge-small results (e.g. "
 / Remote Desktop Protocol), `/normalize` + `/verify` work (gate live, both deferred checks pass, StubJudge,
 run-log written), and **VM deallocate→start reboot-survival confirmed** (containers auto-resume, volume persists
 846). The VM is left **deallocated** (cost-safe); next start auto-resumes everything.
-**Falcon trial APPROVED 2026-06-27 — USER setting up the Falcon account** (0B Tasks 2–7, hands-on).
-**Next actions for a fresh instance:** (1) author + execute **0D-1b Phase 2 (Wire)** — the n8n "honeypot-triage"
-workflow (USER drives the n8n UI; carry the 2 Important items + wire the live judge `ANTHROPIC_API_KEY`); (2)
-once 0B validated, author **0D-2** (Falcon Alerts trigger + Contain). See the Plan 0D block + spec §7.
+> ### 🟡 0B — CrowdStrike Falcon — IN PROGRESS (2026-06-29): Tasks 2–5 built; verify + Tasks 6–8 remain
+> Executing `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT) via
+> **superpowers:executing-plans**, USER hands-on. **Full step-by-step + gotchas + proof-of-work:
+> `infra/honeypot/falcon-setup-walkthrough.md`** (written this session).
+> **Tenant:** cloud **us-2**, base `https://api.us-2.crowdstrike.com`. Trial **expires 2026-07-13** (~14d left
+> on 2026-06-29); keep/drop checkpoint ~2026-07-12. Secrets (Client ID/Secret, CID) in `Personal/honeypot-vm-creds.txt` ONLY.
+> **✅ DONE this session (commits `500976b`, `843337f` + tonight's doc commit):**
+> - **Task 2** — API client `honeypot-soar` (scopes Alerts:R/W + Hosts:R/W + Event streams:R); base URL us-2 recorded.
+> - **Task 3** — sensor **7.38.21003.0** on `vm-honeypot-win` (csagent RUNNING; ext IP 128.203.185.25 confirmed).
+>   NSG checked: `allow-web` (443→Internet, prio 1020) covers the sensor — **no NSG change**.
+> - **Cleanup** — a personal Win11 PC (`PERSONAL-WIN11`) had auto-enrolled in the trial tenant → **UNINSTALLED**
+>   (maintenance token) so the tenant is honeypot-only (else a tenant-wide 0D-2 alert poll would sweep it in / could Contain it).
+> - **Task 4** — Insight XDR enabled; **EDR (Endpoint detections) views visible**. (Alerts API 200 smoke test folds into Task 6's pull.)
+> - **Task 5** — host group `hg-honeypot` (Dynamic, hostname=`vm-honeypot-win`) + policy `honeypot-detect-only`
+>   **BUILT + assigned**: all prevention OFF, ML Detection sliders AGGRESSIVE, ⭐ behavioral enrichments UP
+>   (Cloud-based anomalous process execution → Aggressive, Extended user mode data visibility → Aggressive,
+>   Retrospective detections ON). Policy doc reconciled to the real console: `infra/honeypot/falcon-detect-only-policy.md`.
+> - **⚠️ Gotcha (documented):** "Script-based execution visibility" forces "Quarantine & security center
+>   registration" ON (= quarantine subsystem) → **Cancel it / keep quarantine OFF** for detect-only.
+> **▶ RESUME HERE:**
+> 1. **Finish Task 5** — at session end the policy read **Applied 0 / Pending 1** (precedence 3 = assigned +
+>    winning, just propagating). **Verify it flipped to Applied: 1** (Prevention policies → honeypot-detect-only →
+>    Policy assignment, or the host's Assigned policies). Still Pending after ~10 min → check `sc query csagent` + Last Seen.
+> 2. **Task 6** — EICAR (or wait for a real attacker) → confirm detected-not-quarantined + Alerts API
+>    `pattern_disposition_details` **all-false** → create `infra/honeypot/falcon-validation.md` → commit.
+> 3. **Task 7** — `scripts/falcon-contain-roundtrip.ps1 -Hostname vm-honeypot-win` (creds via `CS_ID/CS_SECRET/CS_BASE` env)
+>    → capture Contain→Lift transitions → commit.
+> 4. **Task 8** — RUNBOOK Falcon lifecycle/off-board + README links + offer `/schedule` trial-end reminder (~2026-07-12).
+> 5. Then **0D-2** — brainstorm was STARTED then **paused** (superpowers:brainstorming) to do 0B first; resume it
+>    WITH real Falcon alert data. Grounding: spec §7 of `2026-06-27-honeypot-phase0d-soar-wiring-design.md` + 6 open
+>    decisions (poll-vs-event-stream, Contain severity threshold, human-gate mechanism, Falcon→canonical field map).
 
-**Plan 0B — CrowdStrike Falcon — trial APPROVED 2026-06-27, USER setting up account.**
+**Plan 0B — CrowdStrike Falcon — IN PROGRESS (live state = the 🟡 0B block above). Background below.**
 - Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT workspace).
-- Falcon 15-day trial **APPROVED 2026-06-27** (submitted 2026-06-26, no-CC self-service). **USER is setting up
-  the account + doing Tasks 2–7 HANDS-ON via RDP** — condensed checklist in `scratchpad/falcon-day2-quickstart.md`.
-  (Hands-on, NOT `az run-command` — user "learn by doing" preference; memory `feedback_prefers_hands_on_doing`.)
+  Walkthrough/proof-of-work: `infra/honeypot/falcon-setup-walkthrough.md`.
+- Falcon 15-day trial activated ~2026-06-28 (expires 2026-07-13). **Hands-on via RDP/console**, NOT
+  `az run-command` — user "learn by doing" preference; memory `feedback_prefers_hands_on_doing`. (The earlier
+  `scratchpad/falcon-day2-quickstart.md` checklist no longer exists — the walkthrough doc supersedes it.)
 - **Research corrected the spec (see the rewritten `crowdstrike-api-notes.md`):** legacy `/detects/*` API is
   DEAD (404 since 2025-09-30) → build on the **Alerts API**; one API client, scopes **Alerts:R/W + Hosts:R/W +
   Event streams:R**; real EDR = the free **Insight XDR** module enabled in-trial (the trial defaults to NGAV-only

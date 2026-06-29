@@ -2,35 +2,83 @@
 
 Goal: the sensor DETECTS the full attacker kill chain while letting it PROCEED
 (no block/quarantine/kill), so the honeypot stays high-interaction. Verified by
-`pattern_disposition_details` all-false on a real detection. Applied at Plan 0B Task 5.
+`pattern_disposition_details` all-false on a real detection (Plan 0B Task 6).
+
+**Status:** policy `honeypot-detect-only` BUILT + assigned to `hg-honeypot` on **2026-06-29**.
+At session end it read **Applied: 0 / Pending: 1** (precedence 3) — i.e. assigned and winning, awaiting
+the sensor's next heartbeat to flip to **Applied: 1**. Verify Applied=1 before Task 6.
+
+> Reconciled to the **actual** Falcon console (us-2 tenant, Windows prevention policy, sensor 7.38.21003.0)
+> on 2026-06-29 — the section names below match the live UI, which is more granular than the original spec.
+> The narrative step-by-step is in [`falcon-setup-walkthrough.md`](falcon-setup-walkthrough.md).
 
 Console path: Endpoint security → Configure → Prevention policies → (Windows) →
-create `honeypot-detect-only` → assign to host group `hg-honeypot`.
+`honeypot-detect-only` → assign to host group `hg-honeypot`.
 
-## ML sliders — set DETECTION high, PREVENTION off
-For EVERY ML setting pair set Detection = AGGRESSIVE (or MODERATE) and Prevention = DISABLED:
-- Cloud Anti-malware            : Detection = AGGRESSIVE · Prevention = DISABLED
-- Sensor Anti-malware           : Detection = AGGRESSIVE · Prevention = DISABLED
-- Adware & PUP                  : Detection = AGGRESSIVE · Prevention = DISABLED
-- Cloud Anti-malware (MS Office): Detection = AGGRESSIVE · Prevention = DISABLED
-- Cloud AM (user-initiated)     : Detection = AGGRESSIVE · Prevention = DISABLED
-- Sensor AM (user-initiated)    : Detection = AGGRESSIVE · Prevention = DISABLED
+## The one-line principle
+**Detection/visibility ON, every prevention/blocking action OFF.** Turning a *prevention* toggle off does
+NOT suppress the detection — CrowdStrike still raises the alert; the toggle only controls whether the sensor
+*acts* (blocks/kills/quarantines). So we max detection and zero out enforcement.
 
-## Boolean PREVENTION switches — ALL OFF (disabling ML sliders alone is not enough)
-Turn OFF every prevention/blocking toggle so nothing is blocked, e.g.:
-- Quarantine on write ............ OFF
-- Exploit mitigation (Force ASLR/DEP, SEH overwrite, Heap spray, NULL-page) OFF
-- Ransomware (file encryption, file-system access, backup deletion) OFF
-- Behavioral prevention: Suspicious Processes, Suspicious Scripts/Commands,
-  Code Injection, Credential Dumping, Lateral Movement OFF
-- Driver-based / FS containment blocking OFF
+## ⚠️ Detect-only gotcha — the quarantine dependency (found 2026-06-29)
+Enabling **"Script-based execution visibility"** (and potentially other visibility toggles) forces
+**"Quarantine & security center registration" ON** via a "Confirm dependent setting" dialog. That master
+toggle turns on Falcon's **quarantine subsystem** AND registers Falcon as the Windows AV provider — the
+opposite of a detect-only honeypot. **Decision: Cancel that dialog; leave "Quarantine & security center
+registration" OFF and skip any visibility toggle that depends on it.** The pure-detection enrichments below
+have no such dependency and are the higher-value ones anyway.
 
-## Detection / VISIBILITY toggles — ON (so detections still fire & stream)
-- Notify End Users ............... OFF (no honeypot-side popups)
-- Additional User Mode Data ...... ON
-- Detect on Write / Engine Full Visibility ... ON
-- Sensor Tampering Protection .... (leave default; not a prevention-of-attack toggle)
+## NGAV machine-learning sliders — Detection AGGRESSIVE, Prevention DISABLED
+(Console sections: *Next-gen antivirus | Cloud machine learning*, *| Sensor machine learning*,
+*| Microsoft Office file macro machine learning*.)
+- Cloud-based anti-malware ............... Detection = AGGRESSIVE · Prevention = DISABLED
+- Cloud-based adware & pup ............... Detection = AGGRESSIVE · Prevention = DISABLED
+- Sensor-based anti-malware .............. Detection = AGGRESSIVE · Prevention = DISABLED
+- Cloud anti-malware for MS Office files . Detection = AGGRESSIVE (optional) · Prevention = DISABLED
+- On-demand-scan ML sliders .............. leave DISABLED (real-time *Detect on write* covers us)
 
-## Verify (Task 6): a detection appears in the console AND each behaviour's
-## `pattern_disposition_details` is all-false (process_blocked / quarantine_file /
-## kill_process / etc. = false). If anything blocked, a Prevention toggle is still on.
+## Behavioral DETECTION enrichments — turn UP (pure detection, no blocking, no quarantine dependency)
+These were OFF by default and are the most valuable detections for a behavioral honeypot:
+- **Cloud-based anomalous process execution** (*Cloud-based detections | Behavioral detections*) → Detection = **AGGRESSIVE** ⭐
+- **Extended user mode data visibility** (*Sensor visibility | Enhanced visibility*, slider) → Detection = **AGGRESSIVE**
+- **Retrospective detections** (*Cloud-based detections | Behavioral detections*) → **ON**
+
+## Visibility / detection toggles — ON
+- Additional user mode data visibility ... ON
+- Detect on write ........................ ON
+- Redacted HTTP detection details ........ ON (default)
+- (Optional, *only if no quarantine dependency fires*) Interpreter-only visibility, HTTP visibility and
+  detection, Enhanced exploitation visibility, Enhanced DLL load visibility, Memory scanning with CPU → ON
+- Notify "End user notifications" ........ OFF (no honeypot-side popups)
+
+## Prevention / blocking — ALL OFF (this is what makes it detect-only)
+Confirmed all-off across every section on 2026-06-29:
+- **Next-gen antivirus | On write:** Quarantine on write — OFF
+- **Next-gen antivirus | Quarantine:** Quarantine & security center registration — OFF · Quarantine on removable media — OFF
+- **Next-gen antivirus | Clean infected MS Office files:** MS Office malicious macro removal — OFF
+- **Malware protection | Execution blocking:** Custom indicator blocking, Suspicious process prevention,
+  Suspicious registry operation prevention, Boot configuration database protection, Suspicious script and
+  command prevention, Intelligence-sourced threat prevention, Driver load prevention, Vulnerable driver
+  protection, File system containment — ALL OFF
+- **Behavior-based prevention | Exploit mitigation:** ASLR bypass, DEP bypass, Heap spray pre-allocation,
+  NULL page allocation, SEH overwrite prevention — ALL OFF
+- **Behavior-based prevention | Ransomware:** Backup deletion, Cryptowall, File encryption, Locky, File
+  system access prevention, Volume shadow copy (audit/protect) — ALL OFF
+- **Behavior-based prevention | Exploitation behavior:** Application exploitation, Chopper webshell,
+  Drive-by download, Code injection, JavaScript execution via Rundll32 prevention — ALL OFF
+- **Behavior-based prevention | Lateral movement and credential access:** Windows logon bypass ("Sticky
+  keys"), Credential dumping prevention — ALL OFF
+- **Behavior-based prevention | Remediation:** Advanced remediation — OFF
+- **Sensor capabilities:** Sensor tamper prevention — OFF (fine for a sensor we manage)
+- Every ML **Prevention** slider — DISABLED
+
+## Host group
+`hg-honeypot` — **Dynamic**, rule Hostname equals `vm-honeypot-win` (auto-re-includes after a snapshot
+rebuild). Must contain ONLY the honeypot (the personal PC was uninstalled 2026-06-29 to keep the tenant
+honeypot-only).
+
+## Verify (Task 6 — NOT yet done)
+Trigger a detection (EICAR or a real attacker hit) → confirm in *Endpoint security → Monitor → Endpoint
+detections* it was detected but NOT quarantined (the EICAR file still exists) → pull it via the Alerts API
+and confirm each behaviour's `pattern_disposition_details` is **all-false** (`process_blocked`,
+`quarantine_file`, `kill_process`, … = false). If anything blocked, a Prevention toggle is still on.
