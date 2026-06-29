@@ -178,7 +178,7 @@
     },
     {
       "parameters": {
-        "amount": 30,
+        "amount": 120,
         "unit": "seconds"
       },
       "id": "wait-lift",

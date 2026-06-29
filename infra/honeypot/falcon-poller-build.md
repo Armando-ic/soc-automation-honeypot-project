@@ -77,13 +77,16 @@ Schedule Trigger ─┬─> get_state ─> falcon_query ─> falcon_plan ─> IF
   2026-06-29):** `total:1`, `resources:["306e…0772:ind:9134…5865:…995344"]` (the EICAR detection; its embedded
   AID == the pinned honeypot AID).
 - **⚠️ Host-scope (`device.hostname:'vm-honeypot-win'`) dropped on purpose.** The spec'd `+device.hostname` FQL
-  **AND** clause could NOT be transmitted through n8n 2.21.7: (a) Send-Query-Parameters sends the FQL `+` as a
-  literal `+` → the CrowdStrike gateway decodes it to a space → `total:0`; (b) moving the whole query to the URL
-  field with `%2B` → httpRequest v4.4 re-encodes the `%` to `%252B` → **`400 invalid query filter`**. The tenant
-  is **honeypot-only** and Contain is **AID-pinned**, so filtering on `created_timestamp` alone is safe — a stray
-  host's alert would at worst be triaged as noise, and the Contain AID-guard still refuses any non-pinned AID.
-  Re-add the host clause only if (i) a reliable n8n encoding for the FQL `+` is found AND (ii) a second host ever
-  legitimately shares the tenant.
+  **AND** clause could NOT be transmitted through n8n 2.21.7: the combined filter returned **`total:0`** via
+  Send-Query-Parameters and **`400 invalid query filter`** via the URL-field `%2B` form. Each clause ALONE returns
+  the EICAR id (`total:1`), so the single-clause path is solid; the **exact wire cause of the combined-filter
+  rejection was not root-caused** — note that with Send-Query ON axios actually encodes a literal `+`→`%2B` and
+  `'`→`%27`, so it is **not** a simple plus-to-space, so treat AND-via-n8n as unsupported until a wire capture
+  proves an encoding the us-2 gateway accepts. The tenant is **honeypot-only** and Contain is **AID-pinned**, so
+  filtering on `created_timestamp` alone is safe — a stray host's alert would at worst be triaged as noise (and is
+  now **correctly attributed** via `map_alert`'s real-host read, not relabeled as the honeypot), while the Contain
+  AID-guard still refuses any non-pinned AID. Re-add the host clause only if (i) a reliable n8n encoding for the
+  FQL `+` is found AND (ii) a second host ever legitimately shares the tenant.
 
 ### C.4 falcon_plan — `n8n-nodes-base.httpRequest`
 - **POST** `http://grounding-service:8000/falcon/plan`; Body (JSON):
@@ -256,6 +259,13 @@ source-aware Parse Alert, `Has IOC` empty-IOC guard, Extract Result `source`/`co
   Items); ensure the node is not in "Run Once for Each Item" mode.
 - **duplicate Iris alerts after a webhook blip** → expected only on a rare partial post-failure (the local webhook
   is highly reliable); the contiguous-prefix advance prevents skips, accepts a rare re-triage.
+- **the same alert (e.g. EICAR) re-appears in `falcon_query` every tick** → **expected, not a bug.** The inclusive
+  `>=` filter re-pulls `created_timestamp == watermark`, and the **`seen`-set — NOT the watermark — is the
+  idempotency key**: `falcon_plan` drops seen ids so it is never re-triaged. EICAR's hydrated object has no
+  `created_timestamp` (the watermark reads `timestamp`, which is `<= created_timestamp`), so it is re-pulled
+  indefinitely and stays in `seen` **by design**. The only event that would re-triage in-window alerts is loss of
+  the state file `/data/falcon-poller-state.json` (it lives on the `grounding_runs` volume → survives recreate +
+  VM deallocate).
 
 ---
 

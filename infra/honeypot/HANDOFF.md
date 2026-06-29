@@ -79,18 +79,18 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon ✅ COMPLETE (2026-06-29): detect-only sensor + OAuth API + Contain→Lift all VALIDATED (`normal→contained→normal`, `pattern_disposition_details` all-false) → `falcon-validation.md`; Task 8 lifecycle docs in RUNBOOK/README; trial keep/drop reminder scheduled 2026-07-11 09:00 ET (routine `trig_01VGbabpwThgahchN54z4GTy`). ⚠️ API secret was pasted in chat → ROTATED. **0D-2 ✅ POLLER LIVE + e2e VALIDATED + hardening DEPLOYED (2026-06-29):** `falcon-alert-poller` poll branch built (host-scope-dropped FQL; proven `total:1`), EICAR empty-IOC e2e green (Iris #245, idempotent, NO 422), 5-lens review findings #4/#5 deployed + smoke-verified. Watchdog DEFERRED; human-fired Contain optional. ▶ See the "## 🟢 0D-2" block below.**
+## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon ✅ COMPLETE (2026-06-29): detect-only sensor + OAuth API + Contain→Lift all VALIDATED (`normal→contained→normal`, `pattern_disposition_details` all-false) → `falcon-validation.md`; Task 8 lifecycle docs in RUNBOOK/README; trial keep/drop reminder scheduled 2026-07-11 09:00 ET (routine `trig_01VGbabpwThgahchN54z4GTy`). ⚠️ API secret was pasted in chat → ROTATED. **0D-2 ✅ POLLER LIVE + e2e VALIDATED + hardening DEPLOYED + Contain workflow VALIDATED (2026-06-29):** `falcon-alert-poller` poll branch (host-scope-dropped FQL, `total:1`), EICAR empty-IOC e2e green (Iris #245, idempotent), findings #4/#5 deployed + smoke-verified, `falcon-contain` round-trip `normal→contained→normal` observed live. Watchdog (auto-lift) DEFERRED. ▶ See the "## 🟢 0D-2" block below.**
 
-## 🟢 0D-2 — Falcon Alerts poll trigger ✅ POLLER BUILT + e2e VALIDATED + hardening DEPLOYED (2026-06-29). Watchdog DEFERRED; human-fired Contain not built.
+## 🟢 0D-2 — Falcon Alerts poll trigger ✅ POLLER + hardening + human-fired Contain all BUILT & VALIDATED (2026-06-29). Watchdog (auto-lift) DEFERRED.
 
 **Read-first for 0D-2:**
 - **Plan (PARENT):** `docs/superpowers/plans/2026-06-29-honeypot-phase0d2-falcon-trigger-contain.md`.
 - **Spec (PARENT):** `docs/superpowers/specs/2026-06-29-honeypot-phase0d2-falcon-trigger-contain-design.md`.
-- **n8n build runbook (THIS REPO):** `infra/honeypot/falcon-poller-build.md` — C.3 reflects the proven config; C.10 watchdog + Section D contain are DEFERRED/optional.
+- **n8n build runbook (THIS REPO):** `infra/honeypot/falcon-poller-build.md` — C.3 reflects the proven config; Section D contain is BUILT (`falcon-contain.json`); C.10 watchdog is DEFERRED.
 - **CONFIRMED us-2 schema (THIS REPO):** `infra/honeypot/falcon-alerts-field-map.md`.
 - **e2e evidence (THIS REPO):** `infra/honeypot/falcon-0d2-validation.md`.
 
-**Commits this session (ai-upgrade — NOT pushed):** `ea285ef` poller poll-branch built + empty-IOC e2e validated · `723c81b` backend hardening (map sort-by-`created` + real-host read). Prior 0D-2 range `008e49f..c78af38` (pushed).
+**Commits this session (ai-upgrade — NOT pushed):** `ea285ef` poller + empty-IOC e2e · `723c81b` backend hardening (map sort + real-host) · `7c2dddf` HANDOFF · `3109642` falcon-contain workflow · + a final commit (`wait_lift`→120s, doc findings #6/#7, contain evidence, this update). Prior 0D-2 range `008e49f..c78af38` (pushed).
 
 **✅ DONE this session:**
 - **Poll branch BUILT + LIVE** = `JSON/falcon-alert-poller.json` (regenerate: `python infra/honeypot/build_falcon_poller_workflow.py`):
@@ -112,25 +112,32 @@ ONLY in the gitignored secrets file — never committed/echoed.
     **USER-APPROVED the az-run-command deploy** (non-secret code sync; n8n VM is Linux, `/root/soc-src` is non-git).
   - **Live smoke GREEN:** scrambled `/falcon/map` batch → sorted `b:2,c:3,a:1`; `host_names:['other-host']` → `ComputerName=other-host`.
 
-**🟡 WATCHDOG (C.10) DEFERRED + human-fired `falcon-contain` NOT built (decision 2026-06-29):** the spec'd watchdog is a racy
-auto-lifter — review #2/#3: a 15-min tick can prematurely lift a legitimate human contain, and its single lift has no verify →
-false all-clear; and it can't run during the 23:00-ET n8n shutdown (#12). It is defense-in-depth the human path already covers
-(self-lift + manual-lift escalation D.6/D.7). If overnight auto-heal is ever wanted, build it **off n8n** (always-up host running
-`scripts/falcon-contain-roundtrip.ps1`), not as an n8n branch.
+**✅ human-fired `falcon-contain` BUILT + round-trip VALIDATED · 🟡 WATCHDOG (auto-lift) DEFERRED (2026-06-29):**
+`JSON/falcon-contain.json` (`build_falcon_contain_workflow.py`): Manual→resolve_host→contain_guard[AID-pin; 409→Discord
+REFUSED]→contain→wait 45s→status_contained→lift(retryOnFail)→wait 120s→status_normal→build_confirm→Discord. Fired live →
+**`normal→contained→normal`** (AID-pin held: resolved AID == pinned `9134…5865`; evidence `falcon-0d2-validation.md` §5).
+`wait_lift`=**120s** because CrowdStrike's lift took >30s; `build_confirm` goes GREEN only on observed `normal`, else a RED
+alarm naming the manual lift (which it correctly fired on the first 30s run — a false all-clear was refused).
+**The spec'd WATCHDOG (auto-lift) stays deferred** — a racy auto-lifter (review #2/#3: a 15-min tick can prematurely lift a
+legitimate human contain; its single lift has no verify → false all-clear; it can't run during the 23:00-ET n8n shutdown #12).
+It is defense-in-depth the human path already covers. If overnight auto-heal is ever wanted, build it **off n8n** (always-up
+host running `scripts/falcon-contain-roundtrip.ps1`), not as an n8n branch.
 
 **Live state (NOT in git):** VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` **RUNNING** — ⚠️ **deallocate when done:**
 `az vm deallocate -g rg-soc-v2-azure-central-us -n vm-soc-v2-n8n` (and `…-splunk`). grounding-service runs the **HARDENED** image.
 Poller state = watermark `2026-06-29T15:11:34.51Z`, `seen=[<EICAR composite_id>]` (advanced past EICAR; idempotent). n8n
-`falcon-alert-poller` imported + cred-bound but **INACTIVE**.
+`falcon-alert-poller` imported + cred-bound but **INACTIVE**; `falcon-contain` imported + cred-bound + round-trip validated
+(host left **`normal`**). ⚠️ If you re-import either workflow, the live `wait_lift` must be **120s** (the committed JSON has it).
 
 **▶ RESUME HERE (0D-2 remaining = optional / Phase-0-closing):**
-1. **(optional) Build human-fired `falcon-contain`** (runbook Section D, AID-pinned via the already-deployed `/falcon/contain-guard`).
-   Needed only for the Contain demo.
-2. **Contain-path e2e (Task 11 remainder):** needs a **credential-access / IOC-bearing** alert at high severity — none exists yet
-   (Falcon's honeypot detections are behavioral Execution). When one appears: confirm `source_ips` populated; triage passes the gate
-   → "Contain recommended" → fire `falcon-contain` → `normal→contained→normal`.
+1. **(optional) Clean GREEN `falcon-contain` run** — it's built + validated (`normal→contained→normal` observed); a single run
+   with `wait_lift`=120 yields the GREEN confirm embed (re-contains ~165s). Edit the live `wait_lift` node 30→120 first (the
+   committed JSON already has 120).
+2. **Contain *demo* path (Task 11 remainder):** the contain *mechanism* is validated; the alert→"Contain recommended" e2e needs a
+   **credential-access / IOC-bearing** alert at high severity — none exists yet (Falcon's honeypot detections are behavioral
+   Execution). When one appears: confirm `source_ips` populated; triage passes the gate → "Contain recommended" → fire `falcon-contain`.
 3. **Activate** the poller (turn on the 15-min Schedule Trigger) to run unattended.
-4. **Task 13:** `falcon-alert-poller.json` committed; commit `falcon-contain.json` if built; **deallocate VMs.** Phase 0 complete.
+4. **Task 13:** `falcon-alert-poller.json` + `falcon-contain.json` committed; **deallocate VMs** (`az vm deallocate …`). Phase 0 complete.
 
 **Deferred low-severity review findings (non-blocking, documented):** #6 (the `seen`-set — not the watermark — is the boundary
 alert's idempotency key), #7 (C.3 root-cause wording: axios actually sends `%2B`; the combined-filter rejection wasn't wire-root-caused),

@@ -46,10 +46,28 @@ Outputs:
 Second full run: `falcon_query` still `total:1` (re-pulled by the inclusive `>=` filter) → `falcon_plan` deduped
 EICAR via `seen` → `ids:[]` → **`IF has_new` false** → poll ends. **No duplicate Iris/Discord; state stable.**
 
+### 4. Backend hardening — live smoke (deployed `soar-grounding-service` image)
+After deploy (image rebuilt + recreated, `/health` ok), a scrambled 3-alert POST to `/falcon/map` returned items
+**`created`-ascending** `b:2(01:00) → c:3(02:00) → a:1(03:00)` (#4), and the alert carrying `host_names:["other-host"]`
+mapped to `ComputerName=other-host` while the others defaulted to `vm-honeypot-win` (#5). 23 pure `test_falcon.py`
+tests green. Re-confirmed green on the all-green sweep.
+
+### 5. Contain round-trip — `falcon-contain` (mechanism validated)
+`JSON/falcon-contain.json` (Manual → resolve_host → contain_guard → contain → wait → status_contained → lift →
+wait → status_normal → build_confirm → Discord). Fired manually 2026-06-29:
+- **AID-pin held:** `contain_guard` resolved `vm-honeypot-win` → the pinned AID `9134…5865` (200); the contained
+  device's `device_id` == that AID, `external_ip 128.203.185.25` (the honeypot).
+- **`normal → contained → normal` observed:** `status_contained` = **`contained`** (≈21:50:01); after `lift`,
+  `status_normal` = **`normal`** (v140, 22:00:46). Egress restored.
+- **Safety logic proved itself:** the first run's 30s post-lift wait was shorter than CrowdStrike's lift-apply
+  time, so `build_confirm` emitted the **RED "may still be CONTAINED"** alarm with the manual-lift command instead
+  of a false all-clear. Fix applied: `wait_lift` 30s → **120s**.
+
 ## Not yet validated / known-pending
 
-- **Contain-path e2e (Task 11 remainder):** needs a **credential-access / IOC-bearing** alert at high severity
-  (the verifier's `severity_supported` won't pass a no-IOC Execution alert at high). None exists in the tenant
-  yet (Falcon's honeypot detections are behavioral Execution). Re-confirm `source_ips` populated when one appears.
-- **Backend hardening (this session, post-e2e):** `/falcon/map` sort-by-`created` (hydrate-reorder SKIP guard) +
-  `map_alert` real-host read (stray-host mislabel) — implemented + redeployed separately.
+- **Contain *demo* path (alert → "Contain recommended"):** the contain *mechanism* is validated (§5); what remains
+  is an e2e where a triaged alert RECOMMENDS contain. That needs a **credential-access / IOC-bearing** alert at
+  high severity (the verifier's `severity_supported` won't pass a no-IOC Execution alert at high) — none exists in
+  the tenant yet (Falcon's honeypot detections are behavioral Execution). Re-confirm `source_ips` populated then.
+- **Watchdog (auto-lift):** deferred (racy; see HANDOFF). Stuck-contain recovery = the manual lift / the RED alarm.
+- **Poller cron:** `falcon-alert-poller` left INACTIVE; activate when ready to run unattended.

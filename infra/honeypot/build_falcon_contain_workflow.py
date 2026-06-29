@@ -7,7 +7,9 @@ the resolved host == exactly one device AND that AID == the pinned honeypot AID)
 
 Design (deliberately simpler than runbook Section D's Wait+poll LOOPS — bounded fixed-waits instead, no
 unbounded n8n loop): Manual -> resolve_host -> contain_guard -(200)-> contain -> wait 45s ->
-status_contained -> lift(retry) -> wait 30s -> status_normal -> build_confirm -> Discord.
+status_contained -> lift(retry) -> wait 120s -> status_normal -> build_confirm -> Discord.
+(wait_lift is 120s because CrowdStrike's lift_containment took >30s to transition in live testing 2026-06-29;
+the RED build_confirm alarm remains the backstop if even 120s is not enough.)
 contain_guard's 409 (error output) -> a Discord REFUSED notice and stop. lift fires regardless of the
 contained read (lifting is the always-safe direction); the final Discord is GREEN only if status_normal == normal,
 else a RED alarm naming the manual lift. A future hardening = the bounded poll loop + a watchdog (both deferred).
@@ -111,7 +113,7 @@ nodes = [
     falcon_http("lift", "POST", f"{US2}/devices/entities/devices-actions/v2?action_name=lift_containment",
                 [col(), 0], json_body=AID_BODY, extra={"retryOnFail": True, "waitBetweenTries": 5000}),
 
-    node("wait_lift", "n8n-nodes-base.wait", 1.1, {"amount": 30, "unit": "seconds"}, [col(), 0],
+    node("wait_lift", "n8n-nodes-base.wait", 1.1, {"amount": 120, "unit": "seconds"}, [col(), 0],
          nid="wait-lift", extra={"webhookId": "falcon-contain-wait-lift"}),
 
     falcon_http("status_normal", "POST", f"{US2}/devices/entities/devices/v2", [col(), 0],
