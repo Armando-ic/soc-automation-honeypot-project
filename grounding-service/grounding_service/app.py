@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from typing import Callable
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from grounding_service import falcon as fal
 from grounding_service.config import Settings
 from grounding_service.enrichment import build_enrichment_results
 from grounding_service.retriever import AttackRetriever
@@ -26,6 +27,23 @@ class VerifyRequest(BaseModel):
     retrieved: list[str] | None = None
     enrichment_results: dict[str, str] | None = None
     run_meta: dict = {}
+
+
+class FalconPlanRequest(BaseModel):
+    candidate_ids: list[str]
+    cap: int | None = None
+
+
+class FalconMapRequest(BaseModel):
+    alerts: list[dict]
+
+
+class FalconAdvanceRequest(BaseModel):
+    results: list[dict]
+
+
+class FalconContainGuardRequest(BaseModel):
+    resolved_ids: list[str]
 
 
 def create_app(
@@ -66,5 +84,43 @@ def create_app(
             settings=settings,
             client=client,
         )
+
+    @app.get("/falcon/state")
+    def falcon_state() -> dict:
+        return fal.load_state(settings.state_path)
+
+    @app.post("/falcon/plan")
+    def falcon_plan(req: FalconPlanRequest) -> dict:
+        st = fal.load_state(settings.state_path)
+        cap = req.cap if req.cap is not None else settings.falcon_poll_cap
+        return {
+            "ids": fal.select_new_alert_ids(req.candidate_ids, st["seen"], cap),
+            "watermark": st["watermark"],
+        }
+
+    @app.post("/falcon/map")
+    def falcon_map(req: FalconMapRequest) -> dict:
+        items = [
+            {"body": fal.map_alert(a),
+             "composite_id": a.get("composite_id", ""),
+             "created": a.get(fal.TS_FIELD, "")}
+            for a in req.alerts
+        ]
+        return {"items": items}
+
+    @app.post("/falcon/advance")
+    def falcon_advance(req: FalconAdvanceRequest) -> dict:
+        st = fal.load_state(settings.state_path)
+        new = fal.advance_state(st, req.results)
+        fal.save_state(settings.state_path, new)
+        return new
+
+    @app.post("/falcon/contain-guard")
+    def falcon_contain_guard(req: FalconContainGuardRequest) -> dict:
+        try:
+            aid = fal.select_contain_aid(req.resolved_ids, settings.falcon_pinned_aid)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        return {"aid": aid}
 
     return app

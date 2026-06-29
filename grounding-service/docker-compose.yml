@@ -20,6 +20,13 @@ services:
     environment:
       QDRANT_URL: http://qdrant:6333
       RUNS_PATH: /data/runs.jsonl
+      # 0D-2 Falcon poller state + AID-pin guard. State persists on the grounding_runs volume
+      # (survives container recreate + VM deallocate). FALCON_PINNED_AID is interpolated from the
+      # gitignored grounding-service/.env (same mechanism as ANTHROPIC_API_KEY); unset => contain-guard
+      # always 409s (fail-safe). The pinned AID NEVER lives in this committed file or in n8n.
+      FALCON_STATE_PATH: /data/falcon-poller-state.json
+      FALCON_PINNED_AID: ${FALCON_PINNED_AID:-}
+      FALCON_POLL_CAP: "8"
       # Live advisory judge (Phase 2): interpolated from a gitignored .env that MUST sit next to THIS
       # compose file (grounding-service/.env). Compose loads the interpolation .env from the compose
       # file's directory, NOT the dir you invoke it from — a repo-root .env is silently ignored.

@@ -63,3 +63,56 @@ def test_verify_returns_200_not_500_on_verifier_crash(seeded_retriever, tmp_path
     })
     assert r.status_code == 200
     assert r.json()["verification_passed"] is False
+
+
+def _falcon_settings(tmp_path):
+    return Settings(
+        runs_path=str(tmp_path / "runs.jsonl"),
+        state_path=str(tmp_path / "falcon-state.json"),
+        falcon_pinned_aid="9134deadbeef5865",
+        falcon_poll_cap=2,
+    )
+
+
+def test_falcon_state_default_empty(seeded_retriever, tmp_path):
+    c = TestClient(create_app(seeded_retriever, _falcon_settings(tmp_path)))
+    assert c.get("/falcon/state").json() == {"watermark": "", "seen": []}
+
+
+def test_falcon_plan_dedups_and_caps(seeded_retriever, tmp_path):
+    s = _falcon_settings(tmp_path)
+    c = TestClient(create_app(seeded_retriever, s))
+    # seed a seen-set via advance
+    c.post("/falcon/advance", json={"results": [
+        {"composite_id": "b", "created": "2026-06-29T00:00:00Z", "ok": True}]})
+    r = c.post("/falcon/plan", json={"candidate_ids": ["a", "b", "c", "d"], "cap": None})
+    assert r.json()["ids"] == ["a", "c"]          # b dropped (seen), cap=2 from settings
+
+
+def test_falcon_map_route(seeded_retriever, tmp_path):
+    c = TestClient(create_app(seeded_retriever, _falcon_settings(tmp_path)))
+    r = c.post("/falcon/map", json={"alerts": [
+        {"composite_id": "x:y", "created": "2026-06-29T01:00:00Z",
+         "severity_name": "High", "tactic": "Credential Access", "technique": "Brute Force",
+         "technique_id": "T1110", "external_ip": "203.0.113.10", "user_name": "Administrator"}]})
+    item = r.json()["items"][0]
+    assert item["composite_id"] == "x:y"
+    assert item["created"] == "2026-06-29T01:00:00Z"
+    assert item["body"]["result"]["src_ip"] == "203.0.113.10"
+    assert item["body"]["source"] == "falcon"
+
+
+def test_falcon_advance_persists(seeded_retriever, tmp_path):
+    s = _falcon_settings(tmp_path)
+    c = TestClient(create_app(seeded_retriever, s))
+    c.post("/falcon/advance", json={"results": [
+        {"composite_id": "a", "created": "2026-06-29T02:00:00Z", "ok": True}]})
+    assert c.get("/falcon/state").json() == {"watermark": "2026-06-29T02:00:00Z", "seen": ["a"]}
+
+
+def test_falcon_contain_guard_ok_and_409(seeded_retriever, tmp_path):
+    c = TestClient(create_app(seeded_retriever, _falcon_settings(tmp_path)))
+    assert c.post("/falcon/contain-guard",
+                  json={"resolved_ids": ["9134deadbeef5865"]}).json() == {"aid": "9134deadbeef5865"}
+    bad = c.post("/falcon/contain-guard", json={"resolved_ids": ["wrong"]})
+    assert bad.status_code == 409
