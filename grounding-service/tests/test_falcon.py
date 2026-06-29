@@ -58,3 +58,51 @@ def test_advance_bounds_seen():
     assert len(new["seen"]) == 5000
     assert new["seen"][-1] == "new"
     assert "0" not in new["seen"]
+
+
+from grounding_service.falcon import map_alert
+
+BEHAVIORAL = {  # the 0B-validated shape: flat, no IP, no user_name
+    "composite_id": "abc:def", "created": "2026-06-29T15:11:34.512Z",
+    "severity": 10, "severity_name": "Informational",
+    "tactic": "Execution", "technique": "User Execution", "technique_id": "T1204",
+    "filename": "powershell.exe", "cmdline": '"...powershell.exe" ', "pattern_disposition": 0,
+}
+
+BRUTE_FORCE = {  # an IP-bearing credential-access alert (field name per Task 0; here: external_ip)
+    "composite_id": "ghi:jkl", "created": "2026-06-29T16:00:00Z",
+    "severity_name": "High", "tactic": "Credential Access", "technique": "Brute Force",
+    "technique_id": "T1110", "external_ip": "203.0.113.10", "user_name": "Administrator",
+    "filename": "", "cmdline": "",
+}
+
+
+def test_map_behavioral_alert_empty_ip_no_undefined():
+    body = map_alert(BEHAVIORAL)
+    assert body["source"] == "falcon"
+    assert body["result"]["src_ip"] == ""                 # empty-IOC path
+    assert body["result"]["ComputerName"] == "vm-honeypot-win"
+    assert body["result"]["count"] == 1
+    assert "undefined" not in body["alert_text"]
+    assert "None" not in body["alert_text"]
+    assert "T1204" in body["alert_text"]
+    assert body["console_link"].endswith("abc:def")
+
+
+def test_map_brute_force_sets_ip_and_user():
+    body = map_alert(BRUTE_FORCE)
+    assert body["result"]["src_ip"] == "203.0.113.10"
+    assert body["result"]["user"] == "Administrator"
+    assert "T1110" in body["alert_text"]
+
+
+def test_map_trims_long_cmdline():
+    alert = dict(BEHAVIORAL, cmdline="x" * 500)
+    body = map_alert(alert)
+    assert len(body["alert_text"]) < 600
+    assert "…" in body["alert_text"]
+
+
+def test_map_ignores_private_or_garbage_ip():
+    assert map_alert(dict(BRUTE_FORCE, external_ip="10.0.0.5"))["result"]["src_ip"] == ""
+    assert map_alert(dict(BRUTE_FORCE, external_ip="not-an-ip"))["result"]["src_ip"] == ""

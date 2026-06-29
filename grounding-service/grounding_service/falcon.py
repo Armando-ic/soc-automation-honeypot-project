@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from pathlib import Path
+
+# Internal/non-routable filter — mirrors honeypot-triage Parse Alert's isPrivate (RFC1918 + loopback +
+# link-local) on purpose: both feed the same canonical IOC path, so they must accept/reject identically.
+# (Deliberately NOT ipaddress.is_private, which over-rejects documentation ranges on Python 3.12+.)
+_PRIVATE_RE = re.compile(r"^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.|169\.254\.)")
 
 # --- §10 pre-build-check-pinned field names (Task 0; update to match the live us-2 facts) ---
 TS_FIELD = "created"                                    # hydrated-alert ISO timestamp key (watermark read field)
@@ -62,3 +68,59 @@ def advance_state(state: dict, results, *, seen_max: int = 5000) -> dict:
     if len(seen) > seen_max:
         seen = seen[-seen_max:]
     return {"watermark": watermark, "seen": seen}
+
+
+def _is_public_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)              # validate shape (rejects non-IPs)
+    except ValueError:
+        return False
+    return _PRIVATE_RE.match(value) is None      # routable external IP (RFC1918/loopback/link-local excluded)
+
+
+def _first_ip(alert: dict) -> str:
+    for key in SRC_IP_FIELDS:
+        v = alert.get(key)
+        if not v:
+            continue
+        s = str(v).strip()
+        if _is_public_ip(s):
+            return s
+    return ""
+
+
+def map_alert(alert: dict) -> dict:
+    """Falcon hydrated alert -> the EXISTING Splunk-shaped webhook body + additive keys (decision A')."""
+    sev_name = str(alert.get("severity_name", "") or "")
+    tactic = str(alert.get("tactic", "") or "")
+    technique = str(alert.get("technique", "") or "")
+    technique_id = str(alert.get("technique_id", "") or "")
+    filename = str(alert.get("filename", "") or "")
+    cmdline = str(alert.get("cmdline", "") or "").strip()
+    if len(cmdline) > 200:
+        cmdline = cmdline[:200] + "…"
+    user = str(alert.get("user_name", "") or "")
+    src_ip = _first_ip(alert)
+    composite_id = str(alert.get("composite_id", "") or "")
+
+    tac_tech = "/".join(p for p in (tactic, technique) if p)
+    head = " ".join(p for p in (sev_name, tac_tech, f"({technique_id})" if technique_id else "") if p)
+    tail = " — ".join(p for p in (filename, cmdline) if p)
+    alert_text = f"{head} on {HOST_DEFAULT}".strip()
+    if tail:
+        alert_text += f" — {tail}"
+    if user:
+        alert_text += f" (user {user})"
+
+    label = technique or "detection"
+    search_name = f"Falcon — {label} ({sev_name})" if sev_name else f"Falcon — {label}"
+    console_link = CONSOLE_LINK_TEMPLATE.format(composite_id=composite_id) if composite_id else ""
+
+    return {
+        "search_name": search_name,
+        "results_link": console_link,
+        "console_link": console_link,
+        "source": "falcon",
+        "alert_text": alert_text,
+        "result": {"src_ip": src_ip, "user": user, "ComputerName": HOST_DEFAULT, "count": 1},
+    }
