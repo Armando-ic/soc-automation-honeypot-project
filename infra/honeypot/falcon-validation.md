@@ -116,8 +116,31 @@ host untouched. The honeypot stays high-interaction.
 > behavioral enrichments — not signatures — are what convict on this box, matching its real attacker traffic
 > (RDP brute-force + post-auth behavior).
 
-## Task 7 — Contain → Lift round-trip *(PENDING — next)*
-Run `scripts/falcon-contain-roundtrip.ps1 -Hostname vm-honeypot-win` (creds via `CS_ID/CS_SECRET/CS_BASE`
-env, from the local machine). Capture: resolved AID, `Contain` → status `contained`, `Lift` → status
-`normal`, and the Host-management cross-check. (While contained, the honeypot's Splunk egress pauses; the UF
-queues + backfills on lift.)
+## Task 7 — Contain → Lift round-trip (2026-06-29) ✅
+Ran `scripts/falcon-contain-roundtrip.ps1 -Hostname vm-honeypot-win` from a **local** machine (creds via
+`CS_ID/CS_SECRET/CS_BASE` env, base us-2). The script resolved the AID by hostname, called `Contain`, polled
+to `contained`, then `Lift`, polled to `normal`:
+
+```
+AID = 9134…5865 · status = normal          (resolved by hostname:'vm-honeypot-win')
+Contain requested. Polling...
+  status = contained                        ← network isolation confirmed (POST /devices/entities/devices-actions/v2?action_name=contain)
+Lift requested. Polling...
+  status = normal                           ← restored (action_name=lift_containment)
+Round-trip complete. Final status = normal
+```
+(AID redacted to first/last 4 — it's a device identifier, not a credential.) Endpoints exercised:
+`GET /devices/queries/devices/v1?filter=hostname:'…'` (resolve), `POST /devices/entities/devices-actions/v2`
+(contain + lift), `POST /devices/entities/devices/v2` (status poll). While contained, the honeypot's egress
+(incl. Splunk telemetry + RDP) is cut except the Falcon cloud channel; the UF queues + backfills on lift.
+
+**Verdict:** the human-gated `Contain`/`Lift` response that Plan 0D-2 will graft onto the SOAR loop works
+end-to-end via OAuth. **0B done-when met:** detect-only sensor ✓ + OAuth API ✓ + `Contain`→`Lift` ✓.
+
+## Security note — API secret rotated (2026-06-29)
+The `honeypot-soar` Client ID + Secret were accidentally pasted in plaintext during Task 7 setup. Per policy
+(SaaS creds → rotate immediately) the secret was **reset in the Falcon console** (API clients and keys →
+`honeypot-soar` → Reset secret) — same Client ID, new secret — and `Personal/honeypot-vm-creds.txt` updated;
+the exposed value is now dead. **Lesson reinforced:** the API pull/Contain commands must run from a local
+trusted machine, and secret values should be loaded from the gitignored creds file, never typed/pasted inline
+(a `$env:CS_SECRET = '<value>'` line lands in PSReadline history on disk and in any chat transcript).

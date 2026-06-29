@@ -79,7 +79,7 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon IN PROGRESS (2026-06-29) — Applied:1 confirmed + Task 6 detect-only VALIDATED (real EDR detection, `pattern_disposition_details` all-false → `falcon-validation.md`); RESUME at Task 7 (Contain→Lift round-trip)**
+## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon — done-when MET (2026-06-29): detect-only sensor ✓ + OAuth API ✓ + Contain→Lift ✓ (`normal→contained→normal`). Task 6+7 VALIDATED → `falcon-validation.md`. ⚠️ API secret was pasted in chat → ROTATED (Reset secret, same Client ID). RESUME at Task 8 (RUNBOOK lifecycle + trial-end reminder), then 0D-2.**
 
 > ### 🟢 0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger BUILT + e2e VALIDATED (2026-06-28 wire; **2026-06-29 Task 7 live-trigger**)
 > Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
@@ -157,9 +157,11 @@ run-log written), and **VM deallocate→start reboot-survival confirmed** (conta
 >    Informational `Execution/User Execution T1204`, `Source: Falcon Insight` (EDR), `pattern_disposition: 0`,
 >    **all 28 `pattern_disposition_details` booleans false**. Evidence: `infra/honeypot/falcon-validation.md`.
 >    (API pull was run on a LOCAL machine, NOT the honeypot — secret never exposed.)
-> 3. **Task 7 ◀ RESUME** — `scripts/falcon-contain-roundtrip.ps1 -Hostname vm-honeypot-win` (creds via `CS_ID/CS_SECRET/CS_BASE` env, run from a LOCAL machine)
->    → capture Contain→Lift transitions → commit.
-> 4. **Task 8** — RUNBOOK Falcon lifecycle/off-board + README links + offer `/schedule` trial-end reminder (~2026-07-12).
+> 3. ✅ **Task 7 DONE (2026-06-29)** — Contain→Lift round-trip clean (`normal→contained→normal`, final `normal`)
+>    via `scripts/falcon-contain-roundtrip.ps1` from a LOCAL machine. **0B done-when met.** ⚠️ During setup the
+>    `honeypot-soar` Client ID + Secret were pasted in plaintext → **secret RESET** in the console (same Client
+>    ID, new secret) + creds file updated + session/PSReadline history cleared. Evidence: `falcon-validation.md`.
+> 4. **Task 8 ◀ RESUME** — RUNBOOK Falcon lifecycle/off-board + README links + offer `/schedule` trial-end reminder (~2026-07-12).
 > 5. Then **0D-2** — brainstorm was STARTED then **paused** (superpowers:brainstorming) to do 0B first; resume it
 >    WITH real Falcon alert data. Grounding: spec §7 of `2026-06-27-honeypot-phase0d-soar-wiring-design.md` + 6 open
 >    decisions (poll-vs-event-stream, Contain severity threshold, human-gate mechanism, Falcon→canonical field map).

@@ -131,14 +131,21 @@ Trigger a controlled detection and prove nothing was blocked:
 > on a LOCAL trusted machine, NOT the honeypot** — the `honeypot-soar` secret grants tenant-wide `Contain`.
 > Full redacted evidence: [`falcon-validation.md`](falcon-validation.md).
 
-## Step 7 — Contain → Lift round-trip *(PENDING — resume here)*
+## Step 7 — Contain → Lift round-trip ✅ DONE (2026-06-29) — evidence in `falcon-validation.md`
 Run `scripts/falcon-contain-roundtrip.ps1 -Hostname 'vm-honeypot-win'` (creds via `CS_ID/CS_SECRET/CS_BASE`
-env). It resolves the AID, calls Contain (`POST /devices/entities/devices-actions/v2?action_name=contain`),
+env, **from a local machine**). It resolves the AID, calls Contain (`POST /devices/entities/devices-actions/v2?action_name=contain`),
 polls status → `contained`, then Lift (`action_name=lift_containment`) → `normal`. Cross-check in Host
 management. (While contained, the honeypot's Splunk egress pauses; the UF queues + backfills on lift.)
 Capture the AID + status transitions in `falcon-validation.md`.
 
-## Step 8 — Lifecycle + trial-end *(PENDING)*
+> **Result (2026-06-29):** clean round-trip `normal → contained → normal`, final status `normal`. The
+> human-gated Contain/Lift response (Plan 0D-2) works end-to-end via OAuth. **0B done-when met** (detect-only
+> sensor + OAuth API + Contain→Lift). ⚠️ **Secret hygiene:** the API secret was accidentally pasted during
+> setup and **rotated** (Reset secret, same Client ID); run secret-bearing commands from a local machine and
+> load values from the gitignored creds file, never inline. If PowerShell blocks the script (`running scripts
+> is disabled`), invoke `powershell -ExecutionPolicy Bypass -File .\falcon-contain-roundtrip.ps1 …`.
+
+## Step 8 — Lifecycle + trial-end *(PENDING — resume here)*
 Add the Falcon lifecycle/off-board/rebuild-re-register section to `RUNBOOK.md` and the trial keep/drop
 checkpoint (~2026-07-12). At trial end: DROP (default) = uninstall sensor + revoke API client ($0 ongoing,
 evidence already captured); KEEP NGAV = Falcon Go ~$60/dev/yr; KEEP EDR = Falcon Enterprise ~$185/dev/yr.
