@@ -69,12 +69,21 @@ Schedule Trigger ─┬─> get_state ─> falcon_query ─> falcon_plan ─> IF
 
 ### C.3 falcon_query — `n8n-nodes-base.httpRequest` (Auth: OAuth2 `Falcon account`)
 - **GET** `https://api.us-2.crowdstrike.com/alerts/queries/alerts/v2`
-- **Send Query Parameters = ON:**
-  - `filter` = `=created_timestamp:>='{{ $('get_state').item.json.watermark }}'+device.hostname:'vm-honeypot-win'`
+- **Send Query Parameters = ON** (3 params; set the `filter` value to **Expression** mode):
+  - `filter` = `created_timestamp:>='{{ $('get_state').item.json.watermark }}'`
   - `sort` = `created_timestamp|asc`
   - `limit` = `200`
-- Returns `resources` = ordered `composite_id`s (oldest-first). (`created_timestamp` is the **FQL key**;
-  `device.hostname` scoping is confirmed filterable.)
+- Returns `resources` = ordered `composite_id`s, oldest-first. **Proven live (n8n 2.21.7 / httpRequest v4.4,
+  2026-06-29):** `total:1`, `resources:["306e…0772:ind:9134…5865:…995344"]` (the EICAR detection; its embedded
+  AID == the pinned honeypot AID).
+- **⚠️ Host-scope (`device.hostname:'vm-honeypot-win'`) dropped on purpose.** The spec'd `+device.hostname` FQL
+  **AND** clause could NOT be transmitted through n8n 2.21.7: (a) Send-Query-Parameters sends the FQL `+` as a
+  literal `+` → the CrowdStrike gateway decodes it to a space → `total:0`; (b) moving the whole query to the URL
+  field with `%2B` → httpRequest v4.4 re-encodes the `%` to `%252B` → **`400 invalid query filter`**. The tenant
+  is **honeypot-only** and Contain is **AID-pinned**, so filtering on `created_timestamp` alone is safe — a stray
+  host's alert would at worst be triaged as noise, and the Contain AID-guard still refuses any non-pinned AID.
+  Re-add the host clause only if (i) a reliable n8n encoding for the FQL `+` is found AND (ii) a second host ever
+  legitimately shares the tenant.
 
 ### C.4 falcon_plan — `n8n-nodes-base.httpRequest`
 - **POST** `http://grounding-service:8000/falcon/plan`; Body (JSON):
@@ -102,7 +111,9 @@ then only honors the contiguous-ok prefix → a SKIP is impossible.
 
 ```javascript
 // Post each Falcon-mapped alert to the existing honeypot-triage webhook, oldest-first, collecting ack results.
-const items = $('falcon_map').item.json.items || [];
+// .first() (not .item): this node is "Run Once for All Items" so there is no current item for .item to pair to;
+// the whole chain is single-item, so .first() reads the one falcon_map output deterministically.
+const items = $('falcon_map').first().json.items || [];
 const results = [];
 for (const it of items) {
   let ok = false;

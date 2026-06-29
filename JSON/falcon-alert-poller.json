@@ -1,0 +1,306 @@
+{
+  "name": "falcon-alert-poller",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://grounding-service:8000/falcon/state",
+        "options": {}
+      },
+      "id": "get_state",
+      "name": "get_state",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.us-2.crowdstrike.com/alerts/queries/alerts/v2",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "crowdStrikeOAuth2Api",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "=created_timestamp:>='{{ $('get_state').item.json.watermark }}'"
+            },
+            {
+              "name": "sort",
+              "value": "created_timestamp|asc"
+            },
+            {
+              "name": "limit",
+              "value": "200"
+            }
+          ]
+        }
+      },
+      "id": "falcon_query",
+      "name": "falcon_query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "crowdStrikeOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Crowdstrike Falcon Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/falcon/plan",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ candidate_ids: $('falcon_query').item.json.resources || [], cap: null }) }}"
+      },
+      "id": "falcon_plan",
+      "name": "falcon_plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasnew",
+              "leftValue": "={{ $('falcon_plan').item.json.ids.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-new",
+      "name": "IF has_new",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.us-2.crowdstrike.com/alerts/entities/alerts/v2",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "crowdStrikeOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ composite_ids: $('falcon_plan').item.json.ids }) }}"
+      },
+      "id": "falcon_hydrate",
+      "name": "falcon_hydrate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        0
+      ],
+      "credentials": {
+        "crowdStrikeOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Crowdstrike Falcon Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/falcon/map",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ alerts: $('falcon_hydrate').item.json.resources }) }}"
+      },
+      "id": "falcon_map",
+      "name": "falcon_map",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Post each Falcon-mapped alert to the existing honeypot-triage webhook, oldest-first,\n// collecting ack results. Stops at the first failure so a partial failure never double-triages a\n// later alert; grounding-service advance_state then honors only the contiguous-ok prefix (no SKIP).\n// .first() (not .item): \"Run Once for All Items\" has no current item for .item to pair to.\nconst items = $('falcon_map').first().json.items || [];\nconst results = [];\nfor (const it of items) {\n  let ok = false;\n  try {\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'http://10.0.0.6:5678/webhook/honeypot-triage',\n      body: it.body,\n      json: true,\n    });\n    ok = true;\n  } catch (e) {\n    ok = false;\n  }\n  results.push({ composite_id: it.composite_id, created: it.created, ok });\n  if (!ok) break;                       // contiguous prefix only — un-acked tail retries next tick\n}\nreturn [{ json: { results } }];"
+      },
+      "id": "post-collect",
+      "name": "Post+Collect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/falcon/advance",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ results: $('Post+Collect').item.json.results }) }}"
+      },
+      "id": "falcon_advance",
+      "name": "falcon_advance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1920,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "get_state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_state": {
+      "main": [
+        [
+          {
+            "node": "falcon_query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "falcon_query": {
+      "main": [
+        [
+          {
+            "node": "falcon_plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "falcon_plan": {
+      "main": [
+        [
+          {
+            "node": "IF has_new",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF has_new": {
+      "main": [
+        [
+          {
+            "node": "falcon_hydrate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "falcon_hydrate": {
+      "main": [
+        [
+          {
+            "node": "falcon_map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "falcon_map": {
+      "main": [
+        [
+          {
+            "node": "Post+Collect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post+Collect": {
+      "main": [
+        [
+          {
+            "node": "falcon_advance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
