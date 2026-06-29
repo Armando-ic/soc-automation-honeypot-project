@@ -79,7 +79,7 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon ✅ COMPLETE (2026-06-29): detect-only sensor + OAuth API + Contain→Lift all VALIDATED (`normal→contained→normal`, `pattern_disposition_details` all-false) → `falcon-validation.md`; Task 8 lifecycle docs in RUNBOOK/README; trial keep/drop reminder scheduled 2026-07-11 09:00 ET (routine `trig_01VGbabpwThgahchN54z4GTy`). ⚠️ API secret was pasted in chat → ROTATED. Commits `593eef9`/`8ce62fc`/`19d0465` pushed to honeypot. RESUME at 0D-2 (Falcon Alerts trigger + Contain — resume the paused brainstorm WITH real Falcon data).**
+## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon ✅ COMPLETE (2026-06-29): detect-only sensor + OAuth API + Contain→Lift all VALIDATED (`normal→contained→normal`, `pattern_disposition_details` all-false) → `falcon-validation.md`; Task 8 lifecycle docs in RUNBOOK/README; trial keep/drop reminder scheduled 2026-07-11 09:00 ET (routine `trig_01VGbabpwThgahchN54z4GTy`). ⚠️ API secret was pasted in chat → ROTATED. **0D-2 now DESIGNED + adversarially reviewed + APPROVED (2026-06-29)** — RESUME at 0D-2 by running `superpowers:writing-plans` on the approved spec, THEN build, in a FRESH instance.**
 
 > ### 🟢 0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger BUILT + e2e VALIDATED (2026-06-28 wire; **2026-06-29 Task 7 live-trigger**)
 > Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
@@ -164,12 +164,23 @@ run-log written), and **VM deallocate→start reboot-survival confirmed** (conta
 > 4. ✅ **Task 8 DONE (2026-06-29)** — Falcon lifecycle/off-board + trial keep/drop matrix in `RUNBOOK.md`;
 >    README synced; one-time trial keep/drop reminder scheduled for **2026-07-11 09:00 ET** (routine
 >    `trig_01VGbabpwThgahchN54z4GTy` → https://claude.ai/code/routines/trig_01VGbabpwThgahchN54z4GTy). **0B COMPLETE.**
-> 5. **0D-2 ◀ RESUME** — brainstorm was STARTED then **paused** (superpowers:brainstorming) to do 0B first; resume it
->    WITH real Falcon alert data — we now have a confirmed detect-only Alerts-API shape: `pattern_disposition == 0`
->    (or `pattern_disposition_details` all-false) marks a pure observation, `Source product = Falcon Insight` flags
->    EDR-origin alerts, behavioral enrichments (not signatures) do the convicting on this box. Grounding: spec §7 of
->    `2026-06-27-honeypot-phase0d-soar-wiring-design.md` + 6 open decisions (poll-vs-event-stream, Contain severity
->    threshold, human-gate mechanism, Falcon→canonical field map).
+> 5. **0D-2 ◀ RESUME (DESIGNED + reviewed + APPROVED 2026-06-29)** — brainstorm → spec → 5-lens adversarial review
+>    (Workflow, 21 confirmed findings, all folded in) → revised spec, all approved. **Spec (PARENT):**
+>    `docs/superpowers/specs/2026-06-29-honeypot-phase0d2-falcon-trigger-contain-design.md`.
+>    **Next = run `superpowers:writing-plans` on the approved spec, THEN execute (hands-on n8n; start the SOC VMs).**
+>    ⚠️ The plan MUST open with the spec's §10 **blocking pre-build checks**: one live `GET /alerts/queries/alerts/v2`
+>    on us-2 to confirm field names — `created` vs `created_timestamp` (the validated sample showed `created`),
+>    the host-scope filter, the attacker-source-IP field, and the console deep-link URL — several gate the build.
+>    Locked decisions (§9): **A′** = the Falcon poller emits the EXISTING Splunk-shaped body
+>    (`{search_name, results_link, result:{src_ip,user,ComputerName,count}}`) + additive `source`/`alert_text`/
+>    `console_link` (NOT a new envelope); **AID-pinned** Contain (resolve hostname→AID, hard-stop unless ==1 match
+>    AND AID == the pinned honeypot AID `9134…5865`); **empty-IOC guard** (skip AbuseIPDB/GreyNoise when `src_ip`
+>    is empty — fixes a run-killing 422 on behavioral alerts); triage severity read from **Extract Result** (the
+>    `/verify` report has none); durable watermark/seen in a **VM file** (n8n static data is wiped by the
+>    regenerate-and-reimport build loop); **containment watchdog** (safe auto-Lift of a stuck contain); per-poll
+>    cap + aggregation; `>=` watermark + single composite_id dedup; dropped `severity_hint`. Contain demo must use
+>    a **credential-access (RDP brute-force) / IOC-bearing** alert (the verifier's `severity_supported` won't pass
+>    a no-IOC Execution alert at High).
 
 **Plan 0B — CrowdStrike Falcon — IN PROGRESS (live state = the 🟡 0B block above). Background below.**
 - Plan: `docs/superpowers/plans/2026-06-26-honeypot-phase0b-crowdstrike-falcon.md` (PARENT workspace).
