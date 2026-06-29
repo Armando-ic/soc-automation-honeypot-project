@@ -1,13 +1,39 @@
+from datetime import datetime, timezone
+
 from grounding_service.falcon import (
     advance_state,
+    default_watermark,
     load_state,
     save_state,
     select_new_alert_ids,
 )
 
 
-def test_load_state_missing_returns_empty(tmp_path):
-    assert load_state(tmp_path / "nope.json") == {"watermark": "", "seen": []}
+def test_default_watermark_is_now_minus_24h_iso_z():
+    now = datetime(2026, 6, 29, 12, 0, 0, tzinfo=timezone.utc)
+    assert default_watermark(now) == "2026-06-28T12:00:00Z"
+
+
+def test_load_state_missing_returns_bounded_default(tmp_path):
+    now = datetime(2026, 6, 29, 12, 0, 0, tzinfo=timezone.utc)
+    assert load_state(tmp_path / "nope.json", now=now) == {
+        "watermark": "2026-06-28T12:00:00Z", "seen": []}
+
+
+def test_load_state_empty_watermark_bounded_seen_preserved(tmp_path):
+    p = tmp_path / "state.json"
+    save_state(p, {"watermark": "", "seen": ["x"]})
+    now = datetime(2026, 6, 29, 12, 0, 0, tzinfo=timezone.utc)
+    assert load_state(p, now=now) == {
+        "watermark": "2026-06-28T12:00:00Z", "seen": ["x"]}
+
+
+def test_load_state_preserves_real_watermark(tmp_path):
+    p = tmp_path / "state.json"
+    save_state(p, {"watermark": "2026-06-29T15:11:34.51Z", "seen": ["a"]})
+    now = datetime(2026, 6, 29, 12, 0, 0, tzinfo=timezone.utc)
+    assert load_state(p, now=now) == {
+        "watermark": "2026-06-29T15:11:34.51Z", "seen": ["a"]}
 
 
 def test_save_then_load_roundtrip(tmp_path):

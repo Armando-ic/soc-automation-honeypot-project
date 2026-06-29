@@ -10,6 +10,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Internal/non-routable filter — mirrors honeypot-triage Parse Alert's isPrivate (RFC1918 + loopback +
@@ -28,14 +29,28 @@ CONSOLE_LINK_TEMPLATE = "https://falcon.us-2.crowdstrike.com/activity-v2/detecti
 _ZERO_HASH = re.compile(r"^0+$")                       # Falcon emits all-zero sha1/sha256 placeholders
 
 
-def load_state(path) -> dict:
+def default_watermark(now: datetime) -> str:
+    """A bounded poll floor for empty state: (now - 24h) as ISO8601 Zulu.
+
+    An empty watermark makes the poller FQL `created_timestamp:>=''` -> 400 every
+    tick (silent poll failure) once it runs unattended. Returning a bounded now-24h
+    default keeps the first poll valid; the first real advance_state persists a true
+    watermark.
+    """
+    return (now - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def load_state(path, *, now: datetime | None = None) -> dict:
     p = Path(path)
     if not p.exists():
-        return {"watermark": "", "seen": []}
-    data = json.loads(p.read_text(encoding="utf-8"))
-    data.setdefault("watermark", "")
-    data.setdefault("seen", [])
-    return data
+        data = {"watermark": "", "seen": []}
+    else:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        data.setdefault("watermark", "")
+        data.setdefault("seen", [])
+    if not data["watermark"]:                       # missing file OR empty string
+        data["watermark"] = default_watermark(now or datetime.now(timezone.utc))
+    return data                                     # still never writes; transient default
 
 
 def save_state(path, state: dict) -> None:
