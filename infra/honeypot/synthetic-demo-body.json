@@ -1,8 +1,8 @@
 {
   "source": "falcon",
-  "search_name": "Falcon — [SYNTHETIC PATH-VALIDATION] Brute Force (High)",
+  "search_name": "Falcon — [SYNTHETIC PATH-VALIDATION] Successful Brute-Force Compromise (Critical)",
   "console_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
   "results_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
-  "alert_text": "High Credential Access/Brute Force (T1110) on vm-honeypot-win — successful interactive RDP logon after sustained failed-auth brute force from external source IP <REAL_BAD_IP> (user Administrator); suspected hands-on-keyboard compromise. [SYNTHETIC PATH-VALIDATION]",
-  "result": { "src_ip": "<REAL_BAD_IP>", "user": "Administrator", "ComputerName": "vm-honeypot-win", "count": 1 }
+  "alert_text": "Critical credential-access compromise on vm-honeypot-win from external source IP <REAL_BAD_IP>. After 487 failed Windows logons (brute force / password guessing) against the Administrator account, a single authentication SUCCEEDED — confirming a successful brute-force compromise, not merely failed attempts. Post-compromise, the same session performed OS credential dumping from LSASS memory and then established an outbound HTTPS command-and-control channel to <REAL_BAD_IP> over web protocols, with data exfiltration over that C2 channel. Hands-on-keyboard active compromise; immediate containment of vm-honeypot-win is warranted. [SYNTHETIC PATH-VALIDATION]",
+  "result": { "src_ip": "<REAL_BAD_IP>", "user": "Administrator", "ComputerName": "vm-honeypot-win", "count": 487 }
 }

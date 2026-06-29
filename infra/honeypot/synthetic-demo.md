@@ -39,12 +39,19 @@ Invoke-RestMethod -Method POST -Uri 'http://10.0.0.6:5678/webhook/honeypot-triag
 
 ## 3. Observe (the artifact)
 
-- **DFIR-Iris:** a new HIGH alert titled `Falcon — [SYNTHETIC PATH-VALIDATION] Brute Force (High)`
-  with the malicious IP attached as an IOC and the AbuseIPDB summary in the description.
-- **Discord:** an embed titled `✅ HIGH — Falcon — [SYNTHETIC PATH-VALIDATION] Brute Force (High)`
-  whose description ends `⚠️ Contain recommended — run falcon-contain for vm-honeypot-win`.
-- (Optional) grounding-service `/verify` returned `verification_passed=true`.
+- **DFIR-Iris:** a new HIGH alert titled `FALCON — [SYNTHETIC PATH-VALIDATION] SUCCESSFUL BRUTE-FORCE COMPROMISE
+  (CRITICAL)` with `2.57.121.25` attached as a **MALICIOUS** IOC, a coherent 487-fail→success narrative, and
+  fully-populated recommended actions.
+- **Discord:** an embed titled `✅ HIGH — Falcon — [SYNTHETIC PATH-VALIDATION] Successful Brute-Force Compromise
+  (Critical)` whose description ends `⚠️ Contain recommended — run falcon-contain for vm-honeypot-win`.
+- (Optional) grounding-service `runs.jsonl` shows `verification_passed=true` (all 10 deterministic checks).
 
-If severity lands `medium` (no "Contain recommended"), re-fire §2 — known LLM-variance characteristic;
-the strong cues (leading "High", malicious source IP, successful-logon narrative) make high/critical
-the overwhelming outcome.
+Notes:
+- **Title says "(Critical)" but the badge is HIGH** — the parenthetical is the (synthetic) Falcon
+  `severity_name`; Opus *independently triages* down to **high** for the honeypot's limited blast radius. That
+  divergence is realistic, not a bug.
+- The **advisory judge** logs `needs_human` by design (a conservative second opinion); it does NOT gate
+  `verification_passed` and does NOT appear in the Iris/Discord view. Coherence (consistent `count`, no
+  unsupported lateral-movement) keeps its notes to advisory polish rather than real contradictions.
+- If severity ever lands `medium` (no "Contain recommended"), re-fire §2 — LLM variance; the coherent
+  successful-compromise narrative makes high/critical the overwhelming outcome.
