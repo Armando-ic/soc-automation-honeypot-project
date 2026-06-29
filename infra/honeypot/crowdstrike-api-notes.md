@@ -53,8 +53,9 @@ hostname, e.g. `falcon.us-2.crowdstrike.com` → us-2).
 - eu-1 → `https://api.eu-1.crowdstrike.com`
 - us-gov-1 → `https://api.laggar.gcw.crowdstrike.com` · us-gov-2 → `https://api.us-gov-2.crowdstrike.mil`
 
-> **Our tenant cloud = TBD** — record it here once the trial client is created (the template's hardcoded
-> `api.us-2.crowdstrike.com` is the template's tenant, not necessarily ours).
+> **Our tenant cloud = us-2** (`https://api.us-2.crowdstrike.com`) — confirmed 2026-06-29 from the
+> `honeypot-soar` API-client creation window (Plan 0B Task 2). (Coincidentally the same cloud as the
+> template's hardcoded value — but now verified for our tenant, not assumed.)
 
 ## 3. Pull detections — Alerts API (legacy Detects API is DEAD) [CONFIRMED 2026-06-26]
 
