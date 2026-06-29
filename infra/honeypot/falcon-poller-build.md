@@ -30,17 +30,22 @@ workflows are pure orchestration. Field names are the ones **confirmed on us-2**
 
 ---
 
-## Section B — Falcon OAuth2 credential (one credential, reused by both workflows)
+## Section B — Falcon credential (n8n's built-in **CrowdStrike OAuth2 API** type)
 
-In n8n → **Credentials → New → "OAuth2 API"**, name it **`Falcon account`**:
-- **Grant Type:** `Client Credentials`
-- **Access Token URL:** `https://api.us-2.crowdstrike.com/oauth2/token`
-- **Client ID / Client Secret:** the `honeypot-soar` values (load from `Personal/honeypot-vm-creds.txt`)
-- **Scope:** leave blank (the client's assigned scopes apply)
-- **Authentication:** `Send credentials in body`
+n8n ships a dedicated CrowdStrike credential (`crowdStrikeOAuth2Api`) — use it (not the generic "OAuth2 API").
+In n8n → **Credentials → New → "CrowdStrike OAuth2 API"**, name it **`Falcon account`**:
+- **URL:** `https://api.us-2.crowdstrike.com`  ← **critical**: this targets our **us-2** cloud (default is us-1).
+  The credential mints/refreshes the 30-min bearer at `{URL}/oauth2/token`.
+- **Client ID / Client Secret:** the `honeypot-soar` values (load from `Personal/honeypot-vm-creds.txt`).
 
-n8n mints + refreshes the 30-minute bearer and retries a 401 itself — no manual `/oauth2/token` node.
-Every Falcon HTTP node below uses **Authentication = Generic Credential Type → OAuth2 API → `Falcon account`**.
+⚠️ **The credential's connection test may show "unsuccessful"** — n8n tests it with the `usermgmt:read` scope,
+which `honeypot-soar` does **not** have (it has Alerts R/W + Hosts R/W + Event streams R). **This is expected and
+harmless**: the credential still mints a valid token and every Alerts/Hosts call below works. To make the test
+green (optional), add **User management: Read** to the `honeypot-soar` client in the Falcon console (read-only;
+does not rotate the secret).
+
+Every Falcon HTTP node below uses **Authentication = Predefined Credential Type → CrowdStrike OAuth2 API →
+`Falcon account`** (it injects the bearer; you still type the full us-2 URL in the node).
 
 ---
 
