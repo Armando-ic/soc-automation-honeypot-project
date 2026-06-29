@@ -100,7 +100,7 @@ Console → **Support and resources → API clients and keys → Add new API cli
   and winning precedence; it flips to **Applied 1** on the sensor's next heartbeat (a few minutes). Verify
   Applied=1 before testing.
 
-## Step 6 — Verify detect-only *(PENDING — resume here)*
+## Step 6 — Verify detect-only ✅ DONE (2026-06-29) — evidence in `falcon-validation.md`
 Trigger a controlled detection and prove nothing was blocked:
 - On the honeypot (elevated PowerShell), write the EICAR test string (assembled in two parts so this file
   doesn't trip AV):
@@ -123,7 +123,15 @@ Trigger a controlled detection and prove nothing was blocked:
   **Detect-only confirmed when `pattern_disposition_details` is all-false** (`process_blocked:false`,
   `quarantine_file:false`, `kill_process:false`, …). Capture the redacted JSON into `falcon-validation.md`.
 
-## Step 7 — Contain → Lift round-trip *(PENDING)*
+> **Result (2026-06-29):** EICAR did **not** trip as a signature file-detection (Falcon is ML/behavioral, and
+> EICAR is a benign signature-AV artifact). Instead Falcon's behavioral engine convicted the **PowerShell
+> process** that wrote it → an **Informational** detection, `Execution / User Execution (T1204)`,
+> `Source product: Falcon Insight` (EDR). `pattern_disposition: 0` and **all 28 `pattern_disposition_details`
+> booleans `false`** → detect-only proven. The `eicar.com` file survived (not quarantined). Run the **API pull
+> on a LOCAL trusted machine, NOT the honeypot** — the `honeypot-soar` secret grants tenant-wide `Contain`.
+> Full redacted evidence: [`falcon-validation.md`](falcon-validation.md).
+
+## Step 7 — Contain → Lift round-trip *(PENDING — resume here)*
 Run `scripts/falcon-contain-roundtrip.ps1 -Hostname 'vm-honeypot-win'` (creds via `CS_ID/CS_SECRET/CS_BASE`
 env). It resolves the AID, calls Contain (`POST /devices/entities/devices-actions/v2?action_name=contain`),
 polls status → `contained`, then Lift (`action_name=lift_containment`) → `normal`. Cross-check in Host
@@ -153,3 +161,11 @@ evidence already captured); KEEP NGAV = Falcon Go ~$60/dev/yr; KEEP EDR = Falcon
    PC's alerts into the SOC loop — and could queue your own machine for Contain.
 6. **Detect-only ≠ turn everything off** — turning a *prevention* toggle off does not suppress the detection;
    CrowdStrike still raises the alert, it just doesn't act. So max the detection sliders, zero the prevention.
+7. **EICAR won't trip Falcon's ML** — EICAR is a benign signature-AV test artifact; Falcon is behavioral/ML and
+   ignores the inert file. The *behavioral* engine still convicted the PowerShell that wrote it (Execution/
+   T1204, Informational). To validate detect-only, look at what the sensor *did* (`pattern_disposition`), not
+   whether EICAR itself was flagged. Real attacker activity on this internet-exposed box is the gold-standard
+   trigger anyway.
+8. **Never run the API pull (secret-bearing) on the honeypot** — the box is the attack surface and the
+   `honeypot-soar` client holds `Hosts:Write` (= tenant-wide `Contain`). Trigger on the honeypot; query from a
+   local trusted machine. If the secret ever touches the honeypot, reset it in API clients and keys.

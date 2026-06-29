@@ -79,7 +79,7 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon IN PROGRESS (2026-06-29) — API client + sensor + XDR + detect-only policy BUILT; RESUME by verifying the policy flipped to Applied=1, then Task 6 (detect-only proof)**
+## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon IN PROGRESS (2026-06-29) — Applied:1 confirmed + Task 6 detect-only VALIDATED (real EDR detection, `pattern_disposition_details` all-false → `falcon-validation.md`); RESUME at Task 7 (Contain→Lift round-trip)**
 
 > ### 🟢 0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger BUILT + e2e VALIDATED (2026-06-28 wire; **2026-06-29 Task 7 live-trigger**)
 > Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
@@ -150,12 +150,14 @@ run-log written), and **VM deallocate→start reboot-survival confirmed** (conta
 > - **⚠️ Gotcha (documented):** "Script-based execution visibility" forces "Quarantine & security center
 >   registration" ON (= quarantine subsystem) → **Cancel it / keep quarantine OFF** for detect-only.
 > **▶ RESUME HERE:**
-> 1. **Finish Task 5** — at session end the policy read **Applied 0 / Pending 1** (precedence 3 = assigned +
->    winning, just propagating). **Verify it flipped to Applied: 1** (Prevention policies → honeypot-detect-only →
->    Policy assignment, or the host's Assigned policies). Still Pending after ~10 min → check `sc query csagent` + Last Seen.
-> 2. **Task 6** — EICAR (or wait for a real attacker) → confirm detected-not-quarantined + Alerts API
->    `pattern_disposition_details` **all-false** → create `infra/honeypot/falcon-validation.md` → commit.
-> 3. **Task 7** — `scripts/falcon-contain-roundtrip.ps1 -Hostname vm-honeypot-win` (creds via `CS_ID/CS_SECRET/CS_BASE` env)
+> 1. ✅ **Task 5 DONE (2026-06-29)** — policy `honeypot-detect-only` confirmed **Applied: 1** (Date applied
+>    2026-06-28 23:57:53; host Last seen 2026-06-29 10:54).
+> 2. ✅ **Task 6 DONE (2026-06-29)** — detect-only VALIDATED. EICAR didn't trip Falcon's ML (it's behavioral,
+>    EICAR is a signature artifact); instead the behavioral engine convicted the PowerShell that wrote it →
+>    Informational `Execution/User Execution T1204`, `Source: Falcon Insight` (EDR), `pattern_disposition: 0`,
+>    **all 28 `pattern_disposition_details` booleans false**. Evidence: `infra/honeypot/falcon-validation.md`.
+>    (API pull was run on a LOCAL machine, NOT the honeypot — secret never exposed.)
+> 3. **Task 7 ◀ RESUME** — `scripts/falcon-contain-roundtrip.ps1 -Hostname vm-honeypot-win` (creds via `CS_ID/CS_SECRET/CS_BASE` env, run from a LOCAL machine)
 >    → capture Contain→Lift transitions → commit.
 > 4. **Task 8** — RUNBOOK Falcon lifecycle/off-board + README links + offer `/schedule` trial-end reminder (~2026-07-12).
 > 5. Then **0D-2** — brainstorm was STARTED then **paused** (superpowers:brainstorming) to do 0B first; resume it

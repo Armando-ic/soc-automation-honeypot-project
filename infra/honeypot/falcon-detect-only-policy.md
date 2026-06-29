@@ -4,9 +4,11 @@ Goal: the sensor DETECTS the full attacker kill chain while letting it PROCEED
 (no block/quarantine/kill), so the honeypot stays high-interaction. Verified by
 `pattern_disposition_details` all-false on a real detection (Plan 0B Task 6).
 
-**Status:** policy `honeypot-detect-only` BUILT + assigned to `hg-honeypot` on **2026-06-29**.
-At session end it read **Applied: 0 / Pending: 1** (precedence 3) — i.e. assigned and winning, awaiting
-the sensor's next heartbeat to flip to **Applied: 1**. Verify Applied=1 before Task 6.
+**Status:** policy `honeypot-detect-only` BUILT + assigned to `hg-honeypot` on **2026-06-29**, confirmed
+**Applied: 1** (Date applied 2026-06-28 23:57:53; host Last seen 2026-06-29). Detect-only **VALIDATED**
+2026-06-29 — a real EDR detection (Execution/User Execution T1204, Informational, `Source: Falcon Insight`)
+returned `pattern_disposition: 0` with all 28 `pattern_disposition_details` booleans `false`.
+Evidence: [`falcon-validation.md`](falcon-validation.md).
 
 > Reconciled to the **actual** Falcon console (us-2 tenant, Windows prevention policy, sensor 7.38.21003.0)
 > on 2026-06-29 — the section names below match the live UI, which is more granular than the original spec.
