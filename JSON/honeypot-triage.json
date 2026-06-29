@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse honeypot brute-force alert -> canonical IOCs + alert_text + enrichment plan (CF#2 canonical form).\nconst body = $input.first().json.body || {};\nconst r = body.result || {};\n\nconst canonIp = (v) => String(v || '').trim();                       // plain IPv4: no change\nconst isPrivate = (ip) =>\n  /^10\\./.test(ip) || /^192\\.168\\./.test(ip) ||\n  /^172\\.(1[6-9]|2\\d|3[0-1])\\./.test(ip) || /^127\\./.test(ip) || ip === '';\nconst canonDomain = (v) =>\n  String(v || '').trim().toLowerCase().replace(/\\[\\.\\]/g, '.').replace(/^hxxp/, 'http').replace(/\\.$/, '');\nconst canonHash = (v) => String(v || '').trim().toLowerCase();\n\nconst src_ip = canonIp(r.src_ip);\nconst host = r.ComputerName || r.dest || r.host || 'unknown-host';\nconst user = r.user || r.Account_Name || 'unknown-user';\nconst count = r.count || 'multiple';\n\nconst enrich_ips = (src_ip && !isPrivate(src_ip)) ? [src_ip] : [];\n\nconst alert_text =\n  `RDP/SMB brute force: ${count} failed Windows logons (EventCode 4625) ` +\n  `against user ${user} on host ${host} from external source IP ${src_ip}. ` +\n  `Repeated failed authentication, credential access, remote service login.`;\n\nreturn [{ json: {\n  run_id: String($execution.id),\n  timestamp: new Date().toISOString(),\n  search_name: body.search_name || '',\n  results_link: body.results_link || '',\n  src_ip, host, user, count,\n  enrich_ips,\n  observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },\n  alert_text,\n}}];"
+        "jsCode": "// Parse alert -> canonical IOCs + alert_text. Source-aware: splunk brute-force (synthesize)\n// vs falcon (use the supplied alert_text). CF#2 canonical form; empty-safe src_ip.\nconst body = $input.first().json.body || {};\nconst r = body.result || {};\nconst source = body.source || 'splunk';\n\nconst canonIp = (v) => String(v || '').trim();                       // plain IPv4: no change\nconst isPrivate = (ip) =>\n  /^10\\./.test(ip) || /^192\\.168\\./.test(ip) ||\n  /^172\\.(1[6-9]|2\\d|3[0-1])\\./.test(ip) || /^127\\./.test(ip) || ip === '';\nconst canonDomain = (v) =>\n  String(v || '').trim().toLowerCase().replace(/\\[\\.\\]/g, '.').replace(/^hxxp/, 'http').replace(/\\.$/, '');\nconst canonHash = (v) => String(v || '').trim().toLowerCase();\n\nconst src_ip = canonIp(r.src_ip);\nconst host = r.ComputerName || r.dest || r.host || 'unknown-host';\nconst user = r.user || r.Account_Name || 'unknown-user';\nconst count = r.count || 'multiple';\n\nconst enrich_ips = (src_ip && !isPrivate(src_ip)) ? [src_ip] : [];\n\nconst alert_text = (source === 'falcon' && body.alert_text)\n  ? String(body.alert_text)\n  : `RDP/SMB brute force: ${count} failed Windows logons (EventCode 4625) ` +\n    `against user ${user} on host ${host} from external source IP ${src_ip}. ` +\n    `Repeated failed authentication, credential access, remote service login.`;\n\nreturn [{ json: {\n  run_id: String($execution.id),\n  timestamp: new Date().toISOString(),\n  source,\n  search_name: body.search_name || '',\n  results_link: body.results_link || '',\n  console_link: body.console_link || '',\n  src_ip, host, user, count,\n  enrich_ips,\n  observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },\n  alert_text,\n}}];"
       },
       "id": "parse-alert",
       "name": "Parse Alert",
@@ -73,7 +73,8 @@
           "id": "REPLACE_ME",
           "name": "Header Auth account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -116,7 +117,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Assemble /normalize items from the two enrichment responses, keyed by the canonical src_ip.\nconst p = $('Parse Alert').item.json;\nconst ip = p.src_ip;\nconst abuse = $('enrich_abuseipdb').item.json;\nconst grey = $('enrich_greynoise').item.json;\nconst items = [];\nif (ip) {\n  items.push({ ioc: ip, provider: 'abuseipdb', response: abuse });\n  items.push({ ioc: ip, provider: 'greynoise', response: grey });\n}\nreturn [{ json: { ...p, items } }];"
+        "jsCode": "// Assemble /normalize items from the two enrichment responses (only when an IP was enriched).\nconst p = $('Parse Alert').item.json;\nconst ip = p.src_ip;\nconst items = [];\nif (ip) {\n  const abuse = $('enrich_abuseipdb').item.json;\n  const grey = $('enrich_greynoise').item.json;\n  items.push({ ioc: ip, provider: 'abuseipdb', response: abuse });\n  items.push({ ioc: ip, provider: 'greynoise', response: grey });\n}\nreturn [{ json: { ...p, items } }];"
       },
       "id": "build-normalize-body",
       "name": "Build Normalize Body",
@@ -231,7 +232,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract submit_triage_result + build Iris alert_iocs, iris_description, Discord embed, /verify body.\nconst content = $input.first().json.content || [];\nconst toolCall = content.find(c => c.type === 'tool_use' && c.name === 'submit_triage_result');\nif (!toolCall) throw new Error(`Expected submit_triage_result tool call but got: ${JSON.stringify(content)}`);\nconst r = toolCall.input;\n\n// Defensive: Opus intermittently omits the trailing narrative field (investigation_notes).\n// Guarantee all 9 required fields are structurally present so a benign omission can't gate a\n// sound triage. Substantive checks (mitre_in_retrieved, enrichment_grounded, tactic/name/\n// severity, verdict_sourced) still run on the model's REAL values - only empty structure is filled.\nr.schema_version = r.schema_version || 'v1';\nif (!r.investigation_notes || !String(r.investigation_notes).trim()) {\n  r.investigation_notes = 'No additional analyst notes provided by automated triage.';\n}\nif (!r.alert_summary || !String(r.alert_summary).trim()) r.alert_summary = 'Honeypot alert (no summary provided).';\nif (!r.severity) r.severity = 'medium';\nif (!r.severity_rationale || !String(r.severity_rationale).trim()) r.severity_rationale = 'No rationale provided.';\nr.mitre_techniques = Array.isArray(r.mitre_techniques) ? r.mitre_techniques : [];\nr.iocs_enriched = Array.isArray(r.iocs_enriched) ? r.iocs_enriched : [];\nr.recommended_actions = Array.isArray(r.recommended_actions) ? r.recommended_actions : [];\nr.iocs = (r.iocs && typeof r.iocs === 'object') ? r.iocs : {};\nfor (const b of ['ips', 'domains', 'file_hashes', 'users', 'hosts']) {\n  if (!Array.isArray(r.iocs[b])) r.iocs[b] = [];\n}\n\nconst ctx = $('Build Opus Input').item.json;\nconst usage = $input.first().json.usage || {};\nconst tokens_in = usage.input_tokens || 0;\nconst tokens_out = usage.output_tokens || 0;\n\nconst IRIS_IOC_TYPE_IDS = { ip: 79, domain: 20, md5: 90, sha1: 111, sha256: 113 };\nconst TLP_AMBER = 2;\nconst BULLET = '•', EMDASH = '—';\n\nfunction resolveIrisTypeId(iocType, value) {\n  if (iocType === 'ip') return IRIS_IOC_TYPE_IDS.ip;\n  if (iocType === 'domain') return IRIS_IOC_TYPE_IDS.domain;\n  if (iocType === 'file_hash') {\n    const v = String(value).trim().toLowerCase();\n    if (/^[0-9a-f]{32}$/.test(v)) return IRIS_IOC_TYPE_IDS.md5;\n    if (/^[0-9a-f]{40}$/.test(v)) return IRIS_IOC_TYPE_IDS.sha1;\n    if (/^[0-9a-f]{64}$/.test(v)) return IRIS_IOC_TYPE_IDS.sha256;\n  }\n  return null;\n}\n\nconst alert_iocs = [];\nfor (const item of (r.iocs_enriched || []).filter(i => i.verdict === 'malicious' || i.verdict === 'suspicious')) {\n  const typeId = resolveIrisTypeId(item.ioc_type, item.value);\n  if (typeId === null) continue;\n  alert_iocs.push({\n    ioc_value: item.value,\n    ioc_description: `${item.source}: ${item.summary}`,\n    ioc_tlp_id: TLP_AMBER,\n    ioc_type_id: typeId,\n    ioc_tags: 'soc-automation,honeypot,phase0d',\n  });\n}\n\nconst sevId = { low: 4, medium: 1, high: 5, critical: 6 }[r.severity] || 2;\nconst mitre = (r.mitre_techniques || []).map(t => `${t.id} (${t.name})`).join(', ') || 'none identified';\nconst enriched = (r.iocs_enriched || [])\n  .map(i => `${BULLET} \\`${i.value}\\` ${EMDASH} ${String(i.verdict).toUpperCase()} (${i.source}): ${i.summary}`)\n  .join('\\n') || '_none_';\nconst actions = (r.recommended_actions || [])\n  .map(a => `${BULLET} [${String(a.priority).toUpperCase()}] ${a.description}`)\n  .join('\\n') || '_none_';\n\nconst splunk_link = (ctx.results_link || '').replace('mydfir-splunk', '20.236.193.253')\n                                            .replace('192.168.129.131', '20.236.193.253');\n\nconst iris_description =\n`**Summary:** ${r.alert_summary}\n\n**Severity:** ${r.severity} ${EMDASH} ${r.severity_rationale}\n\n**MITRE Techniques:** ${mitre}\n\n**Enriched IOCs:**\n${enriched}\n\n**Recommended Actions:**\n${actions}\n\n**Investigation Notes:**\n${r.investigation_notes || '_none_'}\n\n---\nSplunk: ${splunk_link}`;\n\nconst verify_body = {\n  result: r,\n  retrieved: ctx.retrieved_ids || [],\n  enrichment_results: ctx.enrichment_results || {},\n  run_meta: { run_id: ctx.run_id, timestamp: ctx.timestamp, tokens_in, tokens_out, latency_ms: 0 },\n};\n\nconst top_mitre = (r.mitre_techniques && r.mitre_techniques[0])\n  ? `${r.mitre_techniques[0].id} ${r.mitre_techniques[0].name}` : 'n/a';\n\nconst discord_body = { embeds: [{\n  title: `✅ ${String(r.severity).toUpperCase()} — ${ctx.search_name || 'Honeypot brute force'}`,\n  description: `Host **${ctx.host}** • src_ip \\`${ctx.src_ip}\\`\\nMITRE: ${top_mitre}\\nVerifier: **passed**`,\n  color: 3066993,\n}]};\n\nreturn [{ json: {\n  ...r,\n  alert_name: ctx.search_name || 'Honeypot brute force',\n  severity_iris_id: sevId,\n  iris_description,\n  splunk_link,\n  alert_iocs,\n  verify_body,\n  top_mitre,\n  discord_body,\n  src_ip: ctx.src_ip,\n  host: ctx.host,\n} }];"
+        "jsCode": "// Extract submit_triage_result + build Iris alert_iocs, iris_description, Discord embed, /verify body.\nconst content = $input.first().json.content || [];\nconst toolCall = content.find(c => c.type === 'tool_use' && c.name === 'submit_triage_result');\nif (!toolCall) throw new Error(`Expected submit_triage_result tool call but got: ${JSON.stringify(content)}`);\nconst r = toolCall.input;\n\n// Defensive: Opus intermittently omits the trailing narrative field (investigation_notes).\n// Guarantee all 9 required fields are structurally present so a benign omission can't gate a\n// sound triage. Substantive checks (mitre_in_retrieved, enrichment_grounded, tactic/name/\n// severity, verdict_sourced) still run on the model's REAL values - only empty structure is filled.\nr.schema_version = r.schema_version || 'v1';\nif (!r.investigation_notes || !String(r.investigation_notes).trim()) {\n  r.investigation_notes = 'No additional analyst notes provided by automated triage.';\n}\nif (!r.alert_summary || !String(r.alert_summary).trim()) r.alert_summary = 'Honeypot alert (no summary provided).';\nif (!r.severity) r.severity = 'medium';\nif (!r.severity_rationale || !String(r.severity_rationale).trim()) r.severity_rationale = 'No rationale provided.';\nr.mitre_techniques = Array.isArray(r.mitre_techniques) ? r.mitre_techniques : [];\nr.iocs_enriched = Array.isArray(r.iocs_enriched) ? r.iocs_enriched : [];\nr.recommended_actions = Array.isArray(r.recommended_actions) ? r.recommended_actions : [];\nr.iocs = (r.iocs && typeof r.iocs === 'object') ? r.iocs : {};\nfor (const b of ['ips', 'domains', 'file_hashes', 'users', 'hosts']) {\n  if (!Array.isArray(r.iocs[b])) r.iocs[b] = [];\n}\n\nconst ctx = $('Build Opus Input').item.json;\nconst usage = $input.first().json.usage || {};\nconst tokens_in = usage.input_tokens || 0;\nconst tokens_out = usage.output_tokens || 0;\n\nconst IRIS_IOC_TYPE_IDS = { ip: 79, domain: 20, md5: 90, sha1: 111, sha256: 113 };\nconst TLP_AMBER = 2;\nconst BULLET = '•', EMDASH = '—';\n\nfunction resolveIrisTypeId(iocType, value) {\n  if (iocType === 'ip') return IRIS_IOC_TYPE_IDS.ip;\n  if (iocType === 'domain') return IRIS_IOC_TYPE_IDS.domain;\n  if (iocType === 'file_hash') {\n    const v = String(value).trim().toLowerCase();\n    if (/^[0-9a-f]{32}$/.test(v)) return IRIS_IOC_TYPE_IDS.md5;\n    if (/^[0-9a-f]{40}$/.test(v)) return IRIS_IOC_TYPE_IDS.sha1;\n    if (/^[0-9a-f]{64}$/.test(v)) return IRIS_IOC_TYPE_IDS.sha256;\n  }\n  return null;\n}\n\nconst alert_iocs = [];\nfor (const item of (r.iocs_enriched || []).filter(i => i.verdict === 'malicious' || i.verdict === 'suspicious')) {\n  const typeId = resolveIrisTypeId(item.ioc_type, item.value);\n  if (typeId === null) continue;\n  alert_iocs.push({\n    ioc_value: item.value,\n    ioc_description: `${item.source}: ${item.summary}`,\n    ioc_tlp_id: TLP_AMBER,\n    ioc_type_id: typeId,\n    ioc_tags: 'soc-automation,honeypot,phase0d',\n  });\n}\n\nconst sevId = { low: 4, medium: 1, high: 5, critical: 6 }[r.severity] || 2;\nconst mitre = (r.mitre_techniques || []).map(t => `${t.id} (${t.name})`).join(', ') || 'none identified';\nconst enriched = (r.iocs_enriched || [])\n  .map(i => `${BULLET} \\`${i.value}\\` ${EMDASH} ${String(i.verdict).toUpperCase()} (${i.source}): ${i.summary}`)\n  .join('\\n') || '_none_';\nconst actions = (r.recommended_actions || [])\n  .map(a => `${BULLET} [${String(a.priority).toUpperCase()}] ${a.description}`)\n  .join('\\n') || '_none_';\n\nconst detail_link = (ctx.source === 'falcon') ? (ctx.console_link || '')\n  : (ctx.results_link || '').replace('mydfir-splunk', '20.236.193.253')\n                            .replace('192.168.129.131', '20.236.193.253')\n                            .replace('vm-soc-v2-splunk', '20.236.193.253');\nconst link_label = (ctx.source === 'falcon') ? 'Falcon' : 'Splunk';\nconst splunk_link = detail_link;   // kept for back-compat of the returned key\n\nconst iris_description =\n`**Summary:** ${r.alert_summary}\n\n**Severity:** ${r.severity} ${EMDASH} ${r.severity_rationale}\n\n**MITRE Techniques:** ${mitre}\n\n**Enriched IOCs:**\n${enriched}\n\n**Recommended Actions:**\n${actions}\n\n**Investigation Notes:**\n${r.investigation_notes || '_none_'}\n\n---\n${link_label}: ${detail_link}`;\n\nconst verify_body = {\n  result: r,\n  retrieved: ctx.retrieved_ids || [],\n  enrichment_results: ctx.enrichment_results || {},\n  run_meta: { run_id: ctx.run_id, timestamp: ctx.timestamp, tokens_in, tokens_out, latency_ms: 0 },\n};\n\nconst top_mitre = (r.mitre_techniques && r.mitre_techniques[0])\n  ? `${r.mitre_techniques[0].id} ${r.mitre_techniques[0].name}` : 'n/a';\n\nconst sev = String(r.severity || '').toLowerCase();\nconst containRecommended = (ctx.source === 'falcon') && (sev === 'high' || sev === 'critical');\nlet desc = `Host **${ctx.host}** • src_ip \\`${ctx.src_ip || 'n/a'}\\`\\nMITRE: ${top_mitre}\\nVerifier: **passed**`;\nif (detail_link) desc += `\\n[${link_label} detection](${detail_link})`;\nif (containRecommended) desc += `\\n⚠️ **Contain recommended** — run \\`falcon-contain\\` for vm-honeypot-win`;\nconst discord_body = { embeds: [{\n  title: `✅ ${String(r.severity).toUpperCase()} — ${ctx.search_name || 'Honeypot alert'}`,\n  description: desc,\n  color: 3066993,\n}]};\n\nreturn [{ json: {\n  ...r,\n  alert_name: ctx.search_name || 'Honeypot brute force',\n  severity_iris_id: sevId,\n  iris_description,\n  splunk_link,\n  alert_iocs,\n  verify_body,\n  top_mitre,\n  discord_body,\n  source: ctx.source,\n  console_link: ctx.console_link,\n  src_ip: ctx.src_ip,\n  host: ctx.host,\n} }];"
       },
       "id": "extract-result",
       "name": "Extract Result",
@@ -385,6 +386,40 @@
         3120,
         320
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasioc",
+              "leftValue": "={{ $('Parse Alert').item.json.src_ip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-ioc",
+      "name": "Has IOC",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        470,
+        200
+      ]
     }
   ],
   "connections": {
@@ -403,7 +438,25 @@
       "main": [
         [
           {
+            "node": "Has IOC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has IOC": {
+      "main": [
+        [
+          {
             "node": "enrich_abuseipdb",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Normalize Body",
             "type": "main",
             "index": 0
           }

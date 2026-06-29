@@ -85,9 +85,11 @@ SCHEMA = {
 }
 
 # ---- Code-node JS (raw strings preserve regex backslashes/backticks) -------
-JS_PARSE = r"""// Parse honeypot brute-force alert -> canonical IOCs + alert_text + enrichment plan (CF#2 canonical form).
+JS_PARSE = r"""// Parse alert -> canonical IOCs + alert_text. Source-aware: splunk brute-force (synthesize)
+// vs falcon (use the supplied alert_text). CF#2 canonical form; empty-safe src_ip.
 const body = $input.first().json.body || {};
 const r = body.result || {};
+const source = body.source || 'splunk';
 
 const canonIp = (v) => String(v || '').trim();                       // plain IPv4: no change
 const isPrivate = (ip) =>
@@ -104,29 +106,32 @@ const count = r.count || 'multiple';
 
 const enrich_ips = (src_ip && !isPrivate(src_ip)) ? [src_ip] : [];
 
-const alert_text =
-  `RDP/SMB brute force: ${count} failed Windows logons (EventCode 4625) ` +
-  `against user ${user} on host ${host} from external source IP ${src_ip}. ` +
-  `Repeated failed authentication, credential access, remote service login.`;
+const alert_text = (source === 'falcon' && body.alert_text)
+  ? String(body.alert_text)
+  : `RDP/SMB brute force: ${count} failed Windows logons (EventCode 4625) ` +
+    `against user ${user} on host ${host} from external source IP ${src_ip}. ` +
+    `Repeated failed authentication, credential access, remote service login.`;
 
 return [{ json: {
   run_id: String($execution.id),
   timestamp: new Date().toISOString(),
+  source,
   search_name: body.search_name || '',
   results_link: body.results_link || '',
+  console_link: body.console_link || '',
   src_ip, host, user, count,
   enrich_ips,
   observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },
   alert_text,
 }}];"""
 
-JS_NORMBODY = r"""// Assemble /normalize items from the two enrichment responses, keyed by the canonical src_ip.
+JS_NORMBODY = r"""// Assemble /normalize items from the two enrichment responses (only when an IP was enriched).
 const p = $('Parse Alert').item.json;
 const ip = p.src_ip;
-const abuse = $('enrich_abuseipdb').item.json;
-const grey = $('enrich_greynoise').item.json;
 const items = [];
 if (ip) {
+  const abuse = $('enrich_abuseipdb').item.json;
+  const grey = $('enrich_greynoise').item.json;
   items.push({ ioc: ip, provider: 'abuseipdb', response: abuse });
   items.push({ ioc: ip, provider: 'greynoise', response: grey });
 }
@@ -235,8 +240,12 @@ const actions = (r.recommended_actions || [])
   .map(a => `${BULLET} [${String(a.priority).toUpperCase()}] ${a.description}`)
   .join('\n') || '_none_';
 
-const splunk_link = (ctx.results_link || '').replace('mydfir-splunk', '20.236.193.253')
-                                            .replace('192.168.129.131', '20.236.193.253');
+const detail_link = (ctx.source === 'falcon') ? (ctx.console_link || '')
+  : (ctx.results_link || '').replace('mydfir-splunk', '20.236.193.253')
+                            .replace('192.168.129.131', '20.236.193.253')
+                            .replace('vm-soc-v2-splunk', '20.236.193.253');
+const link_label = (ctx.source === 'falcon') ? 'Falcon' : 'Splunk';
+const splunk_link = detail_link;   // kept for back-compat of the returned key
 
 const iris_description =
 `**Summary:** ${r.alert_summary}
@@ -255,7 +264,7 @@ ${actions}
 ${r.investigation_notes || '_none_'}
 
 ---
-Splunk: ${splunk_link}`;
+${link_label}: ${detail_link}`;
 
 const verify_body = {
   result: r,
@@ -267,9 +276,14 @@ const verify_body = {
 const top_mitre = (r.mitre_techniques && r.mitre_techniques[0])
   ? `${r.mitre_techniques[0].id} ${r.mitre_techniques[0].name}` : 'n/a';
 
+const sev = String(r.severity || '').toLowerCase();
+const containRecommended = (ctx.source === 'falcon') && (sev === 'high' || sev === 'critical');
+let desc = `Host **${ctx.host}** • src_ip \`${ctx.src_ip || 'n/a'}\`\nMITRE: ${top_mitre}\nVerifier: **passed**`;
+if (detail_link) desc += `\n[${link_label} detection](${detail_link})`;
+if (containRecommended) desc += `\n⚠️ **Contain recommended** — run \`falcon-contain\` for vm-honeypot-win`;
 const discord_body = { embeds: [{
-  title: `✅ ${String(r.severity).toUpperCase()} — ${ctx.search_name || 'Honeypot brute force'}`,
-  description: `Host **${ctx.host}** • src_ip \`${ctx.src_ip}\`\nMITRE: ${top_mitre}\nVerifier: **passed**`,
+  title: `✅ ${String(r.severity).toUpperCase()} — ${ctx.search_name || 'Honeypot alert'}`,
+  description: desc,
   color: 3066993,
 }]};
 
@@ -283,6 +297,8 @@ return [{ json: {
   verify_body,
   top_mitre,
   discord_body,
+  source: ctx.source,
+  console_link: ctx.console_link,
   src_ip: ctx.src_ip,
   host: ctx.host,
 } }];"""
@@ -326,7 +342,7 @@ nodes = [
               {"name": "maxAgeInDays", "value": "90"}]},
           "sendHeaders": True, "headerParameters": {"parameters": [
               {"name": "Accept", "value": "application/json"}]},
-          "options": {}}, [col(), 0], creds=CRED_HDR),
+          "options": {}}, [col(), 0], creds=CRED_HDR, extra={"onError": "continueRegularOutput"}),
     node("enrich_greynoise", "n8n-nodes-base.httpRequest", 4.4,
          {"method": "GET",
           "url": "=https://api.greynoise.io/v3/community/{{ $('Parse Alert').item.json.src_ip }}",
@@ -395,11 +411,23 @@ nodes = [
          {"method": "POST", "url": "https://discord.com/api/webhooks/REPLACE_ME",
           "sendBody": True, "specifyBody": "json", "jsonBody": NEEDS_DISCORD, "options": {}},
          [X, 320]),
+    node("Has IOC", "n8n-nodes-base.if", 2.2,
+         {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                         "conditions": [{"id": "hasioc",
+                                         "leftValue": "={{ $('Parse Alert').item.json.src_ip }}",
+                                         "rightValue": "",
+                                         "operator": {"type": "string", "operation": "notEmpty", "singleValue": True}}],
+                         "combinator": "and"},
+          "options": {}}, [470, 200]),
 ]
 
 connections = {
     "Webhook": {"main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]},
-    "Parse Alert": {"main": [[{"node": "enrich_abuseipdb", "type": "main", "index": 0}]]},
+    "Parse Alert": {"main": [[{"node": "Has IOC", "type": "main", "index": 0}]]},
+    "Has IOC": {"main": [
+        [{"node": "enrich_abuseipdb", "type": "main", "index": 0}],     # true: has IOC -> enrich
+        [{"node": "Build Normalize Body", "type": "main", "index": 0}], # false: skip enrichment
+    ]},
     "enrich_abuseipdb": {"main": [[{"node": "enrich_greynoise", "type": "main", "index": 0}]]},
     "enrich_greynoise": {"main": [[{"node": "Build Normalize Body", "type": "main", "index": 0}]]},
     "Build Normalize Body": {"main": [[{"node": "normalize", "type": "main", "index": 0}]]},
