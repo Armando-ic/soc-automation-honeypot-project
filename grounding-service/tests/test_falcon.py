@@ -60,7 +60,7 @@ def test_advance_bounds_seen():
     assert "0" not in new["seen"]
 
 
-from grounding_service.falcon import alert_created, composite_id_of, map_alert
+from grounding_service.falcon import alert_created, composite_id_of, map_alert, map_alerts
 
 BEHAVIORAL = {  # real us-2 EICAR behavioral alert shape (Task 0 live dump 2026-06-29)
     "origin_cid": "00000000000000000000000000000000",
@@ -121,6 +121,48 @@ def test_map_network_alert_sets_ip_from_source_ips():
 def test_map_ignores_private_or_garbage_ip():
     assert map_alert(dict(NETWORK, source_ips=["10.0.0.5"]))["result"]["src_ip"] == ""
     assert map_alert(dict(NETWORK, source_ips=["not-an-ip"]))["result"]["src_ip"] == ""
+
+
+def test_map_alerts_sorts_oldest_first_regardless_of_hydrate_order():
+    # CrowdStrike entities/alerts/v2 does NOT guarantee request order; map_alerts must re-sort by
+    # `created` so advance_state's contiguous-prefix watermark can't strand an earlier alert (SKIP).
+    a = dict(NETWORK, composite_id="a:1", created_timestamp="2026-06-29T03:00:00Z")
+    b = dict(NETWORK, composite_id="b:2", created_timestamp="2026-06-29T01:00:00Z")
+    c = dict(NETWORK, composite_id="c:3", created_timestamp="2026-06-29T02:00:00Z")
+    items = map_alerts([a, b, c])                        # scrambled input: 03:00, 01:00, 02:00
+    assert [it["created"] for it in items] == [
+        "2026-06-29T01:00:00Z", "2026-06-29T02:00:00Z", "2026-06-29T03:00:00Z"]
+    assert [it["composite_id"] for it in items] == ["b:2", "c:3", "a:1"]
+    assert items[0]["body"]["source"] == "falcon"       # full webhook body still built per alert
+
+
+def test_map_alerts_empty_created_sorts_first():
+    # a timestamp-less alert must never advance the watermark -> acked earliest (sorts first)
+    no_ts = {"composite_id": "x:0"}                      # no created_timestamp/timestamp -> created ""
+    a = dict(NETWORK, composite_id="a:1", created_timestamp="2026-06-29T01:00:00Z")
+    items = map_alerts([a, no_ts])
+    assert items[0]["composite_id"] == "x:0"
+    assert items[0]["created"] == ""
+
+
+def test_map_alert_reads_real_host_from_host_names():
+    # host-scope was dropped from the FQL, so a stray host's alert can enter; map must NOT relabel
+    # it as the honeypot — read the alert's real host (host_names[0]) for ComputerName + alert_text.
+    body = map_alert(dict(NETWORK, host_names=["other-host"]))
+    assert body["result"]["ComputerName"] == "other-host"
+    assert "other-host" in body["alert_text"]
+
+
+def test_map_alert_reads_logon_domain_when_no_host_names():
+    # distinct from HOST_DEFAULT so this proves logon_domain is actually read (not a coincidental pass)
+    body = map_alert(dict(NETWORK, logon_domain="vm-other-host"))
+    assert body["result"]["ComputerName"] == "vm-other-host"
+
+
+def test_map_alert_defaults_host_when_absent():
+    # no host_names/logon_domain -> default HOST_DEFAULT (BEHAVIORAL/NETWORK fixtures carry neither)
+    assert map_alert(NETWORK)["result"]["ComputerName"] == "vm-honeypot-win"
+    assert map_alert(BEHAVIORAL)["result"]["ComputerName"] == "vm-honeypot-win"
 
 
 import pytest

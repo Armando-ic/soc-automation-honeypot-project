@@ -128,6 +128,22 @@ def _file_hash(alert: dict) -> str:
     return ""
 
 
+def _host_of(alert: dict) -> str:
+    """The alert's real host: first non-empty `host_names[]`, then `logon_domain`, else HOST_DEFAULT.
+
+    The poller's FQL host-scope was dropped (n8n can't transmit the FQL '+' AND), so a stray host's
+    alert can enter — read its true host instead of silently relabeling it as the honeypot. For the
+    real honeypot EICAR object both fields are 'vm-honeypot-win', so live behavior is unchanged.
+    """
+    names = alert.get("host_names")
+    if isinstance(names, (list, tuple)):
+        for n in names:
+            s = str(n).strip()
+            if s:
+                return s
+    return str(alert.get("logon_domain", "") or "").strip() or HOST_DEFAULT
+
+
 def map_alert(alert: dict) -> dict:
     """Falcon hydrated alert -> the EXISTING Splunk-shaped webhook body + additive keys (decision A').
 
@@ -144,10 +160,11 @@ def map_alert(alert: dict) -> dict:
     src_ip = _first_ip(alert)
     file_hash = _file_hash(alert)
     composite_id = composite_id_of(alert)
+    host = _host_of(alert)
 
     tac_tech = "/".join(p for p in (tactic, technique) if p)
     head = " ".join(p for p in (sev_name, tac_tech, f"({technique_id})" if technique_id else "") if p)
-    alert_text = f"{head} on {HOST_DEFAULT}".strip()
+    alert_text = f"{head} on {host}".strip()
     if name:
         alert_text += f" — {name}"
     if file_hash:
@@ -165,8 +182,25 @@ def map_alert(alert: dict) -> dict:
         "console_link": console_link,
         "source": "falcon",
         "alert_text": alert_text,
-        "result": {"src_ip": src_ip, "user": user, "ComputerName": HOST_DEFAULT, "count": 1},
+        "result": {"src_ip": src_ip, "user": user, "ComputerName": host, "count": 1},
     }
+
+
+def map_alerts(alerts) -> list[dict]:
+    """Build a webhook item per hydrated alert, sorted oldest-first by `created`.
+
+    Sorting here (rather than trusting CrowdStrike's entities/alerts/v2 to preserve the request
+    order — it does not) preserves advance_state's contiguous-prefix watermark invariant: a hydrate
+    reorder + a mid-batch webhook failure could otherwise advance the watermark past an earlier
+    un-acked alert (a permanent SKIP). Empty `created` sorts first — a timestamp-less alert must
+    never advance the watermark and is acked earliest.
+    """
+    items = [
+        {"body": map_alert(a), "composite_id": composite_id_of(a), "created": alert_created(a)}
+        for a in (alerts or [])
+    ]
+    items.sort(key=lambda it: it["created"])             # ISO8601 strings sort lexicographically
+    return items
 
 
 def select_contain_aid(resolved_ids, pinned_aid: str) -> str:

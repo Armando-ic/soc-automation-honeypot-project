@@ -102,6 +102,26 @@ def test_falcon_map_route(seeded_retriever, tmp_path):
     assert item["body"]["source"] == "falcon"
 
 
+def test_falcon_map_route_sorts_oldest_first(seeded_retriever, tmp_path):
+    # the route must re-sort by created (entities/alerts/v2 doesn't guarantee request order) so
+    # advance_state's contiguous-prefix watermark can't strand an earlier alert (SKIP).
+    c = TestClient(create_app(seeded_retriever, _falcon_settings(tmp_path)))
+
+    def alert(cid, ts):
+        return {"composite_id": cid, "created_timestamp": ts, "severity_name": "High",
+                "tactic": "Credential Access", "technique": "Brute Force",
+                "technique_id": "T1110", "source_ips": ["203.0.113.10"]}
+
+    r = c.post("/falcon/map", json={"alerts": [
+        alert("a:1", "2026-06-29T03:00:00Z"),
+        alert("b:2", "2026-06-29T01:00:00Z"),
+        alert("c:3", "2026-06-29T02:00:00Z")]})        # scrambled input
+    items = r.json()["items"]
+    assert [it["composite_id"] for it in items] == ["b:2", "c:3", "a:1"]
+    assert [it["created"] for it in items] == [
+        "2026-06-29T01:00:00Z", "2026-06-29T02:00:00Z", "2026-06-29T03:00:00Z"]
+
+
 def test_falcon_advance_persists(seeded_retriever, tmp_path):
     s = _falcon_settings(tmp_path)
     c = TestClient(create_app(seeded_retriever, s))

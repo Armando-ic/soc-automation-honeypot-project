@@ -100,13 +100,8 @@ def create_app(
 
     @app.post("/falcon/map")
     def falcon_map(req: FalconMapRequest) -> dict:
-        items = [
-            {"body": fal.map_alert(a),
-             "composite_id": fal.composite_id_of(a),
-             "created": fal.alert_created(a)}
-            for a in req.alerts
-        ]
-        return {"items": items}
+        # map_alerts sorts oldest-first by `created` (don't trust entities/alerts/v2 to preserve order)
+        return {"items": fal.map_alerts(req.alerts)}
 
     @app.post("/falcon/advance")
     def falcon_advance(req: FalconAdvanceRequest) -> dict:
