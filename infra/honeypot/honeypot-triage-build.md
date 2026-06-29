@@ -347,24 +347,93 @@ return [{ json: { ...ctx, opus_user_message_reground } }];
 
 ---
 
-## Section D — Splunk saved-search (trigger)
+## Section D — Splunk saved-search (trigger) — ✅ BUILT & e2e-VALIDATED 2026-06-29 (Task 7)
 
-SPL (tune field names to your 4625 sourcetype; honeypot `index=honeypot`):
+**Status:** the loop is **live-triggered**. Saved search `Honeypot - RDP/SMB brute force (external)` drives the
+pipeline automatically (cron `*/15`). Proven by a forced `sendalert` fire → IRIS alert **#230** + green Discord
+(src_ip `156.239.41.77`, T1110.001, HIGH) + `runs.jsonl` **`run_id 243` `verification_passed:true`**.
 
+### Field facts — VERIFIED on this honeypot's 4625 events (don't re-derive)
+- sourcetype = `WinEventLog` (classic text, **not** `XmlWinEventLog`). `src_ip` **is** auto-extracted and equals
+  `Source_Network_Address` (the external attacker IP). `user` resolves cleanly to the targeted account
+  (`Administrator`); `Account_Name` is the messy multivalue `["-","Administrator"]` — use `user`, not `Account_Name`.
+  `ComputerName` = `host` = `vm-honeypot-win`. ⚠️ `src` = `workstation` is the Windows logon "workstation name"
+  field, **NOT** an IP — do not map the trigger to it.
+- **Traffic reality (sized 2026-06-29, 24h):** 85 distinct external IPs / 473 events; 62 IPs ≥3, 45 ≥5, 16 ≥10 —
+  but **per-5-min an IP only does 1–2.** This is slow, distributed credential-stuffing, NOT a fast single-source
+  brute force, so the original `count >= 10 in 5 min` would essentially never fire. Threshold retuned accordingly.
+
+### Finalized SPL (Balanced preset — what's live)
 ```spl
-index=honeypot (EventCode=4625 OR source="XmlWinEventLog:Security" EventCode=4625)
-| where NOT (cidrmatch("10.0.0.0/8", src_ip) OR cidrmatch("172.16.0.0/12", src_ip)
-             OR cidrmatch("192.168.0.0/16", src_ip) OR src_ip="-" OR isnull(src_ip))
+index=honeypot EventCode=4625
+| eval src_ip=coalesce(src_ip, Source_Network_Address)
+| where isnotnull(src_ip) AND src_ip!="-"
+        AND NOT (cidrmatch("10.0.0.0/8",src_ip) OR cidrmatch("172.16.0.0/12",src_ip)
+                 OR cidrmatch("192.168.0.0/16",src_ip) OR cidrmatch("127.0.0.0/8",src_ip))
 | stats count, values(user) as user, values(ComputerName) as ComputerName,
         earliest(_time) as earliest, latest(_time) as latest by src_ip
-| where count >= 10
+| where count >= 2
 | eval ComputerName=mvindex(ComputerName,0), user=mvindex(user,0)
+| sort -count
+| head 1
 ```
+`| sort -count | head 1` = **triage the single most aggressive attacker per run.** Splunk's built-in webhook
+action posts only the **first** result row (no per-result fan-out without a custom action), and Parse Alert (C.1)
+expects exactly one `result`/`src_ip` — head-1 makes that explicit. The short trailing window keeps the "top"
+rotating instead of getting stuck on yesterday's #1.
 
-- **Alert type:** Scheduled, cron `*/5 * * * *`, time range last 5 min.
-- **Trigger:** for each result. **Throttle:** by `src_ip` for **300 s** (once per src_ip per window).
-- **Action:** Webhook → the n8n **production** webhook URL (node 1). Splunk posts
-  `{search_name, results_link, result:{...row...}}`, matching Parse Alert (C.1).
+### Alert config (Save As → Alert)
+- **Title:** `Honeypot - RDP/SMB brute force (external)`
+- **Alert type:** Scheduled · **Cron:** `*/15 * * * *` · **Time range:** **Last 30 minutes**
+- **Trigger alert when:** Number of Results · is greater than · `0`
+- **Trigger:** **For each result** (required to expose the per-field throttle; with head-1 it still fires once)
+- **Throttle:** ✅ suppress results containing field value **`src_ip`**, suppress triggering for **1 hour**
+- **Action:** Webhook → **`http://10.0.0.6:5678/webhook/honeypot-triage`** (n8n **PRIVATE** VNet IP — Splunk
+  `10.0.0.5` → n8n `10.0.0.6:5678`; verified routes, no public 5678 exposure). n8n's displayed Production URL uses
+  the **public** host `52.173.105.92` — swap to the private `10.0.0.6`, keep the same `/webhook/honeypot-triage` path.
+
+> ⚠️ **The Save-As-Alert form never shows the time range** — it silently inherits the search bar's time picker. Set
+> the picker to **Last 30 minutes** before Save As, then verify every saved property in one shot:
+> ```spl
+> | rest /servicesNS/-/-/saved/searches
+> | search title="Honeypot - RDP/SMB brute force (external)"
+> | table title cron_schedule dispatch.earliest_time dispatch.latest_time alert_type alert_comparator alert_threshold alert.suppress alert.suppress.fields alert.suppress.period action.webhook.param.url
+> ```
+> Expect `dispatch.earliest_time = -30m@m`, `cron_schedule = */15 * * * *`, `alert.suppress.fields = src_ip`,
+> `alert.suppress.period = 1h`, `action.webhook.param.url = http://10.0.0.6:5678/webhook/honeypot-triage`.
+
+### On-demand e2e test (no waiting on the schedule)
+Set the time picker to **Last 24 hours**, run the finalized SPL with the threshold relaxed to `| where count >= 1`,
+and append `sendalert` to POST the real Splunk-formatted payload to the production webhook (same path the schedule
+uses):
+```spl
+... | where count >= 1 | sort -count | eval ComputerName=mvindex(ComputerName,0), user=mvindex(user,0)
+| head 1
+| sendalert webhook param.url="http://10.0.0.6:5678/webhook/honeypot-triage"
+```
+Confirm: new n8n execution all-green, Discord embed, IRIS alert, `runs.jsonl` +1 line. Note: an ad-hoc `sendalert`
+sends an empty `search_name`/`results_link` (the **scheduled** alert populates both), so the IRIS "Splunk:" link is
+generic on a `sendalert` test.
+
+### Trigger preset dial (if you re-tune)
+| preset | threshold | window | schedule | throttle | ~volume/day |
+|---|---|---|---|---|---|
+| Responsive | `count>=1` | 15 min | `*/5`  | 1h / src_ip | ~50–80 |
+| **Balanced (LIVE)** | `count>=2` | 30 min | `*/15` | 1h / src_ip | ~20–40 |
+| Cost-tight | `count>=2` | 60 min | `*/30` | 6h / src_ip | ~10–20 |
+
+> Known behavior: with head-1 + a 1h throttle, a throttled high-count IP can briefly "shadow" a fresh lower-count IP
+> until its hits age out of the 30-min window (≤30 min). The 2nd-place attacker is *delayed*, never *lost*. Strict
+> per-IP fan-out would need a custom alert action or an n8n-side dedup lookup.
+>
+> Splunk payload shape (both `sendalert` and the schedule): `{search_name, results_link, result:{...row...}}`,
+> wrapped by n8n's webhook node under `.body` — matches Parse Alert (C.1: `body.result.src_ip`, etc.).
+
+### Known cosmetic follow-up (not yet fixed)
+The IRIS "Splunk:" deep-link shows the internal host `vm-soc-v2-splunk:8000` (not externally clickable). C.4's
+`splunk_link` rewrite only maps the legacy `mydfir-splunk` / `192.168.129.131` hosts. To make it externally
+clickable, add `.replace('vm-soc-v2-splunk', '20.236.193.253')` to the C.4 rewrite chain (then re-sync the live
+Extract Result node + the build script). Cosmetic only — does not affect triage or verification.
 
 ---
 

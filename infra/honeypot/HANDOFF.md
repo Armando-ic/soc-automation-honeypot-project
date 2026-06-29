@@ -1,4 +1,4 @@
-# Honeypot Agentic-SOC Upgrade — HANDOFF (2026-06-26)
+# Honeypot Agentic-SOC Upgrade — HANDOFF (2026-06-29)
 
 **For the next fresh Claude instance. Read this first**, then the spec + Plan 0A.
 
@@ -79,9 +79,9 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-28) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) — n8n pipeline BUILT + e2e VALIDATED; Splunk auto-trigger (Task 7) remains** · 0B trial APPROVED
+## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger (Task 7) BUILT & e2e VALIDATED; the loop is LIVE-TRIGGERED** · 0B trial APPROVED
 
-> ### 🟢 0D-1b Phase 2 (Wire) — n8n triage pipeline BUILT + e2e VALIDATED (2026-06-28)
+> ### 🟢 0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger BUILT + e2e VALIDATED (2026-06-28 wire; **2026-06-29 Task 7 live-trigger**)
 > Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
 > `docs/superpowers/plans/2026-06-28-honeypot-phase0d1b-phase2-wire.md` (both PARENT, approved). Build method =
 > **fully hands-on** (USER built it in n8n; final shape captured as an importable JSON), trigger = **brute-force-only**
@@ -104,13 +104,23 @@ ONLY in the gitignored secrets file — never committed/echoed.
 > **Gotchas (documented):** live-judge `.env` MUST be at `grounding-service/.env` (Compose ignores a repo-root `.env`);
 > `/root/soc-src` is a **transferred (non-git) tree** — sync changed files via base64 over `az vm run-command`;
 > `run_meta` tokens log as 0 (langchain node doesn't expose usage — accepted).
-> **REMAINING:** **Task 7 — Splunk saved-search** (runbook §D SPL: `index=honeypot EventCode=4625`, per-src_ip,
-> ≥10/5min, RFC1918-excluded, webhook action → the n8n production URL) to make the loop **live-triggered** instead
-> of manual/replay. **OPTIONAL:** add the bounded one-shot **re-ground** branch (omitted from the importable JSON
-> for reliability; FAIL currently goes straight to needs-human — safe + logged). Then **0D-2** (Falcon trigger +
-> Contain) within the trial window. **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` DEALLOCATED at session end (cost-safe)
-> — `az vm start -g rg-soc-v2-azure-central-us -n <vm>` both to resume; everything auto-resumes + judge survives reboot.
-> The importable workflow is `JSON/honeypot-triage.json` (regenerate via `python infra/honeypot/build_honeypot_triage_workflow.py`).**
+> **✅ Task 7 — Splunk saved-search DONE & e2e-VALIDATED (2026-06-29):** saved search
+> `Honeypot - RDP/SMB brute force (external)` is LIVE — cron `*/15`, trailing 30 min, **Balanced** threshold
+> `count>=2` per `src_ip`, `sort -count | head 1` (Splunk's webhook posts only the first result), per-`src_ip` 1h
+> throttle (Trigger=For each result), webhook → the n8n **PRIVATE** URL `http://10.0.0.6:5678/webhook/honeypot-triage`
+> (Splunk 10.0.0.5 → n8n 10.0.0.6). The original `≥10/5min` was wrong for this honeypot — it gets slow distributed
+> credential-stuffing (85 distinct IPs/24h, ≤2 per 5 min). **Field facts:** `src_ip` IS extracted (= `Source_Network_Address`),
+> `user`=`Administrator`, `ComputerName`=`vm-honeypot-win`, ⚠️ `src`=`workstation` is a decoy (NOT an IP). Proven via
+> `| sendalert webhook` → IRIS alert **#230** + green Discord (src_ip 156.239.41.77, T1110.001, HIGH) + `runs.jsonl`
+> **`run_id 243` `verification_passed:true`** (13 lines now). Full finalized SPL + alert form + on-demand `sendalert`
+> test + the `| rest` config-verify search are in **runbook §D** (rewritten this session).
+> **REMAINING / NEXT:** **OPTIONAL** — add the bounded one-shot **re-ground** branch (omitted from the importable JSON
+> for reliability; FAIL currently goes straight to needs-human — safe + logged); also an OPTIONAL cosmetic fix to C.4's
+> `splunk_link` rewrite (the IRIS deep-link shows internal host `vm-soc-v2-splunk:8000` — add `.replace('vm-soc-v2-splunk','20.236.193.253')`).
+> Then **0D-2** (Falcon trigger + Contain) within the trial window once 0B is validated.
+> **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` STARTED this session — DEALLOCATE at end (cost-safe):
+> `az vm deallocate -g rg-soc-v2-azure-central-us -n <vm>` both; everything auto-resumes + judge survives reboot on next start.**
+> The importable workflow is `JSON/honeypot-triage.json` (regenerate via `python infra/honeypot/build_honeypot_triage_workflow.py`).
 Plan 0A done. Plan 0C **COMPLETE**. **Plan 0D-1a ✅ BUILT** (subagent-driven, 23 tests, commits
 `ac1e8d8..71720f0`, ready-to-merge). **0D-1b was SPLIT into Phase 1 (Deploy) + Phase 2 (Wire).**
 **Phase 1 (Deploy) ✅ DONE & VALIDATED LIVE this session (2026-06-28)** — grounding-service + Qdrant now run
