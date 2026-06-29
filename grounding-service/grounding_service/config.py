@@ -23,6 +23,11 @@ class Settings:
     attack_ref_path: str = os.getenv(
         "ATTACK_REF", str(_VERIFIER / "data" / "attack_reference.json")
     )
+    state_path: str = os.getenv(
+        "FALCON_STATE_PATH", str(Path.cwd() / "falcon-poller-state.json")
+    )
+    falcon_pinned_aid: str = os.getenv("FALCON_PINNED_AID", "")
+    falcon_poll_cap: int = int(os.getenv("FALCON_POLL_CAP", "8"))
 
 
 def load_settings() -> Settings:
