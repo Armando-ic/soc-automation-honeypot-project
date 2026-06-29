@@ -79,58 +79,65 @@ ONLY in the gitignored secrets file — never committed/echoed.
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
 
-## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon ✅ COMPLETE (2026-06-29): detect-only sensor + OAuth API + Contain→Lift all VALIDATED (`normal→contained→normal`, `pattern_disposition_details` all-false) → `falcon-validation.md`; Task 8 lifecycle docs in RUNBOOK/README; trial keep/drop reminder scheduled 2026-07-11 09:00 ET (routine `trig_01VGbabpwThgahchN54z4GTy`). ⚠️ API secret was pasted in chat → ROTATED. **0D-2 IN PROGRESS (2026-06-29) — plan written; Tasks 0–7 DONE (Python backend + 5 routes + builder A′ edits + deploy + live smoke + honeypot-triage re-imported & both smokes green); building the n8n `falcon-alert-poller` next. ▶ See the "## 🟢 0D-2 IN PROGRESS" block below for the exact resume point.**
+## 🎯 CURRENT STATE (2026-06-29) — 0A done · 0C ✅ BUILT · 0D-1a ✅ BUILT · 0D-1b Phase 1 ✅ DONE & LIVE · **0D-1b Phase 2 (Wire) ✅ COMPLETE — the loop is LIVE-TRIGGERED** · **0B Falcon ✅ COMPLETE (2026-06-29): detect-only sensor + OAuth API + Contain→Lift all VALIDATED (`normal→contained→normal`, `pattern_disposition_details` all-false) → `falcon-validation.md`; Task 8 lifecycle docs in RUNBOOK/README; trial keep/drop reminder scheduled 2026-07-11 09:00 ET (routine `trig_01VGbabpwThgahchN54z4GTy`). ⚠️ API secret was pasted in chat → ROTATED. **0D-2 ✅ POLLER LIVE + e2e VALIDATED + hardening DEPLOYED (2026-06-29):** `falcon-alert-poller` poll branch built (host-scope-dropped FQL; proven `total:1`), EICAR empty-IOC e2e green (Iris #245, idempotent, NO 422), 5-lens review findings #4/#5 deployed + smoke-verified. Watchdog DEFERRED; human-fired Contain optional. ▶ See the "## 🟢 0D-2" block below.**
 
-## 🟢 0D-2 IN PROGRESS (2026-06-29) — Falcon Alerts poll + human-fired Contain. Tasks 0–7 DONE; building the n8n poller.
+## 🟢 0D-2 — Falcon Alerts poll trigger ✅ POLLER BUILT + e2e VALIDATED + hardening DEPLOYED (2026-06-29). Watchdog DEFERRED; human-fired Contain not built.
 
 **Read-first for 0D-2:**
-- **Plan (PARENT):** `docs/superpowers/plans/2026-06-29-honeypot-phase0d2-falcon-trigger-contain.md` (14 tasks).
-- **Spec (PARENT):** `docs/superpowers/specs/2026-06-29-honeypot-phase0d2-falcon-trigger-contain-design.md` (approved).
-- **n8n build runbook (THIS REPO):** `infra/honeypot/falcon-poller-build.md` — node-by-node for the poller + AID-pinned `falcon-contain` + watchdog. **Build from this.**
-- **CONFIRMED us-2 schema (THIS REPO):** `infra/honeypot/falcon-alerts-field-map.md` — the §10 checks, resolved live.
+- **Plan (PARENT):** `docs/superpowers/plans/2026-06-29-honeypot-phase0d2-falcon-trigger-contain.md`.
+- **Spec (PARENT):** `docs/superpowers/specs/2026-06-29-honeypot-phase0d2-falcon-trigger-contain-design.md`.
+- **n8n build runbook (THIS REPO):** `infra/honeypot/falcon-poller-build.md` — C.3 reflects the proven config; C.10 watchdog + Section D contain are DEFERRED/optional.
+- **CONFIRMED us-2 schema (THIS REPO):** `infra/honeypot/falcon-alerts-field-map.md`.
+- **e2e evidence (THIS REPO):** `infra/honeypot/falcon-0d2-validation.md`.
 
-**Commits (ai-upgrade, pushed to `honeypot` remote): `008e49f..c78af38`.** 48 grounding-service tests green.
+**Commits this session (ai-upgrade — NOT pushed):** `ea285ef` poller poll-branch built + empty-IOC e2e validated · `723c81b` backend hardening (map sort-by-`created` + real-host read). Prior 0D-2 range `008e49f..c78af38` (pushed).
 
-**✅ DONE (Tasks 0–7):**
-- **Python backend** = `grounding-service/grounding_service/falcon.py` (pure: `load/save_state`, `select_new_alert_ids`,
-  `advance_state` contiguous-prefix watermark, `map_alert`, `alert_created`, `composite_id_of`, `select_contain_aid`)
-  + **5 routes in `app.py`**: `GET /falcon/state`, `POST /falcon/{plan,map,advance,contain-guard}`. TDD.
-- **honeypot-triage A′ edits** (Task 5) in `build_honeypot_triage_workflow.py` → regenerated `JSON/honeypot-triage.json`
-  (18 nodes: source-aware Parse Alert, `Has IOC` empty-IOC guard, Extract Result `source`/`console_link` + Contain line).
-- **Task 0 §10 confirmed LIVE on us-2 + reconciled into the code (CRITICAL — the 0B doc was wrong):**
-  - Watermark **read = `created_timestamp` then `timestamp`** (real object has `timestamp`+`updated_timestamp`, **no `created`**); **FQL key = `created_timestamp`**.
-  - **host-scope `device.hostname:'vm-honeypot-win'` is filterable.** Attacker IP = **`source_ips[]`** (array; empty on behavioral alerts; **unconfirmed-populated** — no credential-access alert exists in the tenant yet).
-  - **`composite_id` is NOT returned** = `origin_cid` + `:` + `id`. **No top-level `filename`/`cmdline`** → use `name` + `sha256`/`md5` (skip all-zero hash).
-  - **Honeypot AID = `11111111111111111111111111111111`** (in `Personal/honeypot-vm-creds.txt` + the VM `.env` `FALCON_PINNED_AID`).
-- **Task 6 deploy:** `falcon.py`+`app.py`+`docker-compose.yml`(`FALCON_*` env) synced to `/root/soc-src` (base64 over az run-command),
-  container rebuilt, `FALCON_PINNED_AID` set in `/root/soc-src/grounding-service/.env`, all 5 routes **smoke-validated live** on the real EICAR schema.
-- **Task 7:** `honeypot-triage` re-imported (18 nodes), creds re-bound, **Discord URL re-set** (it reverts to `REPLACE_ME` on import → 405 if not),
-  re-activated. **Both smokes GREEN:** Splunk path → passed + green Discord (no Contain line); Falcon empty-IOC path → **needs-human, NO 422** (the guard works).
+**✅ DONE this session:**
+- **Poll branch BUILT + LIVE** = `JSON/falcon-alert-poller.json` (regenerate: `python infra/honeypot/build_falcon_poller_workflow.py`):
+  9 nodes — `Schedule(15m)→get_state→falcon_query→falcon_plan→IF has_new`→[true]`hydrate→map→Post+Collect→advance`. Imported, Falcon
+  cred bound, orphan/`1`-suffixed nodes cleaned. **Left INACTIVE** (the 15-min cron is OFF — activate to run unattended).
+- **falcon_query FQL = `created_timestamp` ALONE — host-scope DROPPED on purpose.** n8n 2.21.7 / httpRequest v4.4 cannot transmit the
+  FQL `+` AND: Send-Query-Parameters → literal `+` → gateway space → `total:0`; URL-field `%2B` → re-encoded `%252B` → `400 invalid filter`.
+  Tenant is honeypot-only + Contain is AID-pinned → safe. Proven `total:1` on EICAR. **Post+Collect uses `.first()`** (Run-Once-for-All-Items).
+- **e2e VALIDATED LIVE (empty-IOC path):** EICAR (no `source_ips`) → empty-IOC guard → **needs-human, NO 422** → Iris **#245** + Discord
+  (low / T1204 / no-enrichment / console deep-link resolved). **Idempotent** re-run (IF has_new → false). Evidence: `falcon-0d2-validation.md`.
+- **5-lens adversarial review (Workflow): 15 confirmed findings. Backend hardening DEPLOYED + smoke-verified LIVE:**
+  - **#4 (HIGH)** — `app.py /falcon/map` → new pure `falcon.py:map_alerts()` sorts items oldest-first by `created` (CrowdStrike
+    `entities/alerts/v2` does NOT preserve request order → a hydrate reorder + a mid-batch webhook failure could otherwise SKIP an alert).
+  - **#5 (MED)** — `falcon.py:map_alert` reads the real host via new `_host_of()` (`host_names[0]`→`logon_domain`→`HOST_DEFAULT`);
+    no more relabeling a stray host as the honeypot (compensates for the dropped FQL host-scope). Live EICAR behavior unchanged.
+  - Tests: `tests/test_falcon.py` +4 (23 pure tests green locally `--noconftest`); `tests/test_app.py` + a route scramble test.
+  - **Deploy:** `falcon.py`+`app.py` base64-synced to `/root/soc-src` (md5-matched) → `docker compose up -d --build grounding-service`
+    (image `soar-grounding-service` rebuilt + recreated, `/health` ok; qdrant+n8n untouched; `grounding_runs` volume persisted).
+    **USER-APPROVED the az-run-command deploy** (non-secret code sync; n8n VM is Linux, `/root/soc-src` is non-git).
+  - **Live smoke GREEN:** scrambled `/falcon/map` batch → sorted `b:2,c:3,a:1`; `host_names:['other-host']` → `ComputerName=other-host`.
 
-**Live state the fresh instance must know (NOT in git):**
-- **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` are RUNNING** (started this session). ⚠️ **Deallocate if not resuming today:**
-  `az vm deallocate -g rg-soc-v2-azure-central-us -n vm-soc-v2-n8n` (and `vm-soc-v2-splunk`).
-- grounding-service routes are **live**; poller watermark was **RESET to `2026-06-29T00:00:00Z`, `seen:[]`** for testing
-  (`/data/falcon-poller-state.json`) so the lone EICAR alert is visible. It advances past EICAR after the first successful poll — fine.
-- n8n: `honeypot-triage` is live + active. **New workflow `falcon-alert-poller` started** — built so far: `Schedule Trigger`(15m) → `get_state` → `falcon_query`.
-- n8n credential **"Crowdstrike Falcon Account"** (type **CrowdStrike OAuth2 API**, URL `https://api.us-2.crowdstrike.com`) created.
-  Its connection test shows **"unsuccessful" — EXPECTED** (`honeypot-soar` lacks `usermgmt:read`); it still works for Alerts/Hosts.
+**🟡 WATCHDOG (C.10) DEFERRED + human-fired `falcon-contain` NOT built (decision 2026-06-29):** the spec'd watchdog is a racy
+auto-lifter — review #2/#3: a 15-min tick can prematurely lift a legitimate human contain, and its single lift has no verify →
+false all-clear; and it can't run during the 23:00-ET n8n shutdown (#12). It is defense-in-depth the human path already covers
+(self-lift + manual-lift escalation D.6/D.7). If overnight auto-heal is ever wanted, build it **off n8n** (always-up host running
+`scripts/falcon-contain-roundtrip.ps1`), not as an n8n branch.
 
-**▶ RESUME HERE (Task 8a — the poller's `falcon_query` FQL fix, then continue):**
-1. **Fix the `falcon_query` filter.** Proven live: `device.hostname:'vm-honeypot-win'` ALONE and `created_timestamp:>='2026-06-29T00:00:00Z'` ALONE
-   each return the EICAR id (total:1), but the **combined `A+B` (FQL AND) via n8n "Send Query Parameters" returns 0** — n8n is mangling the `+` AND operator.
-   **Fix options:** (a) put the whole query string in the **URL field** using **`%2B`** for the AND (`…?filter=created_timestamp:>='{{ $('get_state').item.json.watermark }}'%2Bdevice.hostname:'vm-honeypot-win'&sort=created_timestamp|asc&limit=200`),
-   or (b) since the tenant is **honeypot-only**, filter on **`created_timestamp` alone** and drop host-scope (Contain stays AID-pinned; note the re-enroll caveat). Re-run → expect `total:1`.
-2. **Finish the poller** per `falcon-poller-build.md` **Section C**: `falcon_plan` (POST `/falcon/plan`) → `IF has_new` → `falcon_hydrate`
-   (POST Falcon `alerts/entities/alerts/v2`) → `falcon_map` (POST `/falcon/map`) → **`Post+Collect`** Code node (the `this.helpers.httpRequest`
-   loop that POSTs each body to `http://10.0.0.6:5678/webhook/honeypot-triage`, oldest-first, `break` on first failure) → `falcon_advance` (POST `/falcon/advance`).
-   Execute → the EICAR alert flows to **needs-human** (empty-IOC), state advances; re-run → nothing new (idempotency).
-3. **Watchdog** (Section C.10) + **`falcon-contain`** (Section D, AID-pinned via `/falcon/contain-guard`).
-4. **Task 11 e2e** (empty-IOC ✓ already, Contain-path needs a credential-access/IOC alert — may need to generate one), **Task 12** evidence
-   (`infra/honeypot/falcon-0d2-validation.md`), **Task 13** export sanitized poller+contain JSON + `RUNBOOK`/`README`/this HANDOFF + **deallocate VMs**. Phase 0 complete.
+**Live state (NOT in git):** VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` **RUNNING** — ⚠️ **deallocate when done:**
+`az vm deallocate -g rg-soc-v2-azure-central-us -n vm-soc-v2-n8n` (and `…-splunk`). grounding-service runs the **HARDENED** image.
+Poller state = watermark `2026-06-29T15:11:34.51Z`, `seen=[<EICAR composite_id>]` (advanced past EICAR; idempotent). n8n
+`falcon-alert-poller` imported + cred-bound but **INACTIVE**.
 
-**Open (non-blocking):** real console deep-link URL for `CONSOLE_LINK_TEMPLATE`; confirm `source_ips` populated on a real credential-access alert.
-**Format note (memory `feedback_handson_instruction_format`):** give the USER hands-on steps with a "Where:" machine header + numbered commands.
+**▶ RESUME HERE (0D-2 remaining = optional / Phase-0-closing):**
+1. **(optional) Build human-fired `falcon-contain`** (runbook Section D, AID-pinned via the already-deployed `/falcon/contain-guard`).
+   Needed only for the Contain demo.
+2. **Contain-path e2e (Task 11 remainder):** needs a **credential-access / IOC-bearing** alert at high severity — none exists yet
+   (Falcon's honeypot detections are behavioral Execution). When one appears: confirm `source_ips` populated; triage passes the gate
+   → "Contain recommended" → fire `falcon-contain` → `normal→contained→normal`.
+3. **Activate** the poller (turn on the 15-min Schedule Trigger) to run unattended.
+4. **Task 13:** `falcon-alert-poller.json` committed; commit `falcon-contain.json` if built; **deallocate VMs.** Phase 0 complete.
+
+**Deferred low-severity review findings (non-blocking, documented):** #6 (the `seen`-set — not the watermark — is the boundary
+alert's idempotency key), #7 (C.3 root-cause wording: axios actually sends `%2B`; the combined-filter rejection wasn't wire-root-caused),
+#10 (empty-watermark → bounded `now-24h` default vs a 400-loop if the seed is ever skipped — optional code), #13/#14/#15 (validation/
+invariant doc notes). **Open:** real per-detection console deep-link URL; confirm `source_ips` on a real credential-access alert.
+**Deploy note:** VM code-sync = base64 over `az vm run-command` (Linux VM, non-git `/root/soc-src`) — **per-action USER approval** (hands-on boundary).
+**Format note (memory `feedback_handson_instruction_format`):** USER hands-on steps with a "Where:" machine header + numbered commands.
 
 > ### 🟢 0D-1b Phase 2 (Wire) ✅ COMPLETE — n8n pipeline + Splunk auto-trigger BUILT + e2e VALIDATED (2026-06-28 wire; **2026-06-29 Task 7 live-trigger**)
 > Spec `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`; plan
