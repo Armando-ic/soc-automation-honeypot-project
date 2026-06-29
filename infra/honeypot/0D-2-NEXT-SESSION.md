@@ -3,6 +3,13 @@
 **Read `infra/honeypot/HANDOFF.md` first** — the "🟢 0D-2" block is the canonical, full state. This doc is a
 short pointer + the **open decisions** the user wants to work through next session (with analysis already done).
 
+> **UPDATE 2026-06-29 (cont. session):** Q1 + #10 + Q2 **RESOLVED** — poller **ACTIVE**, #10 bounded-watermark
+> **shipped+deployed** (live `/falcon/state` unchanged), synthetic Contain-recommended demo **path-validated**
+> (run 282 / Iris #250; evidence `falcon-0d2-validation.md` §6). Commits `de814c8`, `1502679`, `08bf78c` on
+> `ai-upgrade` (unpushed) + this update. **Remaining:** deallocate VMs (+ optional clean `falcon-contain` run;
+> organic real-attacker capture). Q3 watchdog still **deferred**. The Q1–Q3 analysis below is retained for the
+> organic-capture follow-on.
+
 ## Start here
 - Branch **`ai-upgrade`** in `SOC_Automation_Project`. **NOT pushed.** This session's commits: **`ea285ef..eb18dc3`** (6).
 - Key docs (this repo, `infra/honeypot/`): `falcon-poller-build.md` (runbook), `falcon-alerts-field-map.md` (us-2 schema),
@@ -81,8 +88,8 @@ short pointer + the **open decisions** the user wants to work through next sessi
 ---
 
 ## Remaining work / Phase-0-close checklist
-- [ ] Decide + act on Q1–Q4 above.
-- [ ] (optional, cosmetic) Clean GREEN `falcon-contain` run — live `wait_lift` already needs to be 120 (committed JSON has it).
-- [ ] alert→Contain demo (gated on an IOC alert — Q2).
+- [x] **Q1 activate poller — DONE** (ACTIVE) · [x] **#10 bounded-watermark — DONE** (shipped+deployed) · [x] **Q2 synthetic Contain-recommended demo — DONE** (run 282 / Iris #250, §6). **Q3 watchdog still deferred.**
+- [ ] (optional, cosmetic) Clean GREEN `falcon-contain` run — `wait_lift`=120 (committed JSON has it).
+- [ ] **Organic** alert→Contain demo — still open; the now-active poller is the capture net (Q2 option a).
 - [ ] **Deallocate the SOC VMs** when done (cost). State + judge survive on volumes; everything auto-resumes on next start.
 - [ ] Push `ai-upgrade` to the `honeypot` remote if/when you want it off-box (currently local-only).
