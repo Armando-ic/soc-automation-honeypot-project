@@ -1,0 +1,8 @@
+{
+  "source": "falcon",
+  "search_name": "Falcon — [SYNTHETIC PATH-VALIDATION] Brute Force (High)",
+  "console_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
+  "results_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
+  "alert_text": "High Credential Access/Brute Force (T1110) on vm-honeypot-win — successful interactive RDP logon after sustained failed-auth brute force from external source IP <REAL_BAD_IP> (user Administrator); suspected hands-on-keyboard compromise. [SYNTHETIC PATH-VALIDATION]",
+  "result": { "src_ip": "<REAL_BAD_IP>", "user": "Administrator", "ComputerName": "vm-honeypot-win", "count": 1 }
+}
