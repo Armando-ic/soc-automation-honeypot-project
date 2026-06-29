@@ -80,6 +80,15 @@ procedure in `RUNBOOK.md`.
   Client ID/Secret live ONLY in `Personal/honeypot-vm-creds.txt` (gitignored — never committed/echoed).
 - Sensor: **7.38.21003.0** installed 2026-06-29 via hands-on RDP. Windows hostname = **`vm-honeypot-win`**
   (external IP `128.203.185.25` confirmed in Host management). No reboot. Egress = existing `allow-web` (443).
-  ⚠️ A second host (the user's personal Windows 11 workstation `PERSONAL-WIN11`) is also enrolled in this trial
-  tenant — host group `hg-honeypot` + the detect-only policy + any Contain action MUST stay scoped to the
-  honeypot ONLY (the Contain script is hostname-scoped to `vm-honeypot-win`, which is safe).
+  ✅ Tenant is honeypot-only: a personal Windows 11 workstation (`PERSONAL-WIN11`) briefly auto-enrolled and was
+  **uninstalled 2026-06-29** (maintenance token), so a tenant-wide alert poll (0D-2) can't sweep it in. Host
+  group `hg-honeypot` (Dynamic, hostname=`vm-honeypot-win`) + the Contain script are hostname-scoped anyway.
+- Detect-only policy `honeypot-detect-only` (→ `hg-honeypot`) — **VALIDATED 2026-06-29**: a real EDR detection
+  returned `pattern_disposition: 0` / all `pattern_disposition_details` false (detected, not blocked). See
+  `falcon-validation.md` + `falcon-detect-only-policy.md`.
+- Contain → Lift **proven 2026-06-29** (`normal→contained→normal`) via `scripts/falcon-contain-roundtrip.ps1`
+  (hostname-scoped, run from a LOCAL machine) — the human-gated response Plan 0D-2 will use.
+- ⚠️ Secret hygiene: the `honeypot-soar` secret was **rotated 2026-06-29** after an accidental inline paste;
+  run API/Contain commands from a LOCAL trusted machine and load creds from the gitignored file (never inline).
+- **0B done-when MET** (detect-only sensor + OAuth API + Contain→Lift). Docs: `falcon-setup-walkthrough.md`
+  (steps), `crowdstrike-api-notes.md` (API), `falcon-validation.md` (evidence).

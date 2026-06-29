@@ -81,3 +81,30 @@ Symptom: `index=honeypot` has `WinEventLog:Security`/`:System` but no
 Honeypot OS-level changes can be run without RDP via **Azure Run Command**
 (`az vm run-command invoke -g rg-honeypot -n vm-honeypot-win --command-id RunPowerShellScript --scripts @<file>`),
 which executes PowerShell as SYSTEM through the guest agent.
+
+## Falcon (Plan 0B) — lifecycle, off-board, trial-end
+Posture = **detect-only** (policy `honeypot-detect-only`, host group `hg-honeypot`; validated 2026-06-29 —
+`pattern_disposition_details` all-false). Sensor **7.38.21003.0**, tenant **us-2**. Full setup =
+`falcon-setup-walkthrough.md`; evidence = `falcon-validation.md`; API ref = `crowdstrike-api-notes.md`.
+
+- **Detection source for SOAR (0D-2):** the **Alerts API** (`/alerts/queries/alerts/v2` +
+  `/alerts/entities/alerts/v2`). The legacy `/detects` API is dead (404 since 2025-09-30) — do not use it.
+- **Contain / Lift:** `scripts/falcon-contain-roundtrip.ps1 -Hostname vm-honeypot-win` (hostname-scoped).
+  Run it from a **LOCAL trusted machine, never the honeypot** — the `honeypot-soar` secret grants tenant-wide
+  `Contain`. While contained, the honeypot's egress (incl. Splunk + RDP) is cut except the Falcon channel; the
+  UF queues and backfills on lift.
+- **Secret hygiene:** Client ID/Secret live ONLY in gitignored `Personal/honeypot-vm-creds.txt`. Load them into
+  `$env:CS_ID/CS_SECRET/CS_BASE` **from that file** — never type/paste the value inline (it lands in PSReadline
+  history + transcripts). If exposed → console → **API clients and keys → `honeypot-soar` → Reset secret**,
+  update the creds file, clear the session/history. (Done once on 2026-06-29.)
+- **On rebuild (snapshot restore):** `hg-honeypot` is **Dynamic** (hostname=`vm-honeypot-win`), so the restored
+  VM auto-re-includes and re-applies the detect-only policy. If the sensor doesn't re-register, reinstall with
+  the CID (`WindowsSensor.<ver>.exe /install /quiet /norestart CID=<CID>`); confirm in Host management.
+- **Off-board a host:** uninstall the sensor on the box —
+  `WindowsSensor.exe /uninstall /quiet [MAINTENANCE_TOKEN=<token>]` (token from **Sensor update policies** if
+  uninstall protection is on) — then remove/hide it in Host management.
+- **Trial keep/drop checkpoint ~2026-07-12** (trial day ~14; **trial expires 2026-07-13**):
+  - **DROP (default, $0):** uninstall the sensor + delete/revoke the `honeypot-soar` API client. Evidence is
+    already captured in `falcon-validation.md`, so nothing is lost.
+  - **KEEP NGAV:** Falcon Go (~$60/device/yr) — **no EDR** (no Alerts API detections feeding 0D-2).
+  - **KEEP EDR:** Falcon Enterprise (~$185/device/yr) — required for sustained Alerts API + the 0D-2 trigger.
