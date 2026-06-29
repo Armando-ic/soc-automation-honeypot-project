@@ -78,3 +78,8 @@ procedure in `RUNBOOK.md`.
 - API client: `honeypot-soar` · cloud = **us-2** · base URL `https://api.us-2.crowdstrike.com` ·
   scopes **Alerts:R/W, Hosts:R/W, Event streams:R** (created 2026-06-29, Plan 0B Task 2).
   Client ID/Secret live ONLY in `Personal/honeypot-vm-creds.txt` (gitignored — never committed/echoed).
+- Sensor: **7.38.21003.0** installed 2026-06-29 via hands-on RDP. Windows hostname = **`vm-honeypot-win`**
+  (external IP `128.203.185.25` confirmed in Host management). No reboot. Egress = existing `allow-web` (443).
+  ⚠️ A second host (the user's personal Windows 11 workstation `PERSONAL-WIN11`) is also enrolled in this trial
+  tenant — host group `hg-honeypot` + the detect-only policy + any Contain action MUST stay scoped to the
+  honeypot ONLY (the Contain script is hostname-scoped to `vm-honeypot-win`, which is safe).
