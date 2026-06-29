@@ -102,8 +102,8 @@ def create_app(
     def falcon_map(req: FalconMapRequest) -> dict:
         items = [
             {"body": fal.map_alert(a),
-             "composite_id": a.get("composite_id", ""),
-             "created": a.get(fal.TS_FIELD, "")}
+             "composite_id": fal.composite_id_of(a),
+             "created": fal.alert_created(a)}
             for a in req.alerts
         ]
         return {"items": items}

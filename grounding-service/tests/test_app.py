@@ -92,13 +92,13 @@ def test_falcon_plan_dedups_and_caps(seeded_retriever, tmp_path):
 def test_falcon_map_route(seeded_retriever, tmp_path):
     c = TestClient(create_app(seeded_retriever, _falcon_settings(tmp_path)))
     r = c.post("/falcon/map", json={"alerts": [
-        {"composite_id": "x:y", "created": "2026-06-29T01:00:00Z",
+        {"origin_cid": "cid", "id": "ind:aid:1-2-3", "created_timestamp": "2026-06-29T01:00:00Z",
          "severity_name": "High", "tactic": "Credential Access", "technique": "Brute Force",
-         "technique_id": "T1110", "external_ip": "203.0.113.10", "user_name": "Administrator"}]})
+         "technique_id": "T1110", "source_ips": ["203.0.113.10"], "user_name": "Administrator"}]})
     item = r.json()["items"][0]
-    assert item["composite_id"] == "x:y"
-    assert item["created"] == "2026-06-29T01:00:00Z"
-    assert item["body"]["result"]["src_ip"] == "203.0.113.10"
+    assert item["composite_id"] == "cid:ind:aid:1-2-3"          # reconstructed origin_cid:id
+    assert item["created"] == "2026-06-29T01:00:00Z"            # created_timestamp
+    assert item["body"]["result"]["src_ip"] == "203.0.113.10"  # from source_ips[]
     assert item["body"]["source"] == "falcon"
 
 

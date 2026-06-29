@@ -17,11 +17,15 @@ from pathlib import Path
 # (Deliberately NOT ipaddress.is_private, which over-rejects documentation ranges on Python 3.12+.)
 _PRIVATE_RE = re.compile(r"^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.|169\.254\.)")
 
-# --- §10 pre-build-check-pinned field names (Task 0; update to match the live us-2 facts) ---
-TS_FIELD = "created"                                    # hydrated-alert ISO timestamp key (watermark read field)
-SRC_IP_FIELDS = ("external_ip", "local_ip", "src_ip")  # tried in order; first present + valid public IP wins
+# --- §10 field names CONFIRMED on a live us-2 alert (2026-06-29; see falcon-alerts-field-map.md) ---
+# The real Alerts v2 object has `timestamp` + `updated_timestamp` (no `created`); `created_timestamp`
+# is the FQL sort/filter key (poller side) and is read first when present. The object has no top-level
+# `composite_id` (= origin_cid + ":" + id) and no top-level filename/cmdline (use `name` + hashes).
+TS_READ_FIELDS = ("created_timestamp", "timestamp")    # watermark read: first present wins (FQL key = created_timestamp)
+IP_FIELDS = ("source_ips", "external_ip", "local_ip", "src_ip")  # source_ips is an array; first public IP wins
 HOST_DEFAULT = "vm-honeypot-win"
 CONSOLE_LINK_TEMPLATE = "https://falcon.us-2.crowdstrike.com/activity-v2/detections/{composite_id}"
+_ZERO_HASH = re.compile(r"^0+$")                       # Falcon emits all-zero sha1/sha256 placeholders
 
 
 def load_state(path) -> dict:
@@ -78,41 +82,80 @@ def _is_public_ip(value: str) -> bool:
     return _PRIVATE_RE.match(value) is None      # routable external IP (RFC1918/loopback/link-local excluded)
 
 
-def _first_ip(alert: dict) -> str:
-    for key in SRC_IP_FIELDS:
+def _iter_ip_candidates(alert: dict):
+    for key in IP_FIELDS:
         v = alert.get(key)
-        if not v:
+        if v is None:
             continue
-        s = str(v).strip()
-        if _is_public_ip(s):
+        if isinstance(v, (list, tuple)):
+            for elem in v:
+                yield str(elem).strip()
+        else:
+            yield str(v).strip()
+
+
+def _first_ip(alert: dict) -> str:
+    for s in _iter_ip_candidates(alert):
+        if s and _is_public_ip(s):
             return s
     return ""
 
 
+def alert_created(alert: dict) -> str:
+    """The watermark timestamp: first present of TS_READ_FIELDS (created_timestamp, then timestamp)."""
+    for key in TS_READ_FIELDS:
+        v = alert.get(key)
+        if v:
+            return str(v)
+    return ""
+
+
+def composite_id_of(alert: dict) -> str:
+    """The composite_id is not a returned field; reconstruct it as origin_cid + ':' + id."""
+    cid = alert.get("composite_id")
+    if cid:
+        return str(cid)
+    oc, aid_id = alert.get("origin_cid"), alert.get("id")
+    return f"{oc}:{aid_id}" if oc and aid_id else ""
+
+
+def _file_hash(alert: dict) -> str:
+    """A real (non-placeholder) file hash for the alert_text, sha256 preferred, else md5."""
+    for key in ("sha256", "md5"):
+        v = str(alert.get(key, "") or "")
+        if v and not _ZERO_HASH.match(v):
+            return v
+    return ""
+
+
 def map_alert(alert: dict) -> dict:
-    """Falcon hydrated alert -> the EXISTING Splunk-shaped webhook body + additive keys (decision A')."""
+    """Falcon hydrated alert -> the EXISTING Splunk-shaped webhook body + additive keys (decision A').
+
+    Field names confirmed on a live us-2 alert (falcon-alerts-field-map.md): the object exposes
+    `name`/`tactic`/`technique`/`technique_id`/`severity_name`/`user_name`/`source_ips`/`sha256`/`md5`
+    (no top-level filename/cmdline/composite_id).
+    """
     sev_name = str(alert.get("severity_name", "") or "")
     tactic = str(alert.get("tactic", "") or "")
     technique = str(alert.get("technique", "") or "")
     technique_id = str(alert.get("technique_id", "") or "")
-    filename = str(alert.get("filename", "") or "")
-    cmdline = str(alert.get("cmdline", "") or "").strip()
-    if len(cmdline) > 200:
-        cmdline = cmdline[:200] + "…"
+    name = str(alert.get("name", "") or "")
     user = str(alert.get("user_name", "") or "")
     src_ip = _first_ip(alert)
-    composite_id = str(alert.get("composite_id", "") or "")
+    file_hash = _file_hash(alert)
+    composite_id = composite_id_of(alert)
 
     tac_tech = "/".join(p for p in (tactic, technique) if p)
     head = " ".join(p for p in (sev_name, tac_tech, f"({technique_id})" if technique_id else "") if p)
-    tail = " — ".join(p for p in (filename, cmdline) if p)
     alert_text = f"{head} on {HOST_DEFAULT}".strip()
-    if tail:
-        alert_text += f" — {tail}"
+    if name:
+        alert_text += f" — {name}"
+    if file_hash:
+        alert_text += f" [hash {file_hash}]"
     if user:
         alert_text += f" (user {user})"
 
-    label = technique or "detection"
+    label = technique or name or "detection"
     search_name = f"Falcon — {label} ({sev_name})" if sev_name else f"Falcon — {label}"
     console_link = CONSOLE_LINK_TEMPLATE.format(composite_id=composite_id) if composite_id else ""
 
