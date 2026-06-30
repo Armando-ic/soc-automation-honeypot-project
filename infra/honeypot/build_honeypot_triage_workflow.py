@@ -311,9 +311,34 @@ NEEDS_DISCORD = ("={{ JSON.stringify({ embeds: [{ "
                  "color: 15158332 }] }) }}")
 
 
+# Authoritative canvas layout, folded back from the hand-tuned n8n export (2026-06-30).
+# node() looks these up by name so the generated JSON reproduces the polished
+# presentation layout exactly. The per-call `pos` arg below is now only a fallback.
+POS = {
+    "Webhook": [16, 528],
+    "Parse Alert": [240, 528],
+    "enrich_abuseipdb": [480, 528],
+    "enrich_greynoise": [720, 528],
+    "Build Normalize Body": [960, 528],
+    "normalize": [1200, 528],
+    "retrieve": [1440, 528],
+    "Build Opus Input": [1680, 528],
+    "submit_triage_result": [1568, 752],
+    "Opus triage": [1968, 528],
+    "Extract Result": [2256, 528],
+    "verify": [2528, 528],
+    "Gate": [2704, 528],
+    "Add new Alert": [2944, 400],
+    "Discord": [2944, 560],
+    "Needs-Human Iris": [3184, 704],
+    "Needs-Human Discord": [3184, 848],
+    "Has IOC": [480, 720],
+}
+
+
 def node(name, ntype, tv, params, pos, creds=None, extra=None):
     n = {"parameters": params, "id": name.lower().replace(" ", "-"), "name": name,
-         "type": ntype, "typeVersion": tv, "position": pos}
+         "type": ntype, "typeVersion": tv, "position": POS.get(name, pos)}
     if creds:
         n["credentials"] = creds
     if extra:
@@ -429,42 +454,54 @@ def sticky(name, content, pos, w, h, color=7):
 
 
 nodes += [
-    # --- top documentation strip ---
+    # --- top documentation strip (layout from the hand-tuned export, 2026-06-30) ---
     sticky("Doc — How It Works",
-           "## 🛡️ honeypot-triage\n**What it does:** auto-triages alerts from an internet-exposed honeypot — "
-           "one alert in → enriched, MITRE-grounded, triaged by Claude Opus, credibility-gated → a DFIR-Iris "
-           "case + Discord ping.\n\n**Two feeders, one pipeline:** Splunk saved-searches *and* the Falcon poller "
-           "both POST to this webhook.\n\n**Why:** turn noisy honeypot detections into analyst-ready, *trustworthy* "
-           "triage without a human reading every one.", [0, -520], 460, 220, 4),
-    sticky("Doc — Setup",
-           "## ⚙️ Setup / prerequisites\nBind on import:\n- **Anthropic** (Claude Opus)\n- **AbuseIPDB** + "
-           "**GreyNoise** (Header Auth)\n- **DFIR-Iris**\n- **Discord webhook**\n\nNeeds **grounding-service** at "
-           "`http://grounding-service:8000` (soar-net) for `/normalize`, `/retrieve`, `/verify`.", [500, -520], 460, 220, 5),
+           "## 🛡️ honeypot-triage\n**What it does:** It auto-triages alerts from an internet-exposed honeypot. "
+           "When one alert comes in it gets enriched, grounded in MITRE, and triaged by Claude Opus 4.8, then "
+           "credibility-gated by a verifier that double-checks Opus actually stuck to the evidence (it also "
+           "sanity-checks whether the severity is supported by the evidence). If every MITRE technique it cites "
+           "and every IOC verdict traces back to what the enrichment and the Qdrant retrieval returned, the triage "
+           "is trusted and goes straight through as an auto-approved alert. Otherwise the whole thing gets routed "
+           "so a human has to manually verify the MITRE techniques and IOCs. Either way an Iris alert is created "
+           "and a Discord notification is sent; a clean alert if it passed or a flagged alert for human review if "
+           "it didn't.\n\n**Two feeders, one pipeline:** Splunk saved-searches *and* the Falcon poller both POST "
+           "to this webhook.\n\n**Why:** because this turns noisy honeypot detections into analyst-ready, "
+           "*trustworthy* triage without a human reading every one.", [-64, 0], 1004, 232, 4),
     sticky("Doc — Notes",
-           "## 📌 Notes & use cases\n- Entry point: `POST /webhook/honeypot-triage`.\n- IOC-gated: skips "
-           "enrichment for private/empty IPs.\n- The verifier **never auto-approves** — failed checks go to "
-           "**Needs-Human**, never silently trusted.\n- Use case: auto-triage of honeypot brute-force / EDR "
-           "detections.", [1000, -520], 460, 220, 6),
+           "## 📌 Notes & use cases\n- The entry point is `POST /webhook/honeypot-triage`.\n- It's IOC-gated, so "
+           "it skips enrichment when the alert has no source IP.\n- The verifier never auto-approves; "
+           "anything that fails its checks goes to **Needs-Human**, never silently trusted.\n- The main use case "
+           "is auto-triaging honeypot brute-force and EDR detections.", [976, -416], 460, 188, 6),
     sticky("Doc — Customization",
-           "## 🎛️ Customization\n- Add enrichment APIs (URLscan, OTX, VT) as HTTP-Tool nodes.\n- Tune the "
-           "gate/severity logic in `triage-verifier/`.\n- Re-point Iris/Discord to your instances.\n- Prompt + "
-           "tool schema are versioned in `build_honeypot_triage_workflow.py`.", [1500, -520], 460, 220, 3),
-    # --- section group-boxes (3, boundaries chosen at real node gaps) ---
+           "## 🎛️ Customization\n- Add more enrichment APIs (URLscan, OTX, VT) as HTTP-Tool nodes.\n- Tune the "
+           "gate and severity logic in `triage-verifier/`.\n- Re-point Iris and Discord to your own instances.\n"
+           "- The prompt and tool schema are versioned in `build_honeypot_triage_workflow.py`.", [976, -208], 460, 188, 3),
+    sticky("Doc — Setup",
+           "## ⚙️ Setup / prerequisites\nBind these on import:\n- **Anthropic** (Claude Opus)\n- **AbuseIPDB** and "
+           "**GreyNoise** (Header Auth)\n- **DFIR-Iris**\n- **Discord webhook**\n\nIt also needs **grounding-service** "
+           "running at `http://grounding-service:8000` (on soar-net) for `/normalize`, `/retrieve`, and `/verify`.", [976, 0], 460, 220, 5),
+    # --- section group-boxes (layout from the hand-tuned export) ---
     sticky("Section — Ingest, Enrich & Ground",
-           "## ① Ingest, Enrich & Ground\n**What:** take any alert (Splunk brute-force *or* Falcon), normalize it "
-           "to one shape, enrich the attacker IP (AbuseIPDB + GreyNoise), pull candidate MITRE techniques from "
-           "Qdrant, and assemble the grounded Opus prompt.\n\n**Why:** one pipeline serves both feeders; hand Opus "
-           "*facts + a fixed menu* so it can't invent enrichment or cite an off-menu technique.", [-60, -260], 1960, 560, 7),
+           "## ① Ingest, Enrich & Ground\n**What it does:** This stage takes any alert, whether it came from a "
+           "Splunk brute-force search or from CrowdStrike Falcon, and normalizes it into one shape. Then it enriches the "
+           "attacker IP with AbuseIPDB and GreyNoise, pulls candidate MITRE techniques from Qdrant, and assembles "
+           "the grounded prompt that Opus reasons over.\n\n**Why:** One pipeline serves both feeders, and the whole "
+           "idea is to hand Opus the facts plus a fixed menu of techniques so it can't invent enrichment or cite a "
+           "technique that was never on the list.", [-64, 272], 1944, 640, "#000000"),
     sticky("Section — Triage (Opus)",
-           "## ② Triage (Opus)\n**What:** Claude Opus writes one structured triage via `submit_triage_result`; "
-           "Extract Result builds the Iris/Discord payloads and decides *Contain recommended*.\n\n**Why:** the "
-           "analyst brain — leashed to cite only the candidate techniques and echo only the verdicts it was given.",
-           [1900, -260], 480, 560, 7),
+           "## ② Triage (Opus)\n**What it does:** Claude Opus writes one structured triage by calling "
+           "`submit_triage_result`, and then Extract Result turns that into the Iris and Discord payloads and "
+           "decides whether to flag *Contain recommended*.\n\n**Why:** This is the analyst brain of the pipeline, "
+           "but it's kept on a leash. It's instructed to cite only the candidate techniques it was handed and to "
+           "echo only the verdicts it was given, and the verifier in the next step is what actually enforces that, "
+           "so it can't quietly wander off the evidence.", [1936, 272], 480, 560, "#000000"),
     sticky("Section — Verify & Route",
-           "## ③ Verify & Route\n**What:** the credibility gate (+ advisory AI judge) checks the triage is "
-           "grounded. Pass → open a DFIR-Iris case + Discord embed (with *Contain recommended* if high/critical). "
-           "Fail → **Needs-Human**.\n\n**Why:** the project's primary hallucination control — nothing untrustworthy "
-           "is silently trusted.", [2390, -260], 1010, 620, 7),
+           "## ③ Verify & Route\n**What it does:** This is the credibility gate, with an advisory AI judge "
+           "alongside it, and it checks that the triage is actually grounded. When it passes, the workflow creates a "
+           "DFIR-Iris alert and posts a Discord embed with a link to the detection, and for high or critical Falcon "
+           "detections it also flags *Contain recommended*. If it fails, the alert is routed to **Needs-Human** "
+           "instead.\n\n**Why:** This is the project's primary hallucination control, so nothing untrustworthy is "
+           "ever silently trusted.", [2464, 272], 1010, 748, "#030303"),
 ]
 
 connections = {

@@ -12,8 +12,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
-        0
+        16,
+        528
       ],
       "webhookId": "honeypot-triage"
     },
@@ -27,7 +27,7 @@
       "typeVersion": 2,
       "position": [
         240,
-        0
+        528
       ]
     },
     {
@@ -66,7 +66,7 @@
       "typeVersion": 4.4,
       "position": [
         480,
-        0
+        528
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -105,7 +105,7 @@
       "typeVersion": 4.4,
       "position": [
         720,
-        0
+        528
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -125,7 +125,7 @@
       "typeVersion": 2,
       "position": [
         960,
-        0
+        528
       ]
     },
     {
@@ -143,7 +143,7 @@
       "typeVersion": 4.4,
       "position": [
         1200,
-        0
+        528
       ]
     },
     {
@@ -161,7 +161,7 @@
       "typeVersion": 4.4,
       "position": [
         1440,
-        0
+        528
       ]
     },
     {
@@ -174,7 +174,7 @@
       "typeVersion": 2,
       "position": [
         1680,
-        0
+        528
       ]
     },
     {
@@ -190,8 +190,8 @@
       "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1.3,
       "position": [
-        1560,
-        220
+        1568,
+        752
       ]
     },
     {
@@ -218,8 +218,8 @@
       "type": "@n8n/n8n-nodes-langchain.anthropic",
       "typeVersion": 1,
       "position": [
-        1920,
-        0
+        1968,
+        528
       ],
       "credentials": {
         "anthropicApi": {
@@ -239,8 +239,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2160,
-        0
+        2256,
+        528
       ]
     },
     {
@@ -257,8 +257,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        2400,
-        0
+        2528,
+        528
       ]
     },
     {
@@ -291,8 +291,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2640,
-        0
+        2704,
+        528
       ]
     },
     {
@@ -313,8 +313,8 @@
       "type": "n8n-nodes-dfir-iris.dfirIris",
       "typeVersion": 2,
       "position": [
-        2880,
-        -120
+        2944,
+        400
       ],
       "credentials": {
         "dfirIrisApi": {
@@ -337,8 +337,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        2880,
-        40
+        2944,
+        560
       ]
     },
     {
@@ -359,8 +359,8 @@
       "type": "n8n-nodes-dfir-iris.dfirIris",
       "typeVersion": 2,
       "position": [
-        3120,
-        180
+        3184,
+        704
       ],
       "credentials": {
         "dfirIrisApi": {
@@ -383,8 +383,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        3120,
-        320
+        3184,
+        848
       ]
     },
     {
@@ -417,15 +417,15 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        470,
-        200
+        480,
+        720
       ]
     },
     {
       "parameters": {
-        "content": "## 🛡️ honeypot-triage\n**What it does:** auto-triages alerts from an internet-exposed honeypot — one alert in → enriched, MITRE-grounded, triaged by Claude Opus, credibility-gated → a DFIR-Iris case + Discord ping.\n\n**Two feeders, one pipeline:** Splunk saved-searches *and* the Falcon poller both POST to this webhook.\n\n**Why:** turn noisy honeypot detections into analyst-ready, *trustworthy* triage without a human reading every one.",
-        "height": 220,
-        "width": 460,
+        "content": "## 🛡️ honeypot-triage\n**What it does:** It auto-triages alerts from an internet-exposed honeypot. When one alert comes in it gets enriched, grounded in MITRE, and triaged by Claude Opus 4.8, then credibility-gated by a verifier that double-checks Opus actually stuck to the evidence (it also sanity-checks whether the severity is supported by the evidence). If every MITRE technique it cites and every IOC verdict traces back to what the enrichment and the Qdrant retrieval returned, the triage is trusted and goes straight through as an auto-approved alert. Otherwise the whole thing gets routed so a human has to manually verify the MITRE techniques and IOCs. Either way an Iris alert is created and a Discord notification is sent; a clean alert if it passed or a flagged alert for human review if it didn't.\n\n**Two feeders, one pipeline:** Splunk saved-searches *and* the Falcon poller both POST to this webhook.\n\n**Why:** because this turns noisy honeypot detections into analyst-ready, *trustworthy* triage without a human reading every one.",
+        "height": 232,
+        "width": 1004,
         "color": 4
       },
       "id": "sticky-doc---how-it-works",
@@ -433,13 +433,45 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        0,
-        -520
+        -64,
+        0
       ]
     },
     {
       "parameters": {
-        "content": "## ⚙️ Setup / prerequisites\nBind on import:\n- **Anthropic** (Claude Opus)\n- **AbuseIPDB** + **GreyNoise** (Header Auth)\n- **DFIR-Iris**\n- **Discord webhook**\n\nNeeds **grounding-service** at `http://grounding-service:8000` (soar-net) for `/normalize`, `/retrieve`, `/verify`.",
+        "content": "## 📌 Notes & use cases\n- The entry point is `POST /webhook/honeypot-triage`.\n- It's IOC-gated, so it skips enrichment when the alert has no source IP.\n- The verifier never auto-approves; anything that fails its checks goes to **Needs-Human**, never silently trusted.\n- The main use case is auto-triaging honeypot brute-force and EDR detections.",
+        "height": 188,
+        "width": 460,
+        "color": 6
+      },
+      "id": "sticky-doc---notes",
+      "name": "Doc — Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        976,
+        -416
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🎛️ Customization\n- Add more enrichment APIs (URLscan, OTX, VT) as HTTP-Tool nodes.\n- Tune the gate and severity logic in `triage-verifier/`.\n- Re-point Iris and Discord to your own instances.\n- The prompt and tool schema are versioned in `build_honeypot_triage_workflow.py`.",
+        "height": 188,
+        "width": 460,
+        "color": 3
+      },
+      "id": "sticky-doc---customization",
+      "name": "Doc — Customization",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        976,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ⚙️ Setup / prerequisites\nBind these on import:\n- **Anthropic** (Claude Opus)\n- **AbuseIPDB** and **GreyNoise** (Header Auth)\n- **DFIR-Iris**\n- **Discord webhook**\n\nIt also needs **grounding-service** running at `http://grounding-service:8000` (on soar-net) for `/normalize`, `/retrieve`, and `/verify`.",
         "height": 220,
         "width": 460,
         "color": 5
@@ -449,88 +481,56 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        500,
-        -520
+        976,
+        0
       ]
     },
     {
       "parameters": {
-        "content": "## 📌 Notes & use cases\n- Entry point: `POST /webhook/honeypot-triage`.\n- IOC-gated: skips enrichment for private/empty IPs.\n- The verifier **never auto-approves** — failed checks go to **Needs-Human**, never silently trusted.\n- Use case: auto-triage of honeypot brute-force / EDR detections.",
-        "height": 220,
-        "width": 460,
-        "color": 6
-      },
-      "id": "sticky-doc---notes",
-      "name": "Doc — Notes",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1000,
-        -520
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## 🎛️ Customization\n- Add enrichment APIs (URLscan, OTX, VT) as HTTP-Tool nodes.\n- Tune the gate/severity logic in `triage-verifier/`.\n- Re-point Iris/Discord to your instances.\n- Prompt + tool schema are versioned in `build_honeypot_triage_workflow.py`.",
-        "height": 220,
-        "width": 460,
-        "color": 3
-      },
-      "id": "sticky-doc---customization",
-      "name": "Doc — Customization",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1500,
-        -520
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## ① Ingest, Enrich & Ground\n**What:** take any alert (Splunk brute-force *or* Falcon), normalize it to one shape, enrich the attacker IP (AbuseIPDB + GreyNoise), pull candidate MITRE techniques from Qdrant, and assemble the grounded Opus prompt.\n\n**Why:** one pipeline serves both feeders; hand Opus *facts + a fixed menu* so it can't invent enrichment or cite an off-menu technique.",
-        "height": 560,
-        "width": 1960,
-        "color": 7
+        "content": "## ① Ingest, Enrich & Ground\n**What it does:** This stage takes any alert, whether it came from a Splunk brute-force search or from CrowdStrike Falcon, and normalizes it into one shape. Then it enriches the attacker IP with AbuseIPDB and GreyNoise, pulls candidate MITRE techniques from Qdrant, and assembles the grounded prompt that Opus reasons over.\n\n**Why:** One pipeline serves both feeders, and the whole idea is to hand Opus the facts plus a fixed menu of techniques so it can't invent enrichment or cite a technique that was never on the list.",
+        "height": 640,
+        "width": 1944,
+        "color": "#000000"
       },
       "id": "sticky-section---ingest,-enrich-&-ground",
       "name": "Section — Ingest, Enrich & Ground",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -60,
-        -260
+        -64,
+        272
       ]
     },
     {
       "parameters": {
-        "content": "## ② Triage (Opus)\n**What:** Claude Opus writes one structured triage via `submit_triage_result`; Extract Result builds the Iris/Discord payloads and decides *Contain recommended*.\n\n**Why:** the analyst brain — leashed to cite only the candidate techniques and echo only the verdicts it was given.",
+        "content": "## ② Triage (Opus)\n**What it does:** Claude Opus writes one structured triage by calling `submit_triage_result`, and then Extract Result turns that into the Iris and Discord payloads and decides whether to flag *Contain recommended*.\n\n**Why:** This is the analyst brain of the pipeline, but it's kept on a leash. It's instructed to cite only the candidate techniques it was handed and to echo only the verdicts it was given, and the verifier in the next step is what actually enforces that, so it can't quietly wander off the evidence.",
         "height": 560,
         "width": 480,
-        "color": 7
+        "color": "#000000"
       },
       "id": "sticky-section---triage-(opus)",
       "name": "Section — Triage (Opus)",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1900,
-        -260
+        1936,
+        272
       ]
     },
     {
       "parameters": {
-        "content": "## ③ Verify & Route\n**What:** the credibility gate (+ advisory AI judge) checks the triage is grounded. Pass → open a DFIR-Iris case + Discord embed (with *Contain recommended* if high/critical). Fail → **Needs-Human**.\n\n**Why:** the project's primary hallucination control — nothing untrustworthy is silently trusted.",
-        "height": 620,
+        "content": "## ③ Verify & Route\n**What it does:** This is the credibility gate, with an advisory AI judge alongside it, and it checks that the triage is actually grounded. When it passes, the workflow creates a DFIR-Iris alert and posts a Discord embed with a link to the detection, and for high or critical Falcon detections it also flags *Contain recommended*. If it fails, the alert is routed to **Needs-Human** instead.\n\n**Why:** This is the project's primary hallucination control, so nothing untrustworthy is ever silently trusted.",
+        "height": 748,
         "width": 1010,
-        "color": 7
+        "color": "#030303"
       },
       "id": "sticky-section---verify-&-route",
       "name": "Section — Verify & Route",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2390,
-        -260
+        2464,
+        272
       ]
     }
   ],
