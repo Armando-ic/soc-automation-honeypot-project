@@ -75,7 +75,13 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
   "Iris case" → "Iris alert" (the nodes create alerts), the Notes IOC-gate wording (skips only when there's no
   source IP), and card ② (Opus is *instructed* to stay grounded; the verifier *enforces* it). Two overview
   imprecisions left as acceptable summary simplifications (user's call).
-- ⬜ Spot-check the poller and contain workflow sticky layouts (placed blind in `cd2c3ce`, no eyes on the canvas yet).
+- ✅ **Poller + contain workflows** (2026-06-30): user re-laid both canvases and exported; folded their layouts
+  back into the generators (POS maps; sections recolored near-black; the poller `IF has_new` node, accidentally
+  deleted in the export, was re-added at [940,0]). Voice pass on all cards plus a 12-agent doc-accuracy fan-out
+  tightened several imprecisions (poller "identical" → "same pipeline", "exactly once" → bounded "once", restored
+  the per-run cap, "ack for every one" → "until the first failure"; contain "verifies" → "reads back the status",
+  "never strands" → "always attempts a self-lift", the contained-status read reframed as observed-not-gated). No
+  hard bugs found.
 - ⬜ Commit C (generators + regenerated JSON + checklists).
 
 ### Capture live Falcon footage ⛔ trial-gated (before 2026-07-13)

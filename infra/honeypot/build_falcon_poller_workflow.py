@@ -58,9 +58,26 @@ for (const it of items) {
 return [{ json: { results } }];"""
 
 
+# Authoritative canvas layout, folded back from the hand-tuned n8n export (2026-06-30).
+# node() looks these up by name; the per-call `pos` arg is now a fallback only.
+# (IF has_new was missing from the export -- deleted during layout edits -- and is
+#  re-placed here at [940, 0] inside the Poll & Plan box.)
+POS = {
+    "Schedule Trigger": [0, 0],
+    "get_state": [240, 0],
+    "falcon_query": [480, 0],
+    "falcon_plan": [720, 0],
+    "IF has_new": [940, 0],
+    "falcon_hydrate": [1200, 0],
+    "falcon_map": [1440, 0],
+    "Post+Collect": [1664, 0],
+    "falcon_advance": [2048, 0],
+}
+
+
 def node(name, ntype, tv, params, pos, nid=None, creds=None, extra=None):
     n = {"parameters": params, "id": nid or name.lower().replace(" ", "-"), "name": name,
-         "type": ntype, "typeVersion": tv, "position": pos}
+         "type": ntype, "typeVersion": tv, "position": POS.get(name, pos)}
     if creds:
         n["credentials"] = creds
     if extra:
@@ -145,32 +162,37 @@ def sticky(name, content, pos, w, h, color=7):
 
 
 nodes += [
+    # --- documentation strip + section group-boxes (layout from the hand-tuned export, 2026-06-30) ---
     sticky("Doc — How It Works",
-           "## 📡 falcon-alert-poller\n**What it does:** every 15 min, pulls *new* CrowdStrike Falcon alerts and "
-           "feeds them into the shared `honeypot-triage` webhook.\n\n**Why:** Falcon can't push to a webhook, so we "
-           "poll. It's purely a feeder — downstream triage is identical to the Splunk path.", [0, -480], 460, 200, 4),
+           "## 📡 falcon-alert-poller\n**What it does:** Every 15 minutes it pulls any new CrowdStrike Falcon "
+           "alerts and feeds them into the shared `honeypot-triage` webhook.\n\n**Why:** Falcon can't push to a "
+           "webhook, so we poll it instead. This workflow is purely a feeder, and once an alert is forwarded it "
+           "flows through the same downstream triage pipeline as the Splunk path.", [-64, -400], 460, 168, 4),
     sticky("Doc — Setup",
            "## ⚙️ Setup / prerequisites\n- **CrowdStrike OAuth2** credential (`Crowdstrike Falcon Account`), cloud "
            "**us-2**.\n- **grounding-service** at `http://grounding-service:8000` for `/falcon/state|plan|map|advance`.\n"
-           "- Posts to `http://10.0.0.6:5678/webhook/honeypot-triage`.", [500, -480], 460, 200, 5),
+           "- Posts to `http://10.0.0.6:5678/webhook/honeypot-triage`.", [432, -400], 460, 168, 5),
     sticky("Doc — Notes",
-           "## 📌 Notes\n- **Stateful** (`watermark` + `seen`) → triages each alert exactly once; survives "
-           "restarts.\n- FQL filter is `created_timestamp` alone (n8n can't transmit the FQL `+` AND).\n- Empty "
-           "state → watermark defaults to `now-24h` (#10) so a fresh start can't 400-loop.\n- Activate the Schedule "
-           "Trigger to run unattended.", [1000, -480], 460, 200, 6),
+           "## 📌 Notes\n- It's **stateful** (it tracks a `watermark` and a bounded `seen` list), so it triages each "
+           "alert once and survives restarts.\n- The FQL filter is `created_timestamp` on its own, because n8n "
+           "can't transmit the FQL `+` AND.\n- On an empty state the watermark defaults to `now-24h` (fix #10), so a "
+           "fresh start can't get stuck in a 400-loop.\n- Activate the Schedule Trigger to run it unattended.", [192, -624], 460, 200, 6),
     sticky("Section — Poll & Plan",
-           "## ① Poll & Plan\n**What:** on a 15-min timer, read the saved `{watermark, seen}` state, ask Falcon for "
-           "alerts created since the watermark, then drop already-seen IDs and cap oldest-first.\n\n**Why:** only "
-           "ever process genuinely new alerts — `IF has_new` ends the run cleanly when there's nothing.", [-60, -220], 1240, 460, 7),
+           "## ① Poll & Plan\n**What it does:** On a 15-minute timer it reads the `{watermark, seen}` state, asks "
+           "Falcon for any alerts created since the watermark (oldest-first), then drops already-seen IDs and caps "
+           "how many it processes per run.\n\n**Why:** so it only ever processes genuinely new alerts. The `IF has_new` node ends the "
+           "run cleanly when there's nothing to do.", [-64, -208], 1128, 460, "#030303"),
     sticky("Section — Hydrate, Map & Forward",
-           "## ② Hydrate, Map & Forward\n**What:** fetch the full alert objects, reshape each into the common "
-           "Splunk-style body (sorted oldest-first), and POST each to the `honeypot-triage` webhook, collecting "
-           "acks.\n\n**Why:** the same body shape both feeders use → one downstream pipeline. Stops at the first "
-           "failed POST.", [1180, -220], 720, 460, 7),
+           "## ② Hydrate, Map & Forward\n**What it does:** It fetches the full alert objects, reshapes each one into "
+           "the common Splunk-style body (sorted oldest-first), and POSTs each to the `honeypot-triage` webhook, "
+           "collecting an ack for each one until the first failure.\n\n**Why:** both feeders use the same body shape, so everything flows "
+           "into one downstream pipeline. It stops at the first failed POST so a later alert can't slip through "
+           "ahead of an earlier one.", [1120, -208], 720, 460, "#000000"),
     sticky("Section — Advance State",
-           "## ③ Advance State\n**What:** move `watermark` + `seen` forward across the *contiguous* run of "
-           "successful POSTs.\n\n**Why:** a mid-batch failure never strands an earlier alert behind the watermark — "
-           "un-acked ones retry next tick (no skips).", [1900, -220], 420, 460, 7),
+           "## ③ Advance State\n**What it does:** It moves the `watermark` and `seen` list forward across the "
+           "*contiguous* run of successful POSTs, and no further.\n\n**Why:** that way a mid-batch failure never "
+           "strands an earlier alert behind the watermark. Anything that wasn't acked just gets retried on the next "
+           "tick, so nothing is skipped.", [1888, -208], 420, 460, "#030303"),
 ]
 
 connections = {

@@ -53,9 +53,27 @@ const discord_body = { embeds: [{ title, description: desc, color: ok ? 3066993 
 return [{ json: { discord_body, containedStatus, normalStatus } }];"""
 
 
+# Authoritative canvas layout, folded back from the hand-tuned n8n export (2026-06-30).
+# node() looks these up by name; the per-call `pos` arg is now a fallback only.
+POS = {
+    "Manual Trigger": [0, 0],
+    "resolve_host": [224, 0],
+    "contain_guard": [448, 0],
+    "Discord REFUSED": [448, 208],
+    "contain": [768, 0],
+    "wait_contain": [960, 0],
+    "status_contained": [1184, 0],
+    "lift": [1488, 0],
+    "wait_lift": [1680, 0],
+    "status_normal": [1872, 0],
+    "build_confirm": [2080, 0],
+    "Discord confirm": [2304, 0],
+}
+
+
 def node(name, ntype, tv, params, pos, nid=None, creds=None, extra=None):
     n = {"parameters": params, "id": nid or name.lower().replace(" ", "-"), "name": name,
-         "type": ntype, "typeVersion": tv, "position": pos}
+         "type": ntype, "typeVersion": tv, "position": POS.get(name, pos)}
     if creds:
         n["credentials"] = creds
     if extra:
@@ -133,31 +151,37 @@ def sticky(name, content, pos, w, h, color=7):
 
 
 nodes += [
+    # --- documentation strip + section group-boxes (layout from the hand-tuned export, 2026-06-30) ---
     sticky("Doc — How It Works",
-           "## 🔒 falcon-contain\n**What it does:** human-fired. Network-isolates the honeypot via CrowdStrike, "
-           "verifies it, then lifts it back to normal.\n\n**Why:** the SOAR only *recommends* containment; a person "
-           "fires this. It's the AI-driven response playbook's actuator — with a hard safety rail.", [0, -480], 460, 200, 4),
+           "## 🔒 falcon-contain\n**What it does:** This one is human-fired. It network-isolates the honeypot "
+           "through CrowdStrike, reads back the device status, then lifts it back to normal.\n\n**Why:** the "
+           "SOAR pipeline only *recommends* containment, and a person is the one who actually fires this. It's the "
+           "actuator for the AI-driven response playbook, with a hard safety rail built in.", [-64, -416], 460, 168, 4),
     sticky("Doc — Setup",
            "## ⚙️ Setup / prerequisites\n- **CrowdStrike OAuth2** credential (us-2).\n- **grounding-service** at "
            "`:8000` for `/falcon/contain-guard`.\n- **Discord webhook**.\n- `FALCON_PINNED_AID` set in the "
-           "grounding-service `.env` (the safety pin).", [500, -480], 460, 200, 5),
+           "grounding-service `.env` (the safety pin).", [432, -416], 460, 168, 5),
     sticky("Doc — Notes",
-           "## 📌 Notes / safety\n- **AID-pinned:** refuses unless the hostname resolves to exactly ONE device "
-           "whose AID == the pinned honeypot AID.\n- Self-lifts in the same run (never strands the box offline).\n"
-           "- `wait_lift` = 120s (CrowdStrike's lift takes >30s).\n- ⚠️ Don't fire inside the 23:00-ET pre-shutdown "
-           "window.", [1000, -480], 460, 200, 6),
+           "## 📌 Notes / safety\n- It's **AID-pinned**: it refuses to act unless the hostname resolves to exactly "
+           "one device whose AID matches the pinned honeypot AID.\n- It always attempts a self-lift in the same "
+           "run, so it shouldn't leave the box offline (if the lift doesn't confirm, you get a RED alarm with the "
+           "manual-lift command).\n- `wait_lift` is 120s, because CrowdStrike's lift took more than 30s to take "
+           "effect in testing.\n- ⚠️ Don't fire it inside the 23:00-ET pre-shutdown window.", [928, -416], 460, 168, 6),
     sticky("Section — Resolve & Guard",
-           "## ① Resolve & Guard\n**What:** resolve the hostname → Falcon device IDs, then the AID-pin guard. If "
-           "it isn't exactly one device matching the pinned AID → 409 → a Discord **REFUSED** notice and stop.\n\n"
-           "**Why:** the *pin*, not the hostname, bounds the blast radius — it can never isolate the wrong box.", [-60, -220], 700, 560, 7),
+           "## ① Resolve & Guard\n**What it does:** It resolves the hostname to Falcon device IDs and then runs the "
+           "AID-pin guard. If that isn't exactly one device matching the pinned AID, the guard returns a 409, which "
+           "posts a Discord **REFUSED** notice and stops the run.\n\n**Why:** it's the *pin*, not the hostname, that "
+           "bounds the blast radius, so it can never isolate the wrong box.", [-64, -208], 700, 576, "#030303"),
     sticky("Section — Contain & Verify",
-           "## ② Contain & Verify\n**What:** network-isolate the pinned device, wait 45s, then read its status to "
-           "confirm it actually went `contained`.\n\n**Why:** verify, don't assume — confirm the isolation really "
-           "took effect.", [650, -220], 660, 460, 7),
+           "## ② Contain & Verify\n**What it does:** It network-isolates the pinned device, waits 45 seconds, then "
+           "reads the device status to see whether it went `contained`.\n\n**Why:** read it back rather than just "
+           "assume. The observed status is captured and shown in the final Discord summary (the run proceeds to "
+           "lift either way).", [704, -208], 660, 460, "#030303"),
     sticky("Section — Lift & Confirm",
-           "## ③ Lift & Confirm\n**What:** lift containment (with retry), wait 120s, read status, and build the "
-           "Discord embed — GREEN only if it's observed back to `normal`, else a RED alarm with the manual-lift "
-           "command.\n\n**Why:** never a false all-clear; restoring egress is the always-safe direction.", [1310, -220], 1110, 460, 7),
+           "## ③ Lift & Confirm\n**What it does:** It lifts the containment (retrying if needed), waits 120 seconds, "
+           "reads the status again, and builds the Discord embed. The embed is GREEN only if the device is observed "
+           "back to `normal`, otherwise it's a RED alarm that includes the manual-lift command.\n\n**Why:** it should "
+           "never give a false all-clear, and restoring egress is always the safe direction to fail in.", [1424, -208], 1094, 460, "#030303"),
 ]
 
 connections = {
