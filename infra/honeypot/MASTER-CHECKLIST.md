@@ -17,10 +17,12 @@ finish something we check it off here, and when either of us needs to remember w
 ---
 
 ## ▶ Where we are right now (2026-06-30)
-Pre-Phase-1 portfolio prep. Phase 0 is fully shipped and the autonomous loop is live. We're finishing
-sub-project **C** (organizing the n8n workflows for presentation). The honeypot-triage layout and card
-text are done, and the immediate next action is folding that polish back into the generator and
-regenerating the clean public-ready JSON.
+Pre-Phase-1 portfolio prep. Phase 0 is fully shipped and the autonomous loop is live. Sub-projects **A, B,
+and C are all done** now: the three n8n workflows are organized for presentation (doc strips, section
+group-boxes, voice-passed cards) and committed (`84453f2`). The next deliverable is sub-project **D**:
+organize the honeypot repo for public (secret-scrub pass, repo structure cleanup, a public README with the
+ARCHITECTURE diagram embedded). The portfolio video and the live-Falcon footage are both deferred by
+decision (see those sections below).
 
 ---
 
@@ -60,7 +62,7 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
 - ✅ Walkthrough written and `ARCHITECTURE.md` committed (`e6022e8`), with Mermaid diagrams for the
   Layer-1 loop and the Layer-2 internals.
 
-### C. Organize the 3 n8n workflows for presentation 🟡
+### C. Organize the 3 n8n workflows for presentation ✅ DONE
 - ✅ Sticky-note docs + section group-boxes added to all 3 workflow generators and JSON regenerated (`cd2c3ce`).
 - ✅ Visual calibration of the `honeypot-triage` canvas (you hand-tuned positions and colors; every node
   verified sitting cleanly inside its section box).
@@ -82,7 +84,7 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
   the per-run cap, "ack for every one" → "until the first failure"; contain "verifies" → "reads back the status",
   "never strands" → "always attempts a self-lift", the contained-status read reframed as observed-not-gated). No
   hard bugs found.
-- ⬜ Commit C (generators + regenerated JSON + checklists).
+- ✅ Commit C (generators + regenerated JSON + checklists) — landed as `84453f2`.
 
 ### Capture live Falcon footage ⛔ trial-gated (before 2026-07-13)
 This is split from video production on purpose. The raw clips need live Falcon; the edit does not.
