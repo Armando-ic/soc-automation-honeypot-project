@@ -202,6 +202,102 @@
         1920,
         0
       ]
+    },
+    {
+      "parameters": {
+        "content": "## 📡 falcon-alert-poller\n**What it does:** every 15 min, pulls *new* CrowdStrike Falcon alerts and feeds them into the shared `honeypot-triage` webhook.\n\n**Why:** Falcon can't push to a webhook, so we poll. It's purely a feeder — downstream triage is identical to the Splunk path.",
+        "height": 200,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-doc---how-it-works",
+      "name": "Doc — How It Works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ⚙️ Setup / prerequisites\n- **CrowdStrike OAuth2** credential (`Crowdstrike Falcon Account`), cloud **us-2**.\n- **grounding-service** at `http://grounding-service:8000` for `/falcon/state|plan|map|advance`.\n- Posts to `http://10.0.0.6:5678/webhook/honeypot-triage`.",
+        "height": 200,
+        "width": 460,
+        "color": 5
+      },
+      "id": "sticky-doc---setup",
+      "name": "Doc — Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        500,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 📌 Notes\n- **Stateful** (`watermark` + `seen`) → triages each alert exactly once; survives restarts.\n- FQL filter is `created_timestamp` alone (n8n can't transmit the FQL `+` AND).\n- Empty state → watermark defaults to `now-24h` (#10) so a fresh start can't 400-loop.\n- Activate the Schedule Trigger to run unattended.",
+        "height": 200,
+        "width": 460,
+        "color": 6
+      },
+      "id": "sticky-doc---notes",
+      "name": "Doc — Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ① Poll & Plan\n**What:** on a 15-min timer, read the saved `{watermark, seen}` state, ask Falcon for alerts created since the watermark, then drop already-seen IDs and cap oldest-first.\n\n**Why:** only ever process genuinely new alerts — `IF has_new` ends the run cleanly when there's nothing.",
+        "height": 460,
+        "width": 1240,
+        "color": 7
+      },
+      "id": "sticky-section---poll-&-plan",
+      "name": "Section — Poll & Plan",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ② Hydrate, Map & Forward\n**What:** fetch the full alert objects, reshape each into the common Splunk-style body (sorted oldest-first), and POST each to the `honeypot-triage` webhook, collecting acks.\n\n**Why:** the same body shape both feeders use → one downstream pipeline. Stops at the first failed POST.",
+        "height": 460,
+        "width": 720,
+        "color": 7
+      },
+      "id": "sticky-section---hydrate,-map-&-forward",
+      "name": "Section — Hydrate, Map & Forward",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ③ Advance State\n**What:** move `watermark` + `seen` forward across the *contiguous* run of successful POSTs.\n\n**Why:** a mid-batch failure never strands an earlier alert behind the watermark — un-acked ones retry next tick (no skips).",
+        "height": 460,
+        "width": 420,
+        "color": 7
+      },
+      "id": "sticky-section---advance-state",
+      "name": "Section — Advance State",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        -220
+      ]
     }
   ],
   "connections": {

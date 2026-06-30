@@ -125,6 +125,41 @@ nodes = [
     discord("Discord confirm", "={{ JSON.stringify($json.discord_body) }}", [col(), 0], nid="discord-confirm"),
 ]
 
+# ---- presentation sticky notes (cosmetic; zero effect on execution) -----------
+def sticky(name, content, pos, w, h, color=7):
+    return {"parameters": {"content": content, "height": h, "width": w, "color": color},
+            "id": "sticky-" + name.lower().replace(" ", "-").replace("—", "-"),
+            "name": name, "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": pos}
+
+
+nodes += [
+    sticky("Doc — How It Works",
+           "## 🔒 falcon-contain\n**What it does:** human-fired. Network-isolates the honeypot via CrowdStrike, "
+           "verifies it, then lifts it back to normal.\n\n**Why:** the SOAR only *recommends* containment; a person "
+           "fires this. It's the AI-driven response playbook's actuator — with a hard safety rail.", [0, -480], 460, 200, 4),
+    sticky("Doc — Setup",
+           "## ⚙️ Setup / prerequisites\n- **CrowdStrike OAuth2** credential (us-2).\n- **grounding-service** at "
+           "`:8000` for `/falcon/contain-guard`.\n- **Discord webhook**.\n- `FALCON_PINNED_AID` set in the "
+           "grounding-service `.env` (the safety pin).", [500, -480], 460, 200, 5),
+    sticky("Doc — Notes",
+           "## 📌 Notes / safety\n- **AID-pinned:** refuses unless the hostname resolves to exactly ONE device "
+           "whose AID == the pinned honeypot AID.\n- Self-lifts in the same run (never strands the box offline).\n"
+           "- `wait_lift` = 120s (CrowdStrike's lift takes >30s).\n- ⚠️ Don't fire inside the 23:00-ET pre-shutdown "
+           "window.", [1000, -480], 460, 200, 6),
+    sticky("Section — Resolve & Guard",
+           "## ① Resolve & Guard\n**What:** resolve the hostname → Falcon device IDs, then the AID-pin guard. If "
+           "it isn't exactly one device matching the pinned AID → 409 → a Discord **REFUSED** notice and stop.\n\n"
+           "**Why:** the *pin*, not the hostname, bounds the blast radius — it can never isolate the wrong box.", [-60, -220], 700, 560, 7),
+    sticky("Section — Contain & Verify",
+           "## ② Contain & Verify\n**What:** network-isolate the pinned device, wait 45s, then read its status to "
+           "confirm it actually went `contained`.\n\n**Why:** verify, don't assume — confirm the isolation really "
+           "took effect.", [650, -220], 660, 460, 7),
+    sticky("Section — Lift & Confirm",
+           "## ③ Lift & Confirm\n**What:** lift containment (with retry), wait 120s, read status, and build the "
+           "Discord embed — GREEN only if it's observed back to `normal`, else a RED alarm with the manual-lift "
+           "command.\n\n**Why:** never a false all-clear; restoring egress is the always-safe direction.", [1310, -220], 1110, 460, 7),
+]
+
 connections = {
     "Manual Trigger": {"main": [[{"node": "resolve_host", "type": "main", "index": 0}]]},
     "resolve_host": {"main": [[{"node": "contain_guard", "type": "main", "index": 0}]]},

@@ -137,6 +137,42 @@ nodes = [
             json_body="={{ JSON.stringify({ results: $('Post+Collect').item.json.results }) }}"),
 ]
 
+# ---- presentation sticky notes (cosmetic; zero effect on execution) -----------
+def sticky(name, content, pos, w, h, color=7):
+    return {"parameters": {"content": content, "height": h, "width": w, "color": color},
+            "id": "sticky-" + name.lower().replace(" ", "-").replace("—", "-"),
+            "name": name, "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": pos}
+
+
+nodes += [
+    sticky("Doc — How It Works",
+           "## 📡 falcon-alert-poller\n**What it does:** every 15 min, pulls *new* CrowdStrike Falcon alerts and "
+           "feeds them into the shared `honeypot-triage` webhook.\n\n**Why:** Falcon can't push to a webhook, so we "
+           "poll. It's purely a feeder — downstream triage is identical to the Splunk path.", [0, -480], 460, 200, 4),
+    sticky("Doc — Setup",
+           "## ⚙️ Setup / prerequisites\n- **CrowdStrike OAuth2** credential (`Crowdstrike Falcon Account`), cloud "
+           "**us-2**.\n- **grounding-service** at `http://grounding-service:8000` for `/falcon/state|plan|map|advance`.\n"
+           "- Posts to `http://10.0.0.6:5678/webhook/honeypot-triage`.", [500, -480], 460, 200, 5),
+    sticky("Doc — Notes",
+           "## 📌 Notes\n- **Stateful** (`watermark` + `seen`) → triages each alert exactly once; survives "
+           "restarts.\n- FQL filter is `created_timestamp` alone (n8n can't transmit the FQL `+` AND).\n- Empty "
+           "state → watermark defaults to `now-24h` (#10) so a fresh start can't 400-loop.\n- Activate the Schedule "
+           "Trigger to run unattended.", [1000, -480], 460, 200, 6),
+    sticky("Section — Poll & Plan",
+           "## ① Poll & Plan\n**What:** on a 15-min timer, read the saved `{watermark, seen}` state, ask Falcon for "
+           "alerts created since the watermark, then drop already-seen IDs and cap oldest-first.\n\n**Why:** only "
+           "ever process genuinely new alerts — `IF has_new` ends the run cleanly when there's nothing.", [-60, -220], 1240, 460, 7),
+    sticky("Section — Hydrate, Map & Forward",
+           "## ② Hydrate, Map & Forward\n**What:** fetch the full alert objects, reshape each into the common "
+           "Splunk-style body (sorted oldest-first), and POST each to the `honeypot-triage` webhook, collecting "
+           "acks.\n\n**Why:** the same body shape both feeders use → one downstream pipeline. Stops at the first "
+           "failed POST.", [1180, -220], 720, 460, 7),
+    sticky("Section — Advance State",
+           "## ③ Advance State\n**What:** move `watermark` + `seen` forward across the *contiguous* run of "
+           "successful POSTs.\n\n**Why:** a mid-batch failure never strands an earlier alert behind the watermark — "
+           "un-acked ones retry next tick (no skips).", [1900, -220], 420, 460, 7),
+]
+
 connections = {
     "Schedule Trigger": {"main": [[{"node": "get_state", "type": "main", "index": 0}]]},
     "get_state": {"main": [[{"node": "falcon_query", "type": "main", "index": 0}]]},

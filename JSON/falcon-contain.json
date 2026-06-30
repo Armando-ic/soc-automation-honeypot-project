@@ -248,6 +248,102 @@
         2200,
         0
       ]
+    },
+    {
+      "parameters": {
+        "content": "## 🔒 falcon-contain\n**What it does:** human-fired. Network-isolates the honeypot via CrowdStrike, verifies it, then lifts it back to normal.\n\n**Why:** the SOAR only *recommends* containment; a person fires this. It's the AI-driven response playbook's actuator — with a hard safety rail.",
+        "height": 200,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-doc---how-it-works",
+      "name": "Doc — How It Works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ⚙️ Setup / prerequisites\n- **CrowdStrike OAuth2** credential (us-2).\n- **grounding-service** at `:8000` for `/falcon/contain-guard`.\n- **Discord webhook**.\n- `FALCON_PINNED_AID` set in the grounding-service `.env` (the safety pin).",
+        "height": 200,
+        "width": 460,
+        "color": 5
+      },
+      "id": "sticky-doc---setup",
+      "name": "Doc — Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        500,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 📌 Notes / safety\n- **AID-pinned:** refuses unless the hostname resolves to exactly ONE device whose AID == the pinned honeypot AID.\n- Self-lifts in the same run (never strands the box offline).\n- `wait_lift` = 120s (CrowdStrike's lift takes >30s).\n- ⚠️ Don't fire inside the 23:00-ET pre-shutdown window.",
+        "height": 200,
+        "width": 460,
+        "color": 6
+      },
+      "id": "sticky-doc---notes",
+      "name": "Doc — Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ① Resolve & Guard\n**What:** resolve the hostname → Falcon device IDs, then the AID-pin guard. If it isn't exactly one device matching the pinned AID → 409 → a Discord **REFUSED** notice and stop.\n\n**Why:** the *pin*, not the hostname, bounds the blast radius — it can never isolate the wrong box.",
+        "height": 560,
+        "width": 700,
+        "color": 7
+      },
+      "id": "sticky-section---resolve-&-guard",
+      "name": "Section — Resolve & Guard",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ② Contain & Verify\n**What:** network-isolate the pinned device, wait 45s, then read its status to confirm it actually went `contained`.\n\n**Why:** verify, don't assume — confirm the isolation really took effect.",
+        "height": 460,
+        "width": 660,
+        "color": 7
+      },
+      "id": "sticky-section---contain-&-verify",
+      "name": "Section — Contain & Verify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        650,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ③ Lift & Confirm\n**What:** lift containment (with retry), wait 120s, read status, and build the Discord embed — GREEN only if it's observed back to `normal`, else a RED alarm with the manual-lift command.\n\n**Why:** never a false all-clear; restoring egress is the always-safe direction.",
+        "height": 460,
+        "width": 1110,
+        "color": 7
+      },
+      "id": "sticky-section---lift-&-confirm",
+      "name": "Section — Lift & Confirm",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1310,
+        -220
+      ]
     }
   ],
   "connections": {

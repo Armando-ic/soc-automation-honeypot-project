@@ -421,6 +421,52 @@ nodes = [
           "options": {}}, [470, 200]),
 ]
 
+# ---- presentation sticky notes (cosmetic; zero effect on execution) -----------
+def sticky(name, content, pos, w, h, color=7):
+    return {"parameters": {"content": content, "height": h, "width": w, "color": color},
+            "id": "sticky-" + name.lower().replace(" ", "-").replace("—", "-"),
+            "name": name, "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": pos}
+
+
+nodes += [
+    # --- top documentation strip ---
+    sticky("Doc — How It Works",
+           "## 🛡️ honeypot-triage\n**What it does:** auto-triages alerts from an internet-exposed honeypot — "
+           "one alert in → enriched, MITRE-grounded, triaged by Claude Opus, credibility-gated → a DFIR-Iris "
+           "case + Discord ping.\n\n**Two feeders, one pipeline:** Splunk saved-searches *and* the Falcon poller "
+           "both POST to this webhook.\n\n**Why:** turn noisy honeypot detections into analyst-ready, *trustworthy* "
+           "triage without a human reading every one.", [0, -520], 460, 220, 4),
+    sticky("Doc — Setup",
+           "## ⚙️ Setup / prerequisites\nBind on import:\n- **Anthropic** (Claude Opus)\n- **AbuseIPDB** + "
+           "**GreyNoise** (Header Auth)\n- **DFIR-Iris**\n- **Discord webhook**\n\nNeeds **grounding-service** at "
+           "`http://grounding-service:8000` (soar-net) for `/normalize`, `/retrieve`, `/verify`.", [500, -520], 460, 220, 5),
+    sticky("Doc — Notes",
+           "## 📌 Notes & use cases\n- Entry point: `POST /webhook/honeypot-triage`.\n- IOC-gated: skips "
+           "enrichment for private/empty IPs.\n- The verifier **never auto-approves** — failed checks go to "
+           "**Needs-Human**, never silently trusted.\n- Use case: auto-triage of honeypot brute-force / EDR "
+           "detections.", [1000, -520], 460, 220, 6),
+    sticky("Doc — Customization",
+           "## 🎛️ Customization\n- Add enrichment APIs (URLscan, OTX, VT) as HTTP-Tool nodes.\n- Tune the "
+           "gate/severity logic in `triage-verifier/`.\n- Re-point Iris/Discord to your instances.\n- Prompt + "
+           "tool schema are versioned in `build_honeypot_triage_workflow.py`.", [1500, -520], 460, 220, 3),
+    # --- section group-boxes (3, boundaries chosen at real node gaps) ---
+    sticky("Section — Ingest, Enrich & Ground",
+           "## ① Ingest, Enrich & Ground\n**What:** take any alert (Splunk brute-force *or* Falcon), normalize it "
+           "to one shape, enrich the attacker IP (AbuseIPDB + GreyNoise), pull candidate MITRE techniques from "
+           "Qdrant, and assemble the grounded Opus prompt.\n\n**Why:** one pipeline serves both feeders; hand Opus "
+           "*facts + a fixed menu* so it can't invent enrichment or cite an off-menu technique.", [-60, -260], 1960, 560, 7),
+    sticky("Section — Triage (Opus)",
+           "## ② Triage (Opus)\n**What:** Claude Opus writes one structured triage via `submit_triage_result`; "
+           "Extract Result builds the Iris/Discord payloads and decides *Contain recommended*.\n\n**Why:** the "
+           "analyst brain — leashed to cite only the candidate techniques and echo only the verdicts it was given.",
+           [1900, -260], 480, 560, 7),
+    sticky("Section — Verify & Route",
+           "## ③ Verify & Route\n**What:** the credibility gate (+ advisory AI judge) checks the triage is "
+           "grounded. Pass → open a DFIR-Iris case + Discord embed (with *Contain recommended* if high/critical). "
+           "Fail → **Needs-Human**.\n\n**Why:** the project's primary hallucination control — nothing untrustworthy "
+           "is silently trusted.", [2390, -260], 1010, 620, 7),
+]
+
 connections = {
     "Webhook": {"main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]},
     "Parse Alert": {"main": [[{"node": "Has IOC", "type": "main", "index": 0}]]},
