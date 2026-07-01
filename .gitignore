@@ -37,3 +37,9 @@ scratch/
 
 # Local-only working folder (handoff notes, scratch, VM login secrets) — never publish
 Personal/
+
+# Playwright MCP working dir (per-machine, not for the repo)
+.playwright-mcp/
+
+# Python bytecode anywhere (generalizes the earlier scripts/__pycache__/ rule)
+__pycache__/
