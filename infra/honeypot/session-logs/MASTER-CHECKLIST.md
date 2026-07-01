@@ -72,6 +72,11 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
   the subgraph titles stay readable on GitHub light **and** dark (a per-subgraph `style ... color:` is not
   reliably honoured by GitHub's Mermaid — known issue). Verified: the two Layer-1 copies are byte-identical, and
   a 6-agent fan-out confirmed node/edge fidelity against the generator code plus GitHub-render safety.
+- ✅ **Layer-1 edge-readability follow-up (2026-07-01).** The `n8n` fan-out was hard to trace (many same-grey
+  lines crossing to the External-services box). Fixed with `linkStyle`: the fan-out lines are coloured/thickened
+  by role (contain red, case blue, enrich teal, notify pink, the Falcon poll feed lime) while the ingress lines
+  are dimmed grey, plus `curve: basis`. Added a note under the diagram clarifying the colours are for visual
+  clarity only, not a good/bad or risk rating.
 
 ### C. Organize the 3 n8n workflows for presentation ✅ DONE
 - ✅ Sticky-note docs + section group-boxes added to all 3 workflow generators and JSON regenerated (`cd2c3ce`).

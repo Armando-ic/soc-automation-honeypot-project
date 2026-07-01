@@ -15,7 +15,7 @@ Nothing here is synthetic. The attacks are real strangers hammering an exposed R
 ## Layer 1 — the whole loop (the part you'd point at in a demo)
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
+%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'},'flowchart':{'curve':'basis'}}}%%
 flowchart TB
   ATT["🌐 Internet attacker"]
 
@@ -65,7 +65,15 @@ flowchart TB
   style SOCNET fill:#0a1836,stroke:#3b82f6,color:#bfdbfe
   style N8NVM fill:#1c1140,stroke:#a855f7,color:#ddd6fe
   style EXT fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+  linkStyle 0,1,2,3,5,6 stroke:#6b7280,stroke-width:1.5px
+  linkStyle 4 stroke:#84cc16,stroke-width:3px
+  linkStyle 7 stroke:#2dd4bf,stroke-width:3px
+  linkStyle 8 stroke:#60a5fa,stroke-width:3px
+  linkStyle 9 stroke:#f0abfc,stroke-width:3px
+  linkStyle 10 stroke:#ef4444,stroke-width:3px
 ```
+
+> The colours here are only for visual clarity: they group related parts and make each connection easier to trace. They do not indicate good vs. bad, or safe vs. risky.
 
 ### The cast (who's who, and where they live)
 
