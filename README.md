@@ -7,38 +7,56 @@ Nothing here is synthetic. The attacks are real strangers hammering an exposed R
 ## The loop at a glance
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
 flowchart TB
   ATT["🌐 Internet attacker"]
 
-  subgraph HPNET["vnet-honeypot · 10.66.0.0/24 · UN-peered · rg-honeypot"]
-    HP["vm-honeypot-win<br/>priv 10.66.0.4 · pub x.x.x.x<br/>Win Server 2022<br/>Sysmon + Splunk UF + Falcon sensor"]
+  subgraph HPNET["🔥 vnet-honeypot · 10.66.0.0/24 · UN-peered · rg-honeypot"]
+    HP["Honeypot VM<br/>Win Server 2022<br/>Sysmon · Splunk UF · Falcon sensor"]
   end
 
-  subgraph SOCNET["SOC VNet · 10.0.0.0/16 · rg-soc-v2-azure-central-us"]
-    SPL["vm-soc-v2-splunk<br/>priv 10.0.0.5 · pub x.x.x.x<br/>honeypot index + saved-search alerts"]
-    subgraph N8NVM["vm-soc-v2-n8n · 10.0.0.6 · docker network 'soar-net'"]
-      N8N["n8n workflows<br/>honeypot-triage · falcon-alert-poller · falcon-contain"]
-      GS["grounding-service :8000<br/>/retrieve · /normalize · /verify · /falcon/*"]
+  subgraph SOCNET["🛡️ SOC VNet · 10.0.0.0/16 · rg-soc-v2-azure-central-us"]
+    SPL["Splunk SIEM<br/>honeypot index · saved-search alerts"]
+    subgraph N8NVM["vm-soc-v2-n8n · docker soar-net"]
+      N8N["n8n workflows<br/>triage · poller · contain"]
+      GS["grounding-service<br/>normalize · retrieve · verify · falcon"]
       QD["qdrant<br/>ATT&CK RAG"]
     end
-    IRIS["vm-soc-v2-iris<br/>DFIR-Iris (case mgmt)"]
+    IRIS["DFIR-Iris<br/>case management"]
   end
 
-  CS["☁️ CrowdStrike Falcon cloud<br/>api.us-2.crowdstrike.com"]
-  ENR["🌎 Enrichment APIs<br/>AbuseIPDB · GreyNoise · VirusTotal"]
-  DISC["💬 Discord"]
+  subgraph EXT["☁️ External services"]
+    CS["CrowdStrike Falcon<br/>EDR detect-only + Contain"]
+    ENR["Enrichment APIs<br/>AbuseIPDB · GreyNoise · VirusTotal"]
+    DISC["Discord<br/>notifications"]
+  end
 
-  ATT -->|"RDP 3389 / SMB 445 / web 80,443"| HP
-  HP -->|"Splunk UF → :9997 (over PUBLIC IP, un-peered)"| SPL
-  HP -->|"sensor telemetry :443"| CS
-  SPL -->|"saved-search alert → webhook :5678"| N8N
-  CS -->|"poller pulls new alerts (Alerts API)"| N8N
+  ATT -->|"RDP 3389 · SMB 445 · web 80/443"| HP
+  HP -->|"Splunk UF :9997 · public IP, un-peered"| SPL
+  HP -->|"sensor :443"| CS
+  SPL -->|"saved-search webhook"| N8N
+  CS -->|"poll new alerts"| N8N
   N8N --- GS
   GS --- QD
-  N8N -->|"enrich the attacker IP"| ENR
+  N8N -->|"enrich attacker IP"| ENR
   N8N -->|"verified alert → case"| IRIS
-  N8N -->|"embed (triage / contain results)"| DISC
-  N8N -->|"Contain / Lift (AID-pinned)"| CS
+  N8N -->|"triage / contain result"| DISC
+  N8N -->|"Contain / Lift · AID-pinned"| CS
+
+  classDef attacker fill:#b91c1c,stroke:#fecaca,color:#fff
+  classDef honeypot fill:#c2410c,stroke:#fed7aa,color:#fff
+  classDef soc fill:#1d4ed8,stroke:#bfdbfe,color:#fff
+  classDef brain fill:#7c3aed,stroke:#ddd6fe,color:#fff
+  classDef ext fill:#475569,stroke:#cbd5e1,color:#fff
+  class ATT attacker
+  class HP honeypot
+  class SPL,IRIS soc
+  class N8N,GS,QD brain
+  class CS,ENR,DISC ext
+  style HPNET fill:#2a0e05,stroke:#f97316,color:#fed7aa
+  style SOCNET fill:#0a1836,stroke:#3b82f6,color:#bfdbfe
+  style N8NVM fill:#1c1140,stroke:#a855f7,color:#ddd6fe
+  style EXT fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
 ```
 
 For the full box-by-box walkthrough, see [ARCHITECTURE.md](infra/honeypot/ARCHITECTURE.md).

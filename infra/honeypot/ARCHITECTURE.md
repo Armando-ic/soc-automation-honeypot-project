@@ -15,38 +15,56 @@ Nothing here is synthetic. The attacks are real strangers hammering an exposed R
 ## Layer 1 — the whole loop (the part you'd point at in a demo)
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
 flowchart TB
   ATT["🌐 Internet attacker"]
 
-  subgraph HPNET["vnet-honeypot · 10.66.0.0/24 · UN-peered · rg-honeypot"]
-    HP["vm-honeypot-win<br/>priv 10.66.0.4 · pub x.x.x.x<br/>Win Server 2022<br/>Sysmon + Splunk UF + Falcon sensor"]
+  subgraph HPNET["🔥 vnet-honeypot · 10.66.0.0/24 · UN-peered · rg-honeypot"]
+    HP["Honeypot VM<br/>Win Server 2022<br/>Sysmon · Splunk UF · Falcon sensor"]
   end
 
-  subgraph SOCNET["SOC VNet · 10.0.0.0/16 · rg-soc-v2-azure-central-us"]
-    SPL["vm-soc-v2-splunk<br/>priv 10.0.0.5 · pub x.x.x.x<br/>honeypot index + saved-search alerts"]
-    subgraph N8NVM["vm-soc-v2-n8n · 10.0.0.6 · docker network 'soar-net'"]
-      N8N["n8n workflows<br/>honeypot-triage · falcon-alert-poller · falcon-contain"]
-      GS["grounding-service :8000<br/>/retrieve · /normalize · /verify · /falcon/*"]
+  subgraph SOCNET["🛡️ SOC VNet · 10.0.0.0/16 · rg-soc-v2-azure-central-us"]
+    SPL["Splunk SIEM<br/>honeypot index · saved-search alerts"]
+    subgraph N8NVM["vm-soc-v2-n8n · docker soar-net"]
+      N8N["n8n workflows<br/>triage · poller · contain"]
+      GS["grounding-service<br/>normalize · retrieve · verify · falcon"]
       QD["qdrant<br/>ATT&CK RAG"]
     end
-    IRIS["vm-soc-v2-iris<br/>DFIR-Iris (case mgmt)"]
+    IRIS["DFIR-Iris<br/>case management"]
   end
 
-  CS["☁️ CrowdStrike Falcon cloud<br/>api.us-2.crowdstrike.com"]
-  ENR["🌎 Enrichment APIs<br/>AbuseIPDB · GreyNoise · VirusTotal"]
-  DISC["💬 Discord"]
+  subgraph EXT["☁️ External services"]
+    CS["CrowdStrike Falcon<br/>EDR detect-only + Contain"]
+    ENR["Enrichment APIs<br/>AbuseIPDB · GreyNoise · VirusTotal"]
+    DISC["Discord<br/>notifications"]
+  end
 
-  ATT -->|"RDP 3389 / SMB 445 / web 80,443"| HP
-  HP -->|"Splunk UF → :9997 (over PUBLIC IP, un-peered)"| SPL
-  HP -->|"sensor telemetry :443"| CS
-  SPL -->|"saved-search alert → webhook :5678"| N8N
-  CS -->|"poller pulls new alerts (Alerts API)"| N8N
+  ATT -->|"RDP 3389 · SMB 445 · web 80/443"| HP
+  HP -->|"Splunk UF :9997 · public IP, un-peered"| SPL
+  HP -->|"sensor :443"| CS
+  SPL -->|"saved-search webhook"| N8N
+  CS -->|"poll new alerts"| N8N
   N8N --- GS
   GS --- QD
-  N8N -->|"enrich the attacker IP"| ENR
+  N8N -->|"enrich attacker IP"| ENR
   N8N -->|"verified alert → case"| IRIS
-  N8N -->|"embed (triage / contain results)"| DISC
-  N8N -->|"Contain / Lift (AID-pinned)"| CS
+  N8N -->|"triage / contain result"| DISC
+  N8N -->|"Contain / Lift · AID-pinned"| CS
+
+  classDef attacker fill:#b91c1c,stroke:#fecaca,color:#fff
+  classDef honeypot fill:#c2410c,stroke:#fed7aa,color:#fff
+  classDef soc fill:#1d4ed8,stroke:#bfdbfe,color:#fff
+  classDef brain fill:#7c3aed,stroke:#ddd6fe,color:#fff
+  classDef ext fill:#475569,stroke:#cbd5e1,color:#fff
+  class ATT attacker
+  class HP honeypot
+  class SPL,IRIS soc
+  class N8N,GS,QD brain
+  class CS,ENR,DISC ext
+  style HPNET fill:#2a0e05,stroke:#f97316,color:#fed7aa
+  style SOCNET fill:#0a1836,stroke:#3b82f6,color:#bfdbfe
+  style N8NVM fill:#1c1140,stroke:#a855f7,color:#ddd6fe
+  style EXT fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
 ```
 
 ### The cast (who's who, and where they live)
@@ -109,11 +127,12 @@ This is the workflow every alert runs through, no matter which feeder sent it. G
 `JSON/honeypot-triage.json` is the importable output).
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
 flowchart TB
   WH["Webhook<br/>/honeypot-triage"] --> PA["Parse Alert<br/>source-aware: falcon uses alert_text verbatim;<br/>splunk synthesizes one from the brute-force fields"]
   PA --> HI{"Has IOC?<br/>is src_ip a public IP?"}
   HI -->|yes| AB["enrich_abuseipdb"] --> GN["enrich_greynoise"] --> BN["Build Normalize Body"]
-  HI -->|no, skip enrichment| BN
+  HI -->|"no, skip enrichment"| BN
   BN --> NM["normalize<br/>grounding /normalize → IP verdict map"]
   NM --> RT["retrieve<br/>grounding /retrieve → qdrant ATT&CK candidates"]
   RT --> BO["Build Opus Input<br/>alert + verdicts + candidate techniques<br/>+ the EXACT IOC strings to echo back"]
@@ -125,6 +144,19 @@ flowchart TB
   GT -->|true| DC["Discord ✅ embed<br/>(+ 'Contain recommended' if high/critical)"]
   GT -->|false| NHI["Needs-Human → DFIR-Iris"]
   GT -->|false| NHD["Needs-Human → Discord"]
+  classDef brain fill:#7c3aed,stroke:#ddd6fe,color:#fff
+  classDef llm fill:#9333ea,stroke:#ede9fe,color:#fff
+  classDef ext fill:#475569,stroke:#cbd5e1,color:#fff
+  classDef good fill:#15803d,stroke:#bbf7d0,color:#fff
+  classDef gate fill:#78350f,stroke:#fbbf24,color:#fde68a
+  classDef fail fill:#b91c1c,stroke:#fecaca,color:#fff
+  class WH,PA,BN,NM,RT,BO,EX brain
+  class OP llm
+  class AB,GN ext
+  class VF good
+  class HI,GT gate
+  class IR,DC good
+  class NHI,NHD fail
 ```
 
 **The big idea: everything is pre-chewed before Opus ever sees it.** Opus does NOT call tools to go fetch
@@ -170,12 +202,21 @@ project's primary hallucination control — and because it's plain Python, it's 
 `test_falcon.py` / `test_verifier.py` suite you saw go green today), not another AI you have to take on faith.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
 flowchart TB
   TR["Opus triage result"] --> DET["Deterministic gate (pure Python)<br/>~10 grounding + honesty checks"]
   TR --> JG["Advisory AI judge (same model)<br/>skeptical second read"]
   DET -->|all pass| PASS["verification_passed = TRUE → green Iris case"]
   DET -->|any fail| FAIL["verification_passed = FALSE → Needs-Human"]
-  JG -.->|always 'needs_human' · logged · does NOT gate| LOG["runs.jsonl (second opinion, not shown to the analyst view)"]
+  JG -.->|"always 'needs_human' · logged · does NOT gate"| LOG["runs.jsonl<br/>(second opinion, not shown to the analyst view)"]
+  classDef llm fill:#9333ea,stroke:#ede9fe,color:#fff
+  classDef good fill:#15803d,stroke:#bbf7d0,color:#fff
+  classDef fail fill:#b91c1c,stroke:#fecaca,color:#fff
+  classDef ext fill:#475569,stroke:#cbd5e1,color:#fff
+  class TR,JG llm
+  class DET,PASS good
+  class FAIL fail
+  class LOG ext
 ```
 
 The deterministic checks, grouped by what they're really asking (`triage-verifier/triage_verifier/verifier.py`):
@@ -215,8 +256,9 @@ finds into the *same* `honeypot-triage` webhook. It's purely a feeder — everyt
 the Splunk path. Generated from `infra/honeypot/build_falcon_poller_workflow.py`.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
 flowchart TB
-  SC["Schedule Trigger (every 15 min)"] --> GS["get_state<br/>/falcon/state → {watermark, seen}"]
+  SC["Schedule Trigger (every 15 min)"] --> GS["get_state<br/>/falcon/state → watermark, seen"]
   GS --> FQ["falcon_query<br/>Alerts API: created_timestamp >= watermark"]
   FQ --> FP["falcon_plan<br/>/falcon/plan → drop already-seen, cap oldest-first"]
   FP --> HN{"has new?"}
@@ -225,6 +267,14 @@ flowchart TB
   HY --> MP["falcon_map<br/>/falcon/map → Splunk-shaped body, sorted oldest-first"]
   MP --> PC["Post+Collect<br/>POST each to /honeypot-triage"]
   PC --> AD["falcon_advance<br/>/falcon/advance → move watermark + seen (contiguous prefix)"]
+  classDef brain fill:#7c3aed,stroke:#ddd6fe,color:#fff
+  classDef ext fill:#475569,stroke:#cbd5e1,color:#fff
+  classDef gate fill:#78350f,stroke:#fbbf24,color:#fde68a
+  classDef neutral fill:#374151,stroke:#9ca3af,color:#e5e7eb
+  class SC,GS,FP,MP,AD,PC brain
+  class FQ,HY ext
+  class HN gate
+  class END neutral
 ```
 
 **It's stateful, so it triages each alert exactly once.** Two bits of state (`{watermark, seen}`) live on the
@@ -268,16 +318,27 @@ honeypot (cut all traffic except Falcon's own management channel), then lift it 
 `infra/honeypot/build_falcon_contain_workflow.py`.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
 flowchart TB
   MN["Manual trigger (human-fired)"] --> RH["resolve_host<br/>hostname → Falcon device IDs (AIDs)"]
   RH --> CG{"contain_guard<br/>exactly ONE AID, AND it == the pinned honeypot AID?"}
   CG -->|no| REF["409 → Discord 'REFUSED'<br/>(refuses rather than isolate the wrong box)"]
   CG -->|yes| CN["contain → network-isolate the AID"]
-  CN --> W1["wait 45s"] --> SC["status_contained?  (verify it really went 'contained')"]
-  SC --> LF["lift  (retryOnFail)"]
-  LF --> W2["wait 120s"] --> SN["status_normal?  (verify it really came back 'normal')"]
-  SN --> BC["build_confirm<br/>GREEN only if observed 'normal', else RED alarm + manual-lift command"]
+  CN --> W1["wait 45s"] --> ST["status_contained?<br/>(verify it really went 'contained')"]
+  ST --> LF["lift  (retryOnFail)"]
+  LF --> W2["wait 120s"] --> SN["status_normal?<br/>(verify it really came back 'normal')"]
+  SN --> BC["build_confirm<br/>GREEN only if observed 'normal',<br/>else RED alarm + manual-lift command"]
   BC --> DC["Discord"]
+  classDef brain fill:#7c3aed,stroke:#ddd6fe,color:#fff
+  classDef ext fill:#475569,stroke:#cbd5e1,color:#fff
+  classDef gate fill:#78350f,stroke:#fbbf24,color:#fde68a
+  classDef fail fill:#b91c1c,stroke:#fecaca,color:#fff
+  classDef neutral fill:#374151,stroke:#9ca3af,color:#e5e7eb
+  class MN,BC brain
+  class RH,CN,ST,LF,SN,DC ext
+  class CG gate
+  class REF fail
+  class W1,W2 neutral
 ```
 
 Three design choices carry the whole thing:

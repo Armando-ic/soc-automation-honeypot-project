@@ -64,6 +64,14 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
 ### A + B. Project walkthrough + ARCHITECTURE.md ✅ DONE
 - ✅ Walkthrough written and `ARCHITECTURE.md` committed (`e6022e8`), with Mermaid diagrams for the
   Layer-1 loop and the Layer-2 internals.
+- ✅ **Layer-1 + Layer-2 Mermaid visual-hierarchy pass (2026-07-01).** All five diagrams (Layer-1 in both the
+  public README front door and `ARCHITECTURE.md`, plus the four Layer-2 internals: triage, verifier, poller,
+  contain) restyled with one shared colour vocabulary (trust zones plus an AI-brain accent). Node labels
+  stripped to role names with IPs/ports moved to edge labels and subgraph titles, external SaaS grouped into
+  one box, `classDef` colours added, and each diagram pinned to Mermaid's dark theme via a `%%{init}%%` line so
+  the subgraph titles stay readable on GitHub light **and** dark (a per-subgraph `style ... color:` is not
+  reliably honoured by GitHub's Mermaid — known issue). Verified: the two Layer-1 copies are byte-identical, and
+  a 6-agent fan-out confirmed node/edge fidelity against the generator code plus GitHub-render safety.
 
 ### C. Organize the 3 n8n workflows for presentation ✅ DONE
 - ✅ Sticky-note docs + section group-boxes added to all 3 workflow generators and JSON regenerated (`cd2c3ce`).
