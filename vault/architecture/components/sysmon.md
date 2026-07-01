@@ -15,7 +15,7 @@ related: [[../current-state]], [[splunk]], [[../../subprojects/2026-04-30-detect
 
 | | |
 |---|---|
-| Host | Azure VM `vm-soc-v2-win` (Windows Server, `10.0.0.4` private / `52.242.192.109` public, Central US). Historical: ran on local-VMware Win10 `DESKTOP-VNEF7PC` (192.168.129.130) before Phase 1 (2026-05-22). |
+| Host | Azure VM `vm-soc-v2-win` (Windows Server, `10.0.0.4` private / `x.x.x.x` public, Central US). Historical: ran on local-VMware Win10 `DESKTOP-VNEF7PC` (192.168.129.130) before Phase 1 (2026-05-22). |
 | Service name | `Sysmon64` |
 | Channel | `Microsoft-Windows-Sysmon/Operational` |
 | Forwarder | Existing Splunk Universal Forwarder (config edited only — see splunk.md) |

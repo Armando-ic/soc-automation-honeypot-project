@@ -11,10 +11,10 @@ related: [[README]], [[spec]], [[notes]], [[comparison-latency]], [[../../archit
 
 | VM | Public IP | Private IP | Role | Size |
 |---|---|---|---|---|
-| `vm-soc-v2-win` | `52.242.192.109` | `10.0.0.4` | Phase-1 Windows endpoint (Sysmon UF + ATH/synthetics) | Standard_D4as_v7 |
-| `vm-soc-v2-splunk` | `20.236.193.253` | `10.0.0.5` | Splunk Enterprise 10.4.0 (Dev License, 10 GB/day) | Standard_D4s_v3 |
-| `vm-soc-v2-n8n` | `52.173.105.92` | `10.0.0.6` | n8n 2.21.7 via docker compose (SOC Triage v3 workflow) | Standard_D2s_v3 |
-| `vm-soc-v2-iris` | `20.29.76.25` | `10.0.0.7` | DFIR-IRIS 2.4.22 via docker compose | Standard_D2s_v3 |
+| `vm-soc-v2-win` | `x.x.x.x` | `10.0.0.4` | Phase-1 Windows endpoint (Sysmon UF + ATH/synthetics) | Standard_D4as_v7 |
+| `vm-soc-v2-splunk` | `x.x.x.x` | `10.0.0.5` | Splunk Enterprise 10.4.0 (Dev License, 10 GB/day) | Standard_D4s_v3 |
+| `vm-soc-v2-n8n` | `x.x.x.x` | `10.0.0.6` | n8n 2.21.7 via docker compose (SOC Triage v3 workflow) | Standard_D2s_v3 |
+| `vm-soc-v2-iris` | `x.x.x.x` | `10.0.0.7` | DFIR-IRIS 2.4.22 via docker compose | Standard_D2s_v3 |
 
 **Resource group:** `rg-soc-v2-azure-central-us` (Central US).
 **VNet/subnet:** `vm-soc-v2-win-vnet` / `default` (10.0.0.0/24); all 4 VMs share the subnet, intra-VNet traffic uses private IPs.
@@ -34,9 +34,9 @@ related: [[README]], [[spec]], [[notes]], [[comparison-latency]], [[../../archit
   ```
 - **Windows VM** — RDP via Azure portal Connect blade, **or** Azure portal → Operations → Run command → RunPowerShellScript for non-interactive tasks. **Never spawn GUI apps via Run Command** (Session 0 hangs the script forever and the VM must be restarted to clear it; see Gotcha §G1).
 - **Web UIs (NSG-restricted to home IP):**
-  - Splunk: `http://20.236.193.253:8000` (login: `mydfir` / secrets file)
-  - n8n: `http://52.173.105.92:5678` (login: `owner@example.com` / secrets file)
-  - IRIS: `https://20.29.76.25` (self-signed cert; login: `administrator` / secrets file)
+  - Splunk: `http://x.x.x.x:8000` (login: `mydfir` / secrets file)
+  - n8n: `http://x.x.x.x:5678` (login: `owner@example.com` / secrets file)
+  - IRIS: `https://x.x.x.x` (self-signed cert; login: `administrator` / secrets file)
 - **If SSH fails after a home-IP change** — Azure portal → NSG → Inbound rules → update the `allow-ssh-*-from-home` source IP for each VM's NSG, then retry.
 
 ## Restart services
@@ -86,7 +86,7 @@ Same cron cadence; lands in IRIS as `T1059.001 - PowerShell Encoded Command` wit
 ### List recent IRIS alerts
 
 ```bash
-ssh -i .../vm-soc-v2-linux-key.pem azureuser@20.29.76.25
+ssh -i .../vm-soc-v2-linux-key.pem azureuser@x.x.x.x
 KEY=$(grep '^IRIS_ADM_API_KEY=' ~/iris-web/.env | cut -d= -f2)
 curl -sk -H "Authorization: Bearer $KEY" \
   "https://localhost/alerts/filter?order_by=alert_creation_time&sort_dir=desc&per_page=10&page=1" | python3 -m json.tool
@@ -95,7 +95,7 @@ curl -sk -H "Authorization: Bearer $KEY" \
 ### List recent n8n executions
 
 ```bash
-ssh -i .../vm-soc-v2-linux-key.pem azureuser@52.173.105.92
+ssh -i .../vm-soc-v2-linux-key.pem azureuser@x.x.x.x
 sqlite3 ~/.n8n/database.sqlite \
   "SELECT id, startedAt, stoppedAt, status, mode FROM execution_entity ORDER BY id DESC LIMIT 10"
 ```

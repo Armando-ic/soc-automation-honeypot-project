@@ -11,15 +11,15 @@ See the design spec and plan (in the parent workspace `docs/superpowers/`):
 - Resource group: `rg-honeypot` (Central US)
 - VNet: `vnet-honeypot` · Central US · `10.66.0.0/24` · subnet `snet-honeypot` `10.66.0.0/27` · **Peerings: NONE (verified 2026-06-24)** · Private subnet: Enabled (egress only via the Task-4 public IP) · no overlap with SOC `10.0.0.0/16`
 - NSG: `nsg-honeypot` → see `nsg-rules.md` (associated to `snet-honeypot`; 3 inbound + 5 outbound, created 2026-06-24)
-- VM: `vm-honeypot-win` → **DONE 2026-06-25**, see `## VM (Task 4)` below. Public IP **`128.203.185.25`**.
+- VM: `vm-honeypot-win` → **DONE 2026-06-25**, see `## VM (Task 4)` below. Public IP **`x.x.x.x`**.
 - Budget/spend cap: **DONE 2026-06-25** — `budget-honeypot-monthly` $60/mo on `rg-honeypot`, actual alerts 50/90/100% → `owner@example.com`. (Alert-only; not a hard auto-stop.)
 - Baseline snapshot: **DONE 2026-06-26** — `snap-honeypot-clean` (`rg-honeypot`, full, Standard_LRS) — clean instrumented baseline (Sysmon+UF already working). Rebuild source; see `RUNBOOK.md`.
 - Sysmon config: **installed & logging (Task 7 DONE 2026-06-25)** → `sysmon-config.xml` (SwiftOnSecurity v74, schema 4.50) installed via Sysmon64 v15.21; Operational channel producing Id 1/22; Defender real-time disabled (intentional).
-- UF inputs: **DONE 2026-06-26** → `splunk-inputs.conf` deployed; UF 10.4.0 on the VM forwards to `20.236.193.253:9997`; Splunk `honeypot` index + 9997 receiver + NSG rule (`allow-uf-9997-from-honeypot`) all live.
+- UF inputs: **DONE 2026-06-26** → `splunk-inputs.conf` deployed; UF 10.4.0 on the VM forwards to `x.x.x.x:9997`; Splunk `honeypot` index + 9997 receiver + NSG rule (`allow-uf-9997-from-honeypot`) all live.
 
 ## v2-azure environment (telemetry target — Option A)
 Honeypot stays UN-peered and forwards to Splunk's PUBLIC IP. Confirmed 2026-06-23:
-- Splunk VM `vm-soc-v2-splunk` — public `20.236.193.253`, private `10.0.0.5` (private DENIED from honeypot).
+- Splunk VM `vm-soc-v2-splunk` — public `x.x.x.x`, private `10.0.0.5` (private DENIED from honeypot).
 - Splunk S2S receive port `9997` (confirm enabled at Task 8; TLS recommended).
 - SOC VNet `vm-soc-v2-win-vnet` `10.0.0.0/16` (honeypot egress DENIES this whole range).
 - SOC resource group `rg-soc-v2-azure-central-us` (Splunk NSG gets an inbound 9997-from-honeypot rule at Task 8).
@@ -48,14 +48,14 @@ Honeypot stays UN-peered and forwards to Splunk's PUBLIC IP. Confirmed 2026-06-2
 ## VM (Task 4 — DONE 2026-06-25)
 - `vm-honeypot-win` · `Standard_B2als_v2` (2 vCPU/4 GiB) · **Windows Server 2022 Datacenter Gen2**
   (`2022-datacenter-g2`) · security type **Standard** · `rg-honeypot` / `vnet-honeypot` / `snet-honeypot`.
-- **Public IP (Standard, STATIC): `128.203.185.25`** · Private IP `10.66.0.4` · OS disk Standard SSD LRS.
+- **Public IP (Standard, STATIC): `x.x.x.x`** · Private IP `10.66.0.4` · OS disk Standard SSD LRS.
 - **NIC NSG = none** (subnet `nsg-honeypot` governs) · **Auto-shutdown OFF** · **Hardening: NONE (intentional)** · Power: running.
 - Admin creds: in **gitignored `Personal/honeypot-vm-creds.txt`** (user `analyst`; password NOT recorded here).
 - Provisioned via `az vm create` (after the AD-lab reclaim freed quota). Note: a first attempt
   accidentally used the Win Server **2025** image; deleted and recreated as **2022** per plan. Using
   `--security-type Standard` via CLI required registering `Microsoft.Compute/UseStandardSecurityType`
   (the portal does this silently).
-- **`128.203.185.25` is the source IP for Splunk's inbound 9997 NSG allow-rule at Task 8.**
+- **`x.x.x.x` is the source IP for Splunk's inbound 9997 NSG allow-rule at Task 8.**
 
 ## Telemetry validation (Tasks 8–9 — DONE 2026-06-26)
 End-to-end proof the honeypot host telemetry reaches Splunk. `index=honeypot | stats count by source sourcetype`:
@@ -79,7 +79,7 @@ procedure in `RUNBOOK.md`.
   scopes **Alerts:R/W, Hosts:R/W, Event streams:R** (created 2026-06-29, Plan 0B Task 2).
   Client ID/Secret live ONLY in `Personal/honeypot-vm-creds.txt` (gitignored — never committed/echoed).
 - Sensor: **7.38.21003.0** installed 2026-06-29 via hands-on RDP. Windows hostname = **`vm-honeypot-win`**
-  (external IP `128.203.185.25` confirmed in Host management). No reboot. Egress = existing `allow-web` (443).
+  (external IP `x.x.x.x` confirmed in Host management). No reboot. Egress = existing `allow-web` (443).
   ✅ Tenant is honeypot-only: a personal Windows 11 workstation (`PERSONAL-WIN11`) briefly auto-enrolled and was
   **uninstalled 2026-06-29** (maintenance token), so a tenant-wide alert poll (0D-2) can't sweep it in. Host
   group `hg-honeypot` (Dynamic, hostname=`vm-honeypot-win`) + the Contain script are hostname-scoped anyway.

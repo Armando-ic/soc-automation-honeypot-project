@@ -241,9 +241,9 @@ const actions = (r.recommended_actions || [])
   .join('\n') || '_none_';
 
 const detail_link = (ctx.source === 'falcon') ? (ctx.console_link || '')
-  : (ctx.results_link || '').replace('mydfir-splunk', '20.236.193.253')
-                            .replace('192.168.129.131', '20.236.193.253')
-                            .replace('vm-soc-v2-splunk', '20.236.193.253');
+  : (ctx.results_link || '').replace('mydfir-splunk', 'x.x.x.x')
+                            .replace('192.168.129.131', 'x.x.x.x')
+                            .replace('vm-soc-v2-splunk', 'x.x.x.x');
 const link_label = (ctx.source === 'falcon') ? 'Falcon' : 'Splunk';
 const splunk_link = detail_link;   // kept for back-compat of the returned key
 

@@ -40,11 +40,11 @@ d836c42 Task 3 — nsg-honeypot rules (attack surface + tight egress)
   `vnet-honeypot` `10.66.0.0/24` (subnet `snet-honeypot` `10.66.0.0/27`), **peerings empty** ·
   ✅ **Task 3** `nsg-honeypot` (3 inbound RDP/SMB/web `Destination=Any`; 5 outbound tight egress).
 - ✅ **Task 4 `vm-honeypot-win` DONE (2026-06-25)** — `Standard_B2als_v2`, **Windows Server 2022** Gen2,
-  Standard security, public **`128.203.185.25`** (Static) / private `10.66.0.4`, NIC NSG=none, auto-shutdown
+  Standard security, public **`x.x.x.x`** (Static) / private `10.66.0.4`, NIC NSG=none, auto-shutdown
   OFF, running. Admin creds in gitignored `Personal/honeypot-vm-creds.txt`. (See `## VM` in README.)
 - ✅ **Task 5 budget** `budget-honeypot-monthly` $60/mo (50/90/100% → `owner@example.com`).
 - ✅ **Task 7 Sysmon** installed (SwiftOnSecurity v74 via Sysmon64 v15.21) + Defender RT disabled.
-- ✅ **Task 8 UF** (10.4.0) forwarding to `20.236.193.253:9997`; Splunk `honeypot` index + 9997 receiver +
+- ✅ **Task 8 UF** (10.4.0) forwarding to `x.x.x.x:9997`; Splunk `honeypot` index + 9997 receiver +
   NSG `allow-uf-9997-from-honeypot` (prio 1030) all live.
 - ✅ **Task 9 e2e VALIDATED 2026-06-26** — `index=honeypot`: Security 6,130 + System 466 +
   **Sysmon (XmlWinEventLog) 3,330**. (Two bugs fixed: egress port typo `997`→`9997`; Sysmon
@@ -74,7 +74,7 @@ ONLY in the gitignored secrets file — never committed/echoed.
 - **Quota after delete: Total Regional 20 → 12 / 28** (16 free); **DSv4 8 → 0 / 10**. (Confirmed
   deallocation alone did NOT free quota — deletion did.)
 - **SOC stack `rg-soc-v2-azure-central-us` untouched** (4 VMs verified present): `vm-soc-v2-splunk`
-  (10.0.0.5 / public **20.236.193.253**), `vm-soc-v2-n8n`, `vm-soc-v2-iris`, `vm-soc-v2-win`.
+  (10.0.0.5 / public **x.x.x.x**), `vm-soc-v2-n8n`, `vm-soc-v2-iris`, `vm-soc-v2-win`.
 - **Basv2 quota request submitted** (0 → 4) via Quota REST API — request id
   `ae2f78c6-cace-43d1-9c3a-fdf02e70e580`, InProgress at submit. **VM deploy is gated on this landing**
   (check: `az vm list-usage -l centralus --query "[?contains(localName,'Basv2')]" -o table`).
@@ -183,7 +183,7 @@ invariant doc notes). **Open:** real per-detection console deep-link URL; confir
 > test + the `| rest` config-verify search are in **runbook §D** (rewritten this session).
 > **REMAINING / NEXT:** **OPTIONAL** — add the bounded one-shot **re-ground** branch (omitted from the importable JSON
 > for reliability; FAIL currently goes straight to needs-human — safe + logged); also an OPTIONAL cosmetic fix to C.4's
-> `splunk_link` rewrite (the IRIS deep-link shows internal host `vm-soc-v2-splunk:8000` — add `.replace('vm-soc-v2-splunk','20.236.193.253')`).
+> `splunk_link` rewrite (the IRIS deep-link shows internal host `vm-soc-v2-splunk:8000` — add `.replace('vm-soc-v2-splunk','x.x.x.x')`).
 > Then **0D-2** (Falcon trigger + Contain) within the trial window once 0B is validated.
 > **VMs `vm-soc-v2-n8n` + `vm-soc-v2-splunk` STARTED this session — DEALLOCATE at end (cost-safe):
 > `az vm deallocate -g rg-soc-v2-azure-central-us -n <vm>` both; everything auto-resumes + judge survives reboot on next start.**
@@ -205,7 +205,7 @@ run-log written), and **VM deallocate→start reboot-survival confirmed** (conta
 > on 2026-06-29); keep/drop checkpoint ~2026-07-12. Secrets (Client ID/Secret, CID) in `Personal/honeypot-vm-creds.txt` ONLY.
 > **✅ DONE this session (commits `500976b`, `843337f` + tonight's doc commit):**
 > - **Task 2** — API client `honeypot-soar` (scopes Alerts:R/W + Hosts:R/W + Event streams:R); base URL us-2 recorded.
-> - **Task 3** — sensor **7.38.21003.0** on `vm-honeypot-win` (csagent RUNNING; ext IP 128.203.185.25 confirmed).
+> - **Task 3** — sensor **7.38.21003.0** on `vm-honeypot-win` (csagent RUNNING; ext IP x.x.x.x confirmed).
 >   NSG checked: `allow-web` (443→Internet, prio 1020) covers the sensor — **no NSG change**.
 > - **Cleanup** — a personal Win11 PC (`PERSONAL-WIN11`) had auto-enrolled in the trial tenant → **UNINSTALLED**
 >   (maintenance token) so the tenant is honeypot-only (else a tenant-wide 0D-2 alert poll would sweep it in / could Contain it).
@@ -327,14 +327,14 @@ run-log written), and **VM deallocate→start reboot-survival confirmed** (conta
   high-severity + human-gated) onto the same path. Both spec'd in the 0D design doc §7.
 
 ### Useful facts
-- Honeypot admin: RDP `128.203.185.25`, user `analyst`, pw ONLY in `Personal/honeypot-vm-creds.txt` (never echo/commit).
+- Honeypot admin: RDP `x.x.x.x`, user `analyst`, pw ONLY in `Personal/honeypot-vm-creds.txt` (never echo/commit).
 - Splunk auto-shuts 23:00 ET; START `vm-soc-v2-splunk` (portal) before expecting live ingestion. UF queues meanwhile.
 - `az vm run-command invoke -g rg-honeypot -n vm-honeypot-win` runs PowerShell as SYSTEM (no RDP) — kept as a FALLBACK; default to hands-on.
 - az CLI authenticated (sub `3718c265-...`, `owner@example.com`). On Git Bash, prefix az calls passing full `/subscriptions/...` IDs with `MSYS_NO_PATHCONV=1`.
 - **rg-soc-v2-azure-central-us (Splunk/n8n/Iris) is PROTECTED** — explicit consent before any security-loosening change; `rg-honeypot` is the free-to-modify sandbox.
 
 ## Key pipeline facts (Option A telemetry — decided)
-- Honeypot is **UN-peered**. Universal Forwarder → Splunk's **public** IP **`20.236.193.253:9997`**,
+- Honeypot is **UN-peered**. Universal Forwarder → Splunk's **public** IP **`x.x.x.x:9997`**,
   locked by Splunk's NSG to the honeypot's **static public IP** (add that inbound rule at Task 8; TLS
   recommended). Honeypot egress **denies `10.0.0.0/8`** (the SOC VNet) → no private route in. SOC VNet =
   `vm-soc-v2-win-vnet` `10.0.0.0/16`, RG `rg-soc-v2-azure-central-us`.

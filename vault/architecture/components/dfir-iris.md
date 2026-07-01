@@ -15,7 +15,7 @@ Open-source incident response case management. Receives alerts from the n8n work
 | | |
 |---|---|
 | Host | `vm-soc-v2-iris` (Azure VM, Central US, `Standard_D2s_v3`) |
-| Public Web UI | https://20.29.76.25 (HTTPS, self-signed cert; NSG-restricted to home IP) |
+| Public Web UI | https://x.x.x.x (HTTPS, self-signed cert; NSG-restricted to home IP) |
 | Private API endpoint | https://10.0.0.7/api/* (intra-VNet — n8n-to-IRIS leg) |
 | Version | v2.4.22 (commit `f75e56fb` — matches v1 rebuild exactly; IOC type IDs and severity IDs unchanged) |
 | Source | https://github.com/dfir-iris/iris-web (git tag `v2.4.22`) |
@@ -94,7 +94,7 @@ Required by A2's `Extract Triage Result` Code node when building the `alert_iocs
 | `sha1`   | `sha1`   | **111** |
 | `sha256` | `sha256` | **113** |
 
-Source: `GET /manage/ioc-types/list` on the Iris instance at `20.29.76.25` (public) / `10.0.0.7` (private, intra-VNet).
+Source: `GET /manage/ioc-types/list` on the Iris instance at `x.x.x.x` (public) / `10.0.0.7` (private, intra-VNet).
 
 Notes on the choices:
 
@@ -106,7 +106,7 @@ To re-capture:
 
 ```bash
 curl -ks -H "Authorization: Bearer <iris-api-key>" \
-  https://20.29.76.25/manage/ioc-types/list \
+  https://x.x.x.x/manage/ioc-types/list \
   | python -c "
 import json, sys
 d = json.load(sys.stdin)['data']
@@ -129,7 +129,7 @@ To recapture the full status catalog:
 
 ```bash
 curl -ks -H "Authorization: Bearer <iris-api-key>" \
-  https://20.29.76.25/manage/alert-status/list | python -m json.tool
+  https://x.x.x.x/manage/alert-status/list | python -m json.tool
 ```
 
 ## Severity IDs (captured 2026-04-28, reverified 2026-05-12 — unchanged)
@@ -163,7 +163,7 @@ To re-capture:
 
 ```bash
 curl -ks -H "Authorization: Bearer <iris-api-key>" \
-  https://20.29.76.25/manage/severities/list \
+  https://x.x.x.x/manage/severities/list \
   | python -m json.tool
 ```
 

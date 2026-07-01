@@ -1,6 +1,6 @@
 # Honeypot Lab-Ops Runbook (Phase 0A)
 
-Operating discipline for the caged Windows honeypot `vm-honeypot-win` (public `128.203.185.25`),
+Operating discipline for the caged Windows honeypot `vm-honeypot-win` (public `x.x.x.x`),
 the source-of-truth ops doc (Layer 3 of the design spec's process engineering). Phase 0A complete
 2026-06-26.
 
@@ -11,7 +11,7 @@ fully instrumented: Sysmon + Universal Forwarder already installed and forwardin
 2. Create a new managed disk from `snap-honeypot-clean`, then swap it onto `vm-honeypot-win`
    (or recreate the VM from it). Security type must stay **Standard** (matches the live VM).
 3. Re-confirm: NIC NSG = none (subnet `nsg-honeypot` governs), **auto-shutdown OFF**, Public IP still
-   `128.203.185.25` (Static).
+   `x.x.x.x` (Static).
 4. Confirm telemetry resumes: `index=honeypot | stats count by source sourcetype` shows all three
    sources within ~15 min (Security/System as `WinEventLog`, Sysmon as `XmlWinEventLog`).
 5. If Sysmon specifically is missing after a rebuild, see **Troubleshooting → Sysmon 0 events** below.
@@ -55,7 +55,7 @@ events** with no obvious error:
 Cause: the honeypot egress NSG `allow-splunk-telemetry` rule had a **port typo — `997` instead of
 `9997`**. Because the egress posture is `deny-all-other-egress` (prio 4096), one wrong digit on the only
 telemetry port silently dropped every forwarder packet *before it left the subnet* — no error anywhere.
-- Diagnose: on the honeypot, `Test-NetConnection 20.236.193.253 -Port 9997` → `TcpTestSucceeded:False`.
+- Diagnose: on the honeypot, `Test-NetConnection x.x.x.x -Port 9997` → `TcpTestSucceeded:False`.
 - Fix: `az network nsg rule update -g rg-honeypot --nsg-name nsg-honeypot --name allow-splunk-telemetry --destination-port-ranges 9997`.
 - Lesson: with a tight deny-all egress, verify the *exact* allowed port; failures are silent.
 

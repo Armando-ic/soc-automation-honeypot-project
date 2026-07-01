@@ -6,7 +6,7 @@ docs: [`falcon-setup-walkthrough.md`](falcon-setup-walkthrough.md) (narrative st
 [`falcon-detect-only-policy.md`](falcon-detect-only-policy.md) (the toggle map),
 [`crowdstrike-api-notes.md`](crowdstrike-api-notes.md) (API reference).
 
-**Environment (constants):** `vm-honeypot-win` · `rg-honeypot` · public `128.203.185.25` · Windows Server
+**Environment (constants):** `vm-honeypot-win` · `rg-honeypot` · public `x.x.x.x` · Windows Server
 2022 · tenant cloud **us-2** (`https://api.us-2.crowdstrike.com`) · sensor **7.38.21003.0** · policy
 `honeypot-detect-only` applied (precedence 3). Secrets (Client ID/Secret, CID) live ONLY in gitignored
 `Personal/honeypot-vm-creds.txt` — never committed/echoed. `composite_id` is redacted below because it embeds

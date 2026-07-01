@@ -56,7 +56,7 @@ tests green. Re-confirmed green on the all-green sweep.
 `JSON/falcon-contain.json` (Manual → resolve_host → contain_guard → contain → wait → status_contained → lift →
 wait → status_normal → build_confirm → Discord). Fired manually 2026-06-29:
 - **AID-pin held:** `contain_guard` resolved `vm-honeypot-win` → the pinned AID `9134…5865` (200); the contained
-  device's `device_id` == that AID, `external_ip 128.203.185.25` (the honeypot).
+  device's `device_id` == that AID, `external_ip x.x.x.x` (the honeypot).
 - **`normal → contained → normal` observed:** `status_contained` = **`contained`** (≈21:50:01); after `lift`,
   `status_normal` = **`normal`** (v140, 22:00:46). Egress restored.
 - **Safety logic proved itself:** the first run's 30s post-lift wait was shorter than CrowdStrike's lift-apply

@@ -15,7 +15,7 @@ The SIEM. Splunk Enterprise running on Ubuntu Server. **As of P2 (2026-05-26) ru
 | | |
 |---|---|
 | Host | `vm-soc-v2-splunk` (Azure VM, Central US, `Standard_D4s_v3`) |
-| Public Web UI | http://20.236.193.253:8000 (NSG-restricted to home IP) |
+| Public Web UI | http://x.x.x.x:8000 (NSG-restricted to home IP) |
 | Private receiver | 10.0.0.5:9997 (intra-VNet for Sysmon UF traffic) |
 | Management API | https://10.0.0.5:8089 (internal; not exposed) |
 | Version | Splunk Enterprise **10.4.0** (build `f798d4d49089`) |
@@ -69,6 +69,6 @@ Vault grep at the time confirmed no downstream consumers of the old strings. Fut
 
 ## How to access
 
-- Web UI: browser to http://20.236.193.253:8000 (NSG-restricted to home IP per [[../subprojects/2026-05-23-azure-port/runbook]])
-- SSH: `ssh -i C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem azureuser@20.236.193.253`
+- Web UI: browser to http://x.x.x.x:8000 (NSG-restricted to home IP per [[../subprojects/2026-05-23-azure-port/runbook]])
+- SSH: `ssh -i C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem azureuser@x.x.x.x`
 - MCP (programmatic): see [[architecture/components/splunk-mcp]] (note: MCP host references need update if the splunk-mcp doc still points at 192.168.129.131)

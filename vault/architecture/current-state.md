@@ -16,10 +16,10 @@ All 4 VMs in `rg-soc-v2-azure-central-us`, VNet `vm-soc-v2-win-vnet` / subnet `d
 
 | Host | Public IP | Private IP | Size | Role |
 |---|---|---|---|---|
-| `vm-soc-v2-win` | `52.242.192.109` | `10.0.0.4` | Standard_D4as_v7 (Phase 1) | Endpoint generating telemetry. Sysmon 15.20 + SwiftOnSecurity config (channel `Microsoft-Windows-Sysmon/Operational`), Splunk UF 10.4.0 (LocalSystem), Atomic Red Team (when installed). Also runs Azure Monitor Agent → Sentinel/Log Analytics (Phase 1 parallel path). |
-| `vm-soc-v2-splunk` | `20.236.193.253` | `10.0.0.5` | Standard_D4s_v3 | Splunk Enterprise **10.4.0** (Developer License, 10 GB/day, expires 2026-11-19). Web UI :8000, management API :8089, receiver :9997. Indexes: `mydfir-project`. |
-| `vm-soc-v2-n8n` | `52.173.105.92` | `10.0.0.6` | Standard_D2s_v3 | n8n **2.21.7** via `docker compose` plugin v5.1.4 on Ubuntu Server 24.04. Web UI :5678. Auth: native user management (deprecated `N8N_BASIC_AUTH_*` not used). |
-| `vm-soc-v2-iris` | `20.29.76.25` | `10.0.0.7` | Standard_D2s_v3 | DFIR-IRIS **v2.4.22** (commit `f75e56fb`) via `docker compose`. Web UI :443 (HTTPS, self-signed). 5 containers: db, app, nginx (healthchecked), rabbitmq, worker. |
+| `vm-soc-v2-win` | `x.x.x.x` | `10.0.0.4` | Standard_D4as_v7 (Phase 1) | Endpoint generating telemetry. Sysmon 15.20 + SwiftOnSecurity config (channel `Microsoft-Windows-Sysmon/Operational`), Splunk UF 10.4.0 (LocalSystem), Atomic Red Team (when installed). Also runs Azure Monitor Agent → Sentinel/Log Analytics (Phase 1 parallel path). |
+| `vm-soc-v2-splunk` | `x.x.x.x` | `10.0.0.5` | Standard_D4s_v3 | Splunk Enterprise **10.4.0** (Developer License, 10 GB/day, expires 2026-11-19). Web UI :8000, management API :8089, receiver :9997. Indexes: `mydfir-project`. |
+| `vm-soc-v2-n8n` | `x.x.x.x` | `10.0.0.6` | Standard_D2s_v3 | n8n **2.21.7** via `docker compose` plugin v5.1.4 on Ubuntu Server 24.04. Web UI :5678. Auth: native user management (deprecated `N8N_BASIC_AUTH_*` not used). |
+| `vm-soc-v2-iris` | `x.x.x.x` | `10.0.0.7` | Standard_D2s_v3 | DFIR-IRIS **v2.4.22** (commit `f75e56fb`) via `docker compose`. Web UI :443 (HTTPS, self-signed). 5 containers: db, app, nginx (healthchecked), rabbitmq, worker. |
 
 Phase 1 also provisioned a Log Analytics workspace (`law-soc-v2-azure`, ID `<workspace-id>`) with the SecurityInsights solution; that path is independent of the SOAR pipeline and feeds the deferred Phase 3 Microsoft-native rewrite.
 
@@ -75,8 +75,8 @@ flowchart TD
 ## Interactive investigation path
 
 Independent of the alert pipeline:
-- Claude Desktop and Claude Code both have a `splunk` MCP server (v1 era) — **needs P2 reconfiguration** to point at `20.236.193.253` / `10.0.0.5:8089` and re-create the `mcpuser` account on the Azure Splunk. Tracked at [[../subprojects/2026-05-23-azure-port/notes]] follow-ups and noted in [[components/splunk-mcp]] header.
-- `mydfir` admin REST access works against Azure Splunk's `:8089` (use `https://10.0.0.5:8089` from intra-VNet, or `https://20.236.193.253:8089` if it gets opened to home IP — currently NSG-restricted to internal traffic).
+- Claude Desktop and Claude Code both have a `splunk` MCP server (v1 era) — **needs P2 reconfiguration** to point at `x.x.x.x` / `10.0.0.5:8089` and re-create the `mcpuser` account on the Azure Splunk. Tracked at [[../subprojects/2026-05-23-azure-port/notes]] follow-ups and noted in [[components/splunk-mcp]] header.
+- `mydfir` admin REST access works against Azure Splunk's `:8089` (use `https://10.0.0.5:8089` from intra-VNet, or `https://x.x.x.x:8089` if it gets opened to home IP — currently NSG-restricted to internal traffic).
 
 ## Detection inventory
 

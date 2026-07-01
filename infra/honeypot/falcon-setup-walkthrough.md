@@ -15,7 +15,7 @@ blocks/quarantines/kills.
 **Environment (constants):**
 | | |
 |---|---|
-| Honeypot VM | `vm-honeypot-win` · `rg-honeypot` · public `128.203.185.25` · private `10.66.0.4` · Windows Server 2022 |
+| Honeypot VM | `vm-honeypot-win` · `rg-honeypot` · public `x.x.x.x` · private `10.66.0.4` · Windows Server 2022 |
 | Tenant cloud | **us-2** · API base `https://api.us-2.crowdstrike.com` |
 | API client | `honeypot-soar` (scopes: Alerts R/W, Hosts R/W, Event streams R) |
 | Sensor | Falcon Windows sensor **7.38.21003.0** |
@@ -48,7 +48,7 @@ Console → **Support and resources → API clients and keys → Add new API cli
   (`WindowsSensor.<ver>.exe`). On the same page, **Copy your Customer ID (CID)** (CCID with checksum) →
   `Personal/honeypot-vm-creds.txt` under `## Falcon CID`. Check **Sensor update policies** for an installation
   token (trial tenants usually don't need one).
-- RDP to `128.203.185.25` (user `analyst`). Get the installer onto the box (download in the VM's browser over
+- RDP to `x.x.x.x` (user `analyst`). Get the installer onto the box (download in the VM's browser over
   443, or RDP clipboard). In an **elevated** shell:
   ```
   .\WindowsSensor.<ver>.exe /install /quiet /norestart CID=<CID-with-checksum>
@@ -56,7 +56,7 @@ Console → **Support and resources → API clients and keys → Add new API cli
   (add `ProvToken=<token>` only if Step 1 said it's required). No reboot needed.
 - Verify the service: `sc query csagent` → `STATE : 4  RUNNING`.
 - Console → **Host setup and management → Host management** → confirm the host appears. Ours:
-  hostname **`vm-honeypot-win`**, sensor **7.38.21003.0**, external IP `128.203.185.25` (confirms it's the
+  hostname **`vm-honeypot-win`**, sensor **7.38.21003.0**, external IP `x.x.x.x` (confirms it's the
   right box).
 
 > **Egress:** the sensor is **443-only** to the Falcon cloud. The honeypot's existing `nsg-honeypot`

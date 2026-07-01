@@ -19,7 +19,7 @@ Config-as-docs for rebuild. All custom priorities are within Azure's valid range
 ## Outbound — monitored-limited egress (Option A; first match wins)
 | Prio | Name | Source | Destination | Dest port | Proto | Action |
 |---|---|---|---|---|---|---|
-| 1000 | allow-splunk-telemetry | Any | `20.236.193.253/32` | 9997 | TCP | Allow |
+| 1000 | allow-splunk-telemetry | Any | `x.x.x.x/32` | 9997 | TCP | Allow |
 | 1010 | allow-dns | Any | Any | 53 | Any | Allow |
 | 1020 | allow-web | Any | `Internet` (tag) | 80,443 | TCP | Allow |
 | 4000 | deny-soc-private | Any | `10.0.0.0/8` | * | Any | Deny |

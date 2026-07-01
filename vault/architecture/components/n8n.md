@@ -15,13 +15,13 @@ Workflow automation engine playing the SOAR role. Runs in Docker via docker comp
 | | |
 |---|---|
 | Host | `vm-soc-v2-n8n` (Azure VM, Central US, `Standard_D2s_v3`) |
-| Public Web UI | http://52.173.105.92:5678 (NSG-restricted to home IP) |
+| Public Web UI | http://x.x.x.x:5678 (NSG-restricted to home IP) |
 | Private webhook target | http://10.0.0.6:5678 (intra-VNet — Splunk-to-n8n leg) |
 | Default port | 5678 |
 | Run command | `cd ~ && docker compose up -d` (modern compose-plugin, not legacy `docker-compose`) |
 | Image | `n8nio/n8n:2.21.7` (Docker Hardened Image, digest `sha256:9f1f8e4c…`, pulled 2026-05-25 — pinned to this digest for reproducible rebuilds) |
 | Data volume | bind-mount `~/.n8n:/home/node/.n8n` (container runs as UID 1000 = `azureuser`) |
-| Compose env | `N8N_HOST=52.173.105.92`, `N8N_PROTOCOL=http`, `N8N_SECURE_COOKIE=false`, `WEBHOOK_URL=http://52.173.105.92:5678/`, `GENERIC_TIMEZONE=America/New_York` |
+| Compose env | `N8N_HOST=x.x.x.x`, `N8N_PROTOCOL=http`, `N8N_SECURE_COOKIE=false`, `WEBHOOK_URL=http://x.x.x.x:5678/`, `GENERIC_TIMEZONE=America/New_York` |
 | Docker / compose | Docker Engine + `docker compose v5.1.4` plugin (not legacy `docker-compose 1.29.x`) |
 | Auth | **n8n native user management** (owner: `owner@example.com` / secrets file). **NOT `N8N_BASIC_AUTH_*`** — deprecated since n8n 1.0+ |
 | Auto-shutdown | 11 PM Eastern |
@@ -73,8 +73,8 @@ In v1, `docker-compose up -d --force-recreate` failed with `KeyError: 'Container
 
 ## How to access (P2 / Azure)
 
-- Web UI: http://52.173.105.92:5678
-- SSH: `ssh -i C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem azureuser@52.173.105.92`
+- Web UI: http://x.x.x.x:5678
+- SSH: `ssh -i C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem azureuser@x.x.x.x`
 - See [[runbooks/n8n-workflow-deployment]] for deploying changes (note: runbook IPs need update if not yet refreshed)
 
 ## Wait-node resume URLs are signed (captured 2026-04-29)

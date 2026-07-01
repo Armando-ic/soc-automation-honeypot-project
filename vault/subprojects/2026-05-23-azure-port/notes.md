@@ -66,7 +66,7 @@ All 4 local VMware VMs lift-and-shifted to `F:\VMs\` then deleted from `C:\VMs`.
 | VNet | `vm-soc-v2-win-vnet` | Overall address space TBD — read off VNet Overview blade at Task 6 if needed. Subnet at 10.0.0.0/24; all new P2 VMs reuse the existing `default` subnet so address-space detail is informational only. |
 | Subnet | `default` | CIDR: `10.0.0.0/24` (250 available IPs; only 1 used by `vm-soc-v2-win` at .4) |
 | Existing NSG | `vm-soc-v2-win-nsg` | **Per-NIC attachment** (subnet shows `Security group: -`). New VMs will follow same pattern → one NSG per new VM, attached to its NIC. Matches plan Task 7 Step 1 Option B. |
-| `vm-soc-v2-win` | Private IP: `10.0.0.4` | Size: `Standard D4as v7` (Dasv7 family, 4 vCPU / 16 GiB, Threads/core: 2); OS: Windows; Status: **Stopped (deallocated)** — start before Task 12 Sysmon UF re-point + Task 19 verify; Public IP: `52.242.192.109`; NIC: `vm-soc-v2-win858`; Created: 2026-05-22 10:16 PM UTC |
+| `vm-soc-v2-win` | Private IP: `10.0.0.4` | Size: `Standard D4as v7` (Dasv7 family, 4 vCPU / 16 GiB, Threads/core: 2); OS: Windows; Status: **Stopped (deallocated)** — start before Task 12 Sysmon UF re-point + Task 19 verify; Public IP: `x.x.x.x`; NIC: `vm-soc-v2-win858`; Created: 2026-05-22 10:16 PM UTC |
 | Log Analytics workspace | `law-soc-v2-azure` | Workspace ID: `<workspace-id>`; Pricing: Pay-as-you-go; Active; SecurityInsights solution attached; Phase 1 workspace — not touched by P2 |
 | Home IP for NSG rules | `x.x.x.x` | Source-IP-restricted access (single /32). Per spec §6, if home IP rotates we update NSG rules from the portal. |
 
@@ -97,9 +97,9 @@ All 4 local VMware VMs lift-and-shifted to `F:\VMs\` then deleted from `C:\VMs`.
 
 | VM | Public IP | Private IP | Size | NIC name | Provisioned (Eastern) |
 |---|---|---|---|---|---|
-| vm-soc-v2-splunk | `20.236.193.253` | `10.0.0.5` | Standard_D4s_v3 | `vm-soc-v2-splunk843` | 2026-05-23 4:29 PM |
-| vm-soc-v2-n8n | `52.173.105.92` | `10.0.0.6` | Standard_D2s_v3 | `vm-soc-v2-n8n859` | 2026-05-25 |
-| vm-soc-v2-iris | `20.29.76.25` | `10.0.0.7` | Standard_D2s_v3 | `vm-soc-v2-iris706` | 2026-05-25 |
+| vm-soc-v2-splunk | `x.x.x.x` | `10.0.0.5` | Standard_D4s_v3 | `vm-soc-v2-splunk843` | 2026-05-23 4:29 PM |
+| vm-soc-v2-n8n | `x.x.x.x` | `10.0.0.6` | Standard_D2s_v3 | `vm-soc-v2-n8n859` | 2026-05-25 |
+| vm-soc-v2-iris | `x.x.x.x` | `10.0.0.7` | Standard_D2s_v3 | `vm-soc-v2-iris706` | 2026-05-25 |
 
 **SSH key:** `C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem` (RSA, generated during Task 6, reused across all three P2 Linux VMs — splunk, n8n, iris).
 
@@ -114,7 +114,7 @@ Task 17 (IRIS VM provision) pulled forward ahead of Task 15 completion because t
 - **n8n version installed: 2.21.7** (image digest `sha256:9f1f8e4c093c9924338bd168e3f813f746041d13b337753af0dbdd329e7b50f7`, Docker Hardened Image released 2025-05-06, alpine-3.22 + node 24-dev). Pinned in compose file at the user's request: today's `:latest` becomes the canonical baseline for future rebuilds.
 - **Compose file:** `/home/azureuser/docker-compose.yml` on `vm-soc-v2-n8n`. Uses bind-mount `~/.n8n:/home/node/.n8n` for state persistence; container runs as UID 1000 (= azureuser host UID), so no permission gotchas.
 - **Auth pattern:** **No basic-auth env vars** — used n8n native user management (owner account at `owner@example.com` / `[REDACTED-LAB-PW]`, matching v1 convention). Deviates from plan Task 14 Step 3's `N8N_BASIC_AUTH_*` prescription, which was incorrect — `N8N_BASIC_AUTH_*` is deprecated since n8n 1.0+ and v1 actually used native user management too.
-- **Required env vars set:** `N8N_SECURE_COOKIE=false` (honors 2026-05-12 gotcha for LAN HTTP access), `N8N_HOST=52.173.105.92`, `N8N_PROTOCOL=http`, `WEBHOOK_URL=http://52.173.105.92:5678/`, `GENERIC_TIMEZONE=America/New_York`.
+- **Required env vars set:** `N8N_SECURE_COOKIE=false` (honors 2026-05-12 gotcha for LAN HTTP access), `N8N_HOST=x.x.x.x`, `N8N_PROTOCOL=http`, `WEBHOOK_URL=http://x.x.x.x:5678/`, `GENERIC_TIMEZONE=America/New_York`.
 
 ### Gotchas discovered during n8n install (worth carrying forward)
 
@@ -137,7 +137,7 @@ Used the community package `n8n-nodes-dfir-iris` v2.0.3 by `barn4k` (https://git
 - **Compose pulled all 4 images successfully:** `iriswebapp_db:v2.4.22`, `iriswebapp_app:v2.4.22`, `iriswebapp_nginx:v2.4.22`, `rabbitmq:3-management-alpine`.
 - **5 containers running healthy:** db, rabbitmq, app, nginx (with health check), worker. Worker connects to rabbitmq + celery ready in ~15 sec post-start.
 - **Total startup time: ~30 sec** from `docker compose up -d` to "IRIS IS READY on port 443" log line.
-- **HTTPS on 443 bound** via docker-proxy on host. Web UI at `https://20.29.76.25` (self-signed cert). API at `https://10.0.0.7/api/*` for n8n.
+- **HTTPS on 443 bound** via docker-proxy on host. Web UI at `https://x.x.x.x` (self-signed cert). API at `https://10.0.0.7/api/*` for n8n.
 - **Admin login:** `administrator` / `[REDACTED-LAB-PW]` (via `IRIS_ADM_PASSWORD` in .env).
 - **API key:** captured in secrets file (set via `IRIS_ADM_API_KEY` in .env — no log-scraping needed).
 - **`/api/ping` returns `{"status":"success","message":"pong"}` with Bearer token auth — confirmed end-to-end.**
@@ -162,7 +162,7 @@ The DFIR-IRIS credential created earlier with v1 placeholder host needs updating
 ## Task 15 complete — workflow live (2026-05-25)
 
 - Workflow **SOC Triage v3** activated on `vm-soc-v2-n8n`.
-- **Production webhook URL:** `http://52.173.105.92:5678/webhook/db7245f7-8451-4bea-b47d-f6ad35b818cd` (public IP form)
+- **Production webhook URL:** `http://x.x.x.x:5678/webhook/db7245f7-8451-4bea-b47d-f6ad35b818cd` (public IP form)
 - **Production webhook URL (private IP form — preferred for Splunk→n8n VNet traffic):** `http://10.0.0.6:5678/webhook/db7245f7-8451-4bea-b47d-f6ad35b818cd`
 - **GUID `db7245f7-8451-4bea-b47d-f6ad35b818cd` survived JSON import unchanged** — matches the v3-era GUID preserved during 2026-05-12 v1 rebuild specifically so Splunk needed no change.
 - 4 credentials wired:
@@ -255,7 +255,7 @@ Both alerts had `ioc_count=0` because the synthetic test event uses `Write-Host 
 - **Boot-start:** enabled via systemd (`/etc/systemd/system/Splunkd.service`).
 - **mydfir admin user:** created (password reused from v1 secrets convention).
 - **Receiver port 9997:** listening on `0.0.0.0:9997` for forwarder traffic.
-- **Splunk Web:** `http://20.236.193.253:8000` (NSG-restricted to home IP).
+- **Splunk Web:** `http://x.x.x.x:8000` (NSG-restricted to home IP).
 - **Management API:** `https://10.0.0.5:8089` (internal); not exposed to internet.
 
 ### License status

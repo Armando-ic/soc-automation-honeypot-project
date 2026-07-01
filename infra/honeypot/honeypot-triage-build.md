@@ -264,8 +264,8 @@ const actions = (r.recommended_actions || [])
   .join('\n') || '_none_';
 
 // Azure Splunk public IP (was local mydfir-splunk/192.168.129.131 in v3)
-const splunk_link = (ctx.results_link || '').replace('mydfir-splunk', '20.236.193.253')
-                                            .replace('192.168.129.131', '20.236.193.253');
+const splunk_link = (ctx.results_link || '').replace('mydfir-splunk', 'x.x.x.x')
+                                            .replace('192.168.129.131', 'x.x.x.x');
 
 const iris_description =
 `**Summary:** ${r.alert_summary}
@@ -390,7 +390,7 @@ rotating instead of getting stuck on yesterday's #1.
 - **Throttle:** ✅ suppress results containing field value **`src_ip`**, suppress triggering for **1 hour**
 - **Action:** Webhook → **`http://10.0.0.6:5678/webhook/honeypot-triage`** (n8n **PRIVATE** VNet IP — Splunk
   `10.0.0.5` → n8n `10.0.0.6:5678`; verified routes, no public 5678 exposure). n8n's displayed Production URL uses
-  the **public** host `52.173.105.92` — swap to the private `10.0.0.6`, keep the same `/webhook/honeypot-triage` path.
+  the **public** host `x.x.x.x` — swap to the private `10.0.0.6`, keep the same `/webhook/honeypot-triage` path.
 
 > ⚠️ **The Save-As-Alert form never shows the time range** — it silently inherits the search bar's time picker. Set
 > the picker to **Last 30 minutes** before Save As, then verify every saved property in one shot:
@@ -432,7 +432,7 @@ generic on a `sendalert` test.
 ### Known cosmetic follow-up (not yet fixed)
 The IRIS "Splunk:" deep-link shows the internal host `vm-soc-v2-splunk:8000` (not externally clickable). C.4's
 `splunk_link` rewrite only maps the legacy `mydfir-splunk` / `192.168.129.131` hosts. To make it externally
-clickable, add `.replace('vm-soc-v2-splunk', '20.236.193.253')` to the C.4 rewrite chain (then re-sync the live
+clickable, add `.replace('vm-soc-v2-splunk', 'x.x.x.x')` to the C.4 rewrite chain (then re-sync the live
 Extract Result node + the build script). Cosmetic only — does not affect triage or verification.
 
 ---
