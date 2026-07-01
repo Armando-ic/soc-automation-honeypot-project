@@ -18,22 +18,28 @@ finish something we check it off here, and when either of us needs to remember w
 
 ## ▶ Where we are right now (2026-07-01)
 Pre-Phase-1 portfolio prep. Phase 0 is fully shipped and the autonomous loop is live. Sub-projects **A, B, C,
-and D are all done.** D (organize the repo for public) landed the honeypot-forward README, the structure
-cleanup, a broader public-IP scrub, and a scan gate. On top of that, a multi-agent pre-publish audit caught
-four secrets the regex scanners missed (a reused lab password, the home IP, an Azure workspace GUID, and real
-CrowdStrike IDs), three of which were live-public on the v1 `origin` repo. All four were redacted and purged
-from both repos' history with `git filter-repo`, force-pushed, and verified clean. **The only things left are
-manual:** flip `soc-automation-honeypot-project` from private to public on GitHub, and rotate the reused
-password (plus the pending IRIS key) before those VMs are next online. The portfolio video and the live-Falcon
-footage are both deferred by decision (see those sections below).
+and D are all done**, and the **repo is now PUBLIC** (flipped 2026-07-01; `ai-upgrade` is pushed and in sync
+with `origin`). D landed the honeypot-forward README, the structure cleanup, a broader public-IP scrub, a scan
+gate, and a multi-agent pre-publish audit that caught four secrets the regex scanners missed (a reused lab
+password, the home IP, an Azure workspace GUID, and real CrowdStrike IDs, three of which were live-public on the
+v1 `origin` repo). All four were redacted and history-purged from both repos with `git filter-repo`,
+force-pushed, and verified clean. Today also landed the **five-diagram Mermaid visual-hierarchy pass**
+(`4009320`) plus the **Layer-1 edge-readability follow-up** (`1411f72`). **No blocking manual items remain:**
+the reused lab passwords are throwaway lab credentials and are intentionally **not** being rotated (user
+decision 2026-07-01); the pending IRIS admin API key gets rotated when `vm-soc-v2-iris` is next allocated, not
+before (it's offline now). **The next substantive work item is Phase 1** (adversarial red-team) — brainstorm to
+spec to plan. The portfolio video and the live-Falcon footage are both deferred by decision (see those sections
+below).
 
 ---
 
 ## ⏰ On a clock (time-sensitive, not deliverables)
-- ⏰ **Falcon trial expires 2026-07-13** (treat it as ~13 days). Anything that needs the live Falcon API
-  (real poller pulls, contain round-trip, demo footage) has to happen before then.
-- 🖥️ **Both SOC VMs are up** (`vm-soc-v2-n8n`, `vm-soc-v2-splunk`) for an organic-capture window. They
-  auto-deallocate around 23:00 ET. Deallocate manually when we're done for the day.
+- ⏰ **Falcon trial expires 2026-07-13** (12 days out as of 2026-07-01 — recompute against today). Anything
+  that needs the live Falcon API (real poller pulls, contain round-trip, demo footage) has to happen before then.
+- 🖥️ **All VMs currently deallocated** (verified 2026-07-01): `vm-soc-v2-n8n`, `vm-soc-v2-splunk`,
+  `vm-soc-v2-iris`, `vm-soc-v2-win`, and `vm-honeypot-win`. No organic-capture window is open right now. Start
+  the VMs you need before any live work; they auto-deallocate around 23:00 ET, so deallocate manually when done.
+  (VM power state drifts fast — re-verify each session with `az vm list -d`.)
 
 ---
 
@@ -62,7 +68,7 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
 ## Pre-Phase-1 — Portfolio Prep 🟡 CURRENT
 
 ### A + B. Project walkthrough + ARCHITECTURE.md ✅ DONE
-- ✅ Walkthrough written and `ARCHITECTURE.md` committed (`e6022e8`), with Mermaid diagrams for the
+- ✅ Walkthrough written and `ARCHITECTURE.md` committed (`7350557`), with Mermaid diagrams for the
   Layer-1 loop and the Layer-2 internals.
 - ✅ **Layer-1 + Layer-2 Mermaid visual-hierarchy pass (2026-07-01).** All five diagrams (Layer-1 in both the
   public README front door and `ARCHITECTURE.md`, plus the four Layer-2 internals: triage, verifier, poller,
@@ -79,7 +85,7 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
   clarity only, not a good/bad or risk rating.
 
 ### C. Organize the 3 n8n workflows for presentation ✅ DONE
-- ✅ Sticky-note docs + section group-boxes added to all 3 workflow generators and JSON regenerated (`cd2c3ce`).
+- ✅ Sticky-note docs + section group-boxes added to all 3 workflow generators and JSON regenerated (`877c63d`).
 - ✅ Visual calibration of the `honeypot-triage` canvas (you hand-tuned positions and colors; every node
   verified sitting cleanly inside its section box).
 - ✅ `honeypot-triage` "What it does" card rewritten in the preferred voice (wording locked).
@@ -100,7 +106,7 @@ DFIR-Iris + Discord, with CrowdStrike Falcon as detect-only EDR plus Contain.
   the per-run cap, "ack for every one" → "until the first failure"; contain "verifies" → "reads back the status",
   "never strands" → "always attempts a self-lift", the contained-status read reframed as observed-not-gated). No
   hard bugs found.
-- ✅ Commit C (generators + regenerated JSON + checklists) — landed as `84453f2`.
+- ✅ Commit C (generators + regenerated JSON + checklists) — landed across `73f9354`..`84cff8a`.
 
 ### Capture live Falcon footage ⛔ trial-gated (before 2026-07-13)
 This is split from video production on purpose. The raw clips need live Falcon; the edit does not.
@@ -112,18 +118,24 @@ This is split from video production on purpose. The raw clips need live Falcon; 
   clips now.
 
 ### D. Organize the honeypot repo for public ✅ DONE (2026-07-01)
-- ✅ Repo structure cleanup + honeypot-forward README with the ARCHITECTURE diagram (Tasks 1-6, `c855f8b`..`63598b2`).
-- ✅ Broader public-IP `x.x.x.x` scrub (Task 6b, `625dc9f`) and the scan gate + gitleaks note (Task 7, `3d862d7`).
+- ✅ Repo structure cleanup + honeypot-forward README with the ARCHITECTURE diagram (Tasks 1-6, `27c7cb7`..`5d30a95`).
+- ✅ Broader public-IP `x.x.x.x` scrub (Task 6b, `3673980`) and the scan gate + gitleaks note (Task 7, `debe667`).
 - ✅ **Multi-agent pre-publish audit + secret purge.** The semantic audit found four blockers gitleaks and
   trufflehog both rated clean: a reused lab password, the residential home IP, an Azure Log Analytics workspace
-  GUID, and real CrowdStrike IDs in a test fixture. Redacted (`ed23df1`) plus four approved PII scrubs, then
-  history-purged from BOTH this repo and the public v1 `origin` via `git filter-repo` and force-pushed
-  (honeypot tip is now the rewritten `2fd9013`). Verified zero occurrences across all commits. See the memory
+  GUID, and real CrowdStrike IDs in a test fixture. Redacted plus four approved PII scrubs applied in `2fd9013`,
+  then history-purged from BOTH this repo and the public v1 `origin` via `git filter-repo` and force-pushed
+  (`2fd9013` is the rewrite base; the branch has since advanced to `1411f72`). Verified zero occurrences across
+  all commits. See the memory
   `secret-exposure-remediation-2026-07-01` and the plan `docs/superpowers/plans/2026-07-01-honeypot-repo-public-prep.md`.
-- ⬜ **Manual, remaining:** review the rendered README on GitHub, then flip the repo private → public. Rotate the
-  reused password on n8n/IRIS/Splunk (and the pending IRIS key) before those VMs are next online.
-- 📝 **Loose end:** the local-only `v4-gcp-native` branch still carries these secrets in its history and is not
-  yet audited for its own GCP-native content; it needs its own scrub before it is ever pushed.
+- ✅ **Reviewed the rendered README and flipped the repo private → public (2026-07-01).**
+- ✅ **Decision (2026-07-01):** the reused lab password is a throwaway lab credential and is intentionally
+  **not** being rotated.
+- ⏸️ **Deferred:** rotate the pending IRIS admin API key when `vm-soc-v2-iris` is next allocated (not before —
+  it's offline now). Load the new value from the gitignored creds file, never inline.
+- ✅ **Loose end resolved (2026-07-01):** `v4-gcp-native` was rebased `--onto` the clean `v3` base (`77c9952`) so
+  it inherits no purged secrets, and backed up to the **PRIVATE** repo `Armando-ic/soc-v4-gcp-redacted`
+  (gh-confirmed private). It **must stay private** (it documents the live redacted.com security design and
+  blind spots) and would need a genericization pass before it could ever go public. See memory `soc-v4-gcp-redacted`.
 
 ---
 
@@ -153,3 +165,4 @@ Each phase gets brainstormed into its own spec then plan before any building sta
 - No inline secret paste; the user loads secrets from the gitignored creds file on a local machine.
 - VM writes go via base64 over `az vm run-command` with per-action approval.
 - Commit trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
+- The public repo's default branch is intentionally `ai-upgrade` (deliberately not renamed to `main`).
