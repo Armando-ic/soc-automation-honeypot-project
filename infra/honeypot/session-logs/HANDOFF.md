@@ -1,5 +1,10 @@
 # Honeypot Agentic-SOC Upgrade — HANDOFF (2026-06-29)
 
+> **STATUS 2026-07-01:** Phase 0 shipped and sub-project D (public-repo prep) is DONE, including a multi-agent
+> pre-publish audit + `git filter-repo` secret purge across both this repo and the public v1 `origin` (see
+> `MASTER-CHECKLIST.md` and memory `secret-exposure-remediation-2026-07-01`). Remaining is manual: flip the repo
+> public and rotate the reused password. Everything below is the Phase-0 build record.
+
 **For the next fresh Claude instance. Read this first**, then the spec + Plan 0A.
 
 ## What this is

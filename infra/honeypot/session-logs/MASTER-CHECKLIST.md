@@ -4,7 +4,7 @@
 finish something we check it off here, and when either of us needs to remember where we are, we read the
 "Where we are right now" pointer and scan the phase we're in. Keep it current as work lands.
 
-**Last updated:** 2026-06-30
+**Last updated:** 2026-07-01
 
 **Companion docs (read these for detail, this file is the index):**
 - Build state: [`HANDOFF.md`](HANDOFF.md) (canonical 🟢 0D-2 block)
@@ -16,13 +16,16 @@ finish something we check it off here, and when either of us needs to remember w
 
 ---
 
-## ▶ Where we are right now (2026-06-30)
-Pre-Phase-1 portfolio prep. Phase 0 is fully shipped and the autonomous loop is live. Sub-projects **A, B,
-and C are all done** now: the three n8n workflows are organized for presentation (doc strips, section
-group-boxes, voice-passed cards) and committed (`84453f2`). The next deliverable is sub-project **D**:
-organize the honeypot repo for public (secret-scrub pass, repo structure cleanup, a public README with the
-ARCHITECTURE diagram embedded). The portfolio video and the live-Falcon footage are both deferred by
-decision (see those sections below).
+## ▶ Where we are right now (2026-07-01)
+Pre-Phase-1 portfolio prep. Phase 0 is fully shipped and the autonomous loop is live. Sub-projects **A, B, C,
+and D are all done.** D (organize the repo for public) landed the honeypot-forward README, the structure
+cleanup, a broader public-IP scrub, and a scan gate. On top of that, a multi-agent pre-publish audit caught
+four secrets the regex scanners missed (a reused lab password, the home IP, an Azure workspace GUID, and real
+CrowdStrike IDs), three of which were live-public on the v1 `origin` repo. All four were redacted and purged
+from both repos' history with `git filter-repo`, force-pushed, and verified clean. **The only things left are
+manual:** flip `soc-automation-honeypot-project` from private to public on GitHub, and rotate the reused
+password (plus the pending IRIS key) before those VMs are next online. The portfolio video and the live-Falcon
+footage are both deferred by decision (see those sections below).
 
 ---
 
@@ -95,11 +98,19 @@ This is split from video production on purpose. The raw clips need live Falcon; 
   project is complete, and Falcon access gets re-established at that point rather than capturing insurance
   clips now.
 
-### D. Organize the honeypot repo for public ⬜
-- ⬜ Secret-scrub pass (gitignored creds file, any baked credential IDs / `instanceId`, the plaintext
-  secrets in `SOC-Automation-Project.md`).
-- ⬜ Repo structure cleanup.
-- ⬜ Public README with the ARCHITECTURE diagram embedded.
+### D. Organize the honeypot repo for public ✅ DONE (2026-07-01)
+- ✅ Repo structure cleanup + honeypot-forward README with the ARCHITECTURE diagram (Tasks 1-6, `c855f8b`..`63598b2`).
+- ✅ Broader public-IP `x.x.x.x` scrub (Task 6b, `625dc9f`) and the scan gate + gitleaks note (Task 7, `3d862d7`).
+- ✅ **Multi-agent pre-publish audit + secret purge.** The semantic audit found four blockers gitleaks and
+  trufflehog both rated clean: a reused lab password, the residential home IP, an Azure Log Analytics workspace
+  GUID, and real CrowdStrike IDs in a test fixture. Redacted (`ed23df1`) plus four approved PII scrubs, then
+  history-purged from BOTH this repo and the public v1 `origin` via `git filter-repo` and force-pushed
+  (honeypot tip is now the rewritten `2fd9013`). Verified zero occurrences across all commits. See the memory
+  `secret-exposure-remediation-2026-07-01` and the plan `docs/superpowers/plans/2026-07-01-honeypot-repo-public-prep.md`.
+- ⬜ **Manual, remaining:** review the rendered README on GitHub, then flip the repo private → public. Rotate the
+  reused password on n8n/IRIS/Splunk (and the pending IRIS key) before those VMs are next online.
+- 📝 **Loose end:** the local-only `v4-gcp-native` branch still carries these secrets in its history and is not
+  yet audited for its own GCP-native content; it needs its own scrub before it is ever pushed.
 
 ---
 
