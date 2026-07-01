@@ -313,7 +313,7 @@ Contain with an AID-pin safety rail.** Two feeders, one brain, a deterministic g
 opinion, and a response action that refuses to hurt the wrong box.
 
 ### Where to go deeper (the canonical docs)
-- **State of the build:** `infra/honeypot/HANDOFF.md` (the 🟢 0D-2 block).
+- **State of the build:** `infra/honeypot/session-logs/HANDOFF.md` (the 🟢 0D-2 block).
 - **Build runbooks:** `falcon-poller-build.md`, `honeypot-triage-build.md`, the `build_*_workflow.py` generators.
 - **Evidence:** `falcon-0d2-validation.md` (incl. §6, today's synthetic Contain-recommended run).
 - **The guardrail code:** `triage-verifier/triage_verifier/verifier.py` + `constants.py`; `grounding-service/`.

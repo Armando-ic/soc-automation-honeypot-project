@@ -3,9 +3,9 @@
 **You are continuing a honeypot agentic-SOC portfolio project.** This file supersedes the earlier
 2026-06-30 handoff (preserved in git history at commit `99f3e39`). Read order:
 1. **This file** (where we are + the immediate next action).
-2. `infra/honeypot/MASTER-CHECKLIST.md` — the living progress tracker. This is the canonical state; it
+2. `infra/honeypot/session-logs/MASTER-CHECKLIST.md` — the living progress tracker. This is the canonical state; it
    shows every phase, what's done, and what's left. Read it second.
-3. `infra/honeypot/HANDOFF.md` (🟢 0D-2 block) — deeper build state for Phase 0.
+3. `infra/honeypot/session-logs/HANDOFF.md` (🟢 0D-2 block) — deeper build state for Phase 0.
 4. `infra/honeypot/ARCHITECTURE.md` — the plain-language walkthrough of the whole system.
 
 > ⚠️ **Writing conventions (the user cares about these):** write in a **casual, conversational,
@@ -30,7 +30,7 @@ is saved to disk but **not committed**. Your first job is to commit it. Five fil
 
 - `infra/honeypot/build_falcon_poller_workflow.py` + `JSON/falcon-alert-poller.json`
 - `infra/honeypot/build_falcon_contain_workflow.py` + `JSON/falcon-contain.json`
-- `infra/honeypot/MASTER-CHECKLIST.md`
+- `infra/honeypot/session-logs/MASTER-CHECKLIST.md`
 
 **Do NOT `git add -A`.** Add exactly those five paths. Keep these untracked files OUT of the commit:
 `.playwright-mcp/`, `infra/honeypot/__pycache__/`, and the three throwaway exports
@@ -40,7 +40,7 @@ is saved to disk but **not committed**. Your first job is to commit it. Five fil
 
 Suggested commit (multi `-m`, ends with the required trailer):
 ```
-git add infra/honeypot/build_falcon_poller_workflow.py JSON/falcon-alert-poller.json infra/honeypot/build_falcon_contain_workflow.py JSON/falcon-contain.json infra/honeypot/MASTER-CHECKLIST.md
+git add infra/honeypot/build_falcon_poller_workflow.py JSON/falcon-alert-poller.json infra/honeypot/build_falcon_contain_workflow.py JSON/falcon-contain.json infra/honeypot/session-logs/MASTER-CHECKLIST.md
 git commit \
   -m "docs(honeypot): poller + contain presentation polish, voice + accuracy pass" \
   -m "Fold the hand-tuned n8n layouts back into both generators via POS maps (sections recolored near-black). Re-added the poller IF has_new node that was deleted in the user's export, at [940,0]." \

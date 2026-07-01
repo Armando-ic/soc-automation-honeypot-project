@@ -1,6 +1,6 @@
 # 0D-2 — handoff to the next Claude instance (2026-06-29)
 
-**Read `infra/honeypot/HANDOFF.md` first** — the "🟢 0D-2" block is the canonical, full state. This doc is a
+**Read `infra/honeypot/session-logs/HANDOFF.md` first** — the "🟢 0D-2" block is the canonical, full state. This doc is a
 short pointer + the **open decisions** the user wants to work through next session (with analysis already done).
 
 > **UPDATE 2026-06-29 (cont. session):** Q1 + #10 + Q2 **RESOLVED** — poller **ACTIVE**, #10 bounded-watermark
