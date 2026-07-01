@@ -1,3 +1,23 @@
+# ============================================================================
+# 2026-07-01 secret-remediation note (honeypot repo public-prep, sub-project D)
+# ----------------------------------------------------------------------------
+# The DFIR-IRIS admin API key that had been committed at
+# vault/subprojects/2026-05-23-azure-port/notes.md was purged from full history on
+# both the public origin repo (v2-azure) and this repo (ai-upgrade) via
+# `git filter-repo --replace-text`, then force-pushed. That line now holds a
+# ***REMOVED-IRIS-ADMIN-API-KEY*** marker. Re-verified 2026-07-01: gitleaks reports
+# "no leaks found" across all 225 commits, and trufflehog finds 0 verified secrets in
+# any tracked file. The only verified hits live in the gitignored
+# SOC-Automation-Project.md creds file and an untracked downloads/ artifact, neither of
+# which is committed.
+#
+# TOOLING CAVEAT: gitleaks' and trufflehog's default rules MISS bare hex tokens sitting
+# in prose (they matched none of the IRIS key while it was live). The original catch came
+# from a context-classifying scan (scratchpad targeted_scan.py), so treat that targeted
+# pass, not the default detectors, as the real gate. trufflehog's remaining unverified
+# hits are false positives on a demo sha256 IOC hash and the vendored CrowdStrike sample.
+# ============================================================================
+
 # gitleaks config — extends the default ruleset with path-scoped allowlists for
 # vendored upstream artifacts whose EXAMPLE data trips the generic-api-key detector.
 #
