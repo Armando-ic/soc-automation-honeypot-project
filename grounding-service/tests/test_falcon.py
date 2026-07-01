@@ -88,7 +88,7 @@ def test_advance_bounds_seen():
 
 from grounding_service.falcon import alert_created, composite_id_of, map_alert, map_alerts
 
-BEHAVIORAL = {  # real us-2 EICAR behavioral alert shape (Task 0 live dump 2026-06-29)
+BEHAVIORAL = {  # us-2 EICAR behavioral alert shape (from a real dump; identifiers redacted)
     "origin_cid": "00000000000000000000000000000000",
     "id": "ind:11111111111111111111111111111111:5106908871-10418-995344",
     "timestamp": "2026-06-29T15:10:32.158Z",

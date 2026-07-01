@@ -36,7 +36,7 @@ If the MCP appears not to be connected, see [[runbooks/splunk-mcp-setup]].
 | Per-MITRE-technique detection content | `detections/` (one page per T-id; `_template.md` to add new) |
 | Recent activity history | `log.md` (tail it) |
 | Catalog of every wiki page | `index.md` |
-| Original transcripts, screenshots, JSON exports | `../Transcripts/`, `../Photos/`, `../JSON/` at project root |
+| Original screenshots, JSON exports | `../Photos/`, `../JSON/` at project root |
 | Past session notes | `sources/session-notes/` |
 
 ## Sub-project conventions

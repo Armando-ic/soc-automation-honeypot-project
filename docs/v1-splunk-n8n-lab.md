@@ -67,7 +67,7 @@ D1 frozen at 2026-05-12 after a from-scratch rebuild of n8n + IRIS (forced by an
 ## What's deliberately NOT in this repo
 
 - **Secrets** — API keys, VM passwords, IRIS admin password, etc. Runtime values live in `.env` (gitignored, see `.env.example`); a human-readable lab credential sheet at `SOC-Automation-Project.md` (gitignored) is consulted by the install runbooks. See [vault/runbooks/secrets-management.md](vault/runbooks/secrets-management.md) for the full layout and the 2026-05-18 pre-publish remediation notes.
-- **VM disk images** — too large for git. The vault documents how to rebuild each VM from scratch in [vault/subprojects/2026-04-30-detection-foundations/runbook.md](vault/subprojects/2026-04-30-detection-foundations/runbook.md) and the transcripts.
+- **VM disk images** — too large for git. The vault documents how to rebuild each VM from scratch in [vault/subprojects/2026-04-30-detection-foundations/runbook.md](vault/subprojects/2026-04-30-detection-foundations/runbook.md).
 - **Splunk MCP server source** — kept locally under `splunk-mcp-main/` for development convenience but not redistributed here. Upstream: [livehybrid/splunk-mcp](https://github.com/livehybrid/splunk-mcp). Project notes on the local mirror are in [vault/sources/session-notes/2026-04-27-mcp-mirror-fork.md](vault/sources/session-notes/2026-04-27-mcp-mirror-fork.md).
 - **OneDrive-trapped legacy VMs** — see the 2026-05-08 log entry.
 
