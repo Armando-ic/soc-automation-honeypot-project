@@ -2,7 +2,7 @@
 status: complete
 updated: 2026-05-26
 sub_project: P2 (Azure Port)
-related: [[spec]], [[plan]], [[runbook]], [[notes]], [[comparison-latency]], [[../../../SOC-Automation-Project-to-Azure-Port]]
+related: [[spec]], [[plan]], [[runbook]], [[notes]], [[comparison-latency]], [[../../../docs/SOC-Automation-Project-to-Azure-Port]]
 ---
 
 # Sub-project P2 — Azure Port (v1 → Azure IaaS)
@@ -73,6 +73,6 @@ Port the local-VMware SOC stack (Splunk + n8n + DFIR-IRIS) to Azure IaaS, then d
 ## References
 
 - [[spec]] — full design with per-VM specs, NSG rules, sequencing, rollback.
-- `../../../SOC-Automation-Project-to-Azure-Port.md` — durable handoff doc with pivot story (cherry-pick from `v3-microsoft-native` as pre-flight).
+- `../../../docs/SOC-Automation-Project-to-Azure-Port.md` — durable handoff doc with pivot story (cherry-pick from `v3-microsoft-native` as pre-flight).
 - [[../../architecture/components/splunk]], [[../../architecture/components/n8n]], [[../../architecture/components/dfir-iris]] — v1 component definitions.
 - [[../../architecture/current-state]] — v1 architecture diagram.
