@@ -1,77 +1,103 @@
-# SOC Automation Project
+# Honeypot Agentic-SOC
 
-An AI-augmented SOC (Security Operations Center) automation lab. Splunk SIEM ingests endpoint telemetry, fires saved-search alerts into an n8n SOAR pipeline, where Claude Opus 4.7 performs Tier-1 triage with VirusTotal/AbuseIPDB enrichment tools, then writes the result into DFIR-Iris as a case-management alert.
+An internet-exposed Windows honeypot gets attacked for real, its logs and EDR detections flow into a SOAR pipeline, Claude Opus triages each alert, a verifier gate plus a second-opinion AI judge decide whether that triage is trustworthy, and it lands as a case in DFIR-Iris with a Discord ping. If the alert is bad enough, the system recommends network-isolating the box through CrowdStrike Falcon.
 
-Built as a portfolio project to demonstrate detection engineering, SIEM operations, and human-in-the-loop AI for security workflows.
+Nothing here is synthetic. The attacks are real strangers hammering an exposed RDP port.
 
-## Architecture
+## The loop at a glance
 
+```mermaid
+flowchart TB
+  ATT["🌐 Internet attacker"]
+
+  subgraph HPNET["vnet-honeypot · 10.66.0.0/24 · UN-peered · rg-honeypot"]
+    HP["vm-honeypot-win<br/>priv 10.66.0.4 · pub x.x.x.x<br/>Win Server 2022<br/>Sysmon + Splunk UF + Falcon sensor"]
+  end
+
+  subgraph SOCNET["SOC VNet · 10.0.0.0/16 · rg-soc-v2-azure-central-us"]
+    SPL["vm-soc-v2-splunk<br/>priv 10.0.0.5 · pub x.x.x.x<br/>honeypot index + saved-search alerts"]
+    subgraph N8NVM["vm-soc-v2-n8n · 10.0.0.6 · docker network 'soar-net'"]
+      N8N["n8n workflows<br/>honeypot-triage · falcon-alert-poller · falcon-contain"]
+      GS["grounding-service :8000<br/>/retrieve · /normalize · /verify · /falcon/*"]
+      QD["qdrant<br/>ATT&CK RAG"]
+    end
+    IRIS["vm-soc-v2-iris<br/>DFIR-Iris (case mgmt)"]
+  end
+
+  CS["☁️ CrowdStrike Falcon cloud<br/>api.us-2.crowdstrike.com"]
+  ENR["🌎 Enrichment APIs<br/>AbuseIPDB · GreyNoise · VirusTotal"]
+  DISC["💬 Discord"]
+
+  ATT -->|"RDP 3389 / SMB 445 / web 80,443"| HP
+  HP -->|"Splunk UF → :9997 (over PUBLIC IP, un-peered)"| SPL
+  HP -->|"sensor telemetry :443"| CS
+  SPL -->|"saved-search alert → webhook :5678"| N8N
+  CS -->|"poller pulls new alerts (Alerts API)"| N8N
+  N8N --- GS
+  GS --- QD
+  N8N -->|"enrich the attacker IP"| ENR
+  N8N -->|"verified alert → case"| IRIS
+  N8N -->|"embed (triage / contain results)"| DISC
+  N8N -->|"Contain / Lift (AID-pinned)"| CS
 ```
-Windows endpoint                            Splunk SIEM            n8n SOAR              DFIR-Iris
-(Sysmon + Universal     ─►   ingestion ─►  saved-search    ─►   Claude triage    ─►    case alert
- Forwarder + Atomic                          alert action          + enrichment           + analyst
- Red Team)                                   (webhook)             tools                  review
-```
 
-Lab on a private VMware NAT subnet: Win10-v2 (192.168.129.130), Splunk (.131), n8n (.132), IRIS (.133). Full topology and host inventory in [vault/architecture/current-state.md](vault/architecture/current-state.md).
+For the full box-by-box walkthrough, see [ARCHITECTURE.md](infra/honeypot/ARCHITECTURE.md).
 
-## What's in the repo
+## What makes it interesting
 
-| Path | Contents |
-|---|---|
-| [vault/](vault/) | Documentation vault — architecture, decisions (ADRs), sub-projects, runbooks, detection catalog |
-| [JSON/](JSON/) | n8n workflow exports + Iris OpenAPI spec |
-| [scripts/](scripts/) | Python automation scripts (Sysmon install, ART invocation, paramiko SSH helpers) |
-| [Transcripts/](Transcripts/) | Tutorial transcripts from the original MyDFIR SOC Project 2.0 video series |
-
-## What's shipped
-
-Three sub-projects shipped end-to-end:
-
-- **A1 — Structured Outputs** ([spec](vault/subprojects/2026-04-27-structured-outputs/spec.md)) — replaced freeform Claude output with a `submit_triage_result` tool returning a versioned structured schema, enabling programmatic IOC routing and severity mapping into Iris.
-- **A2 — Iris Escalation Gate** ([spec](vault/subprojects/2026-04-28-iris-escalation-gate/spec.md)) — Slack-interactive human-approval gate via signed Wait-resume URLs and Iris's escalate endpoint. **Retired by ADR 0007** (Slack removed; approval moves to IRIS-native review); design preserved in vault as historical reference.
-- **D1 — Detection Foundations** ([spec](vault/subprojects/2026-04-30-detection-foundations/spec.md)) — Sysmon 15.20 + SwiftOnSecurity config on the endpoint, Atomic Red Team for purple-team test execution, one worked-example detection (T1059.001 PowerShell Encoded Command) firing end-to-end through the pipeline.
-
-D1 frozen at 2026-05-12 after a from-scratch rebuild of n8n + IRIS (forced by an unrelated OneDrive incident — recovery story documented in [vault/log.md](vault/log.md) entry 2026-05-08). Full chain re-validated post-rebuild: IRIS alert #4 produced from a real ART-shape event traversing Win10 → Sysmon → UF → Splunk saved search → webhook → n8n → Claude → IRIS.
-
-## Highlights worth reading
-
-- **[vault/detections/t1059-001-powershell-encoded.md](vault/detections/t1059-001-powershell-encoded.md)** — D1's worked-example detection page. Captures the SPL, what events look like in Sysmon's wire format, the live-fire evidence trail (alerts #51, #52 on 2026-04-30 → #4 on 2026-05-12 post-rebuild), and the gotchas surfaced along the way.
-- **[vault/decisions/](vault/decisions/)** — 7 ADRs documenting non-obvious choices: vault layout, API vs subscription tradeoffs, MCP mirroring, sub-project splitting, the additive `ioc_type` schema enhancement, the Sysmon add-on decision, and the Slack-removal / IRIS-native-gate pivot.
-- **[vault/architecture/components/](vault/architecture/components/)** — One reference doc per major component (Splunk, Sysmon, n8n, dfir-iris, claude-api, splunk-mcp). Captures install metadata, EventCode/field references, ID catalogs, and gotchas in operational terms.
-- **[vault/subprojects/2026-04-30-detection-foundations/notes.md](vault/subprojects/2026-04-30-detection-foundations/notes.md)** — D1's working notes. Includes the Phase 11 (2026-05-12) post-rebuild revalidation gotchas, including a non-obvious Splunk REST-API trap that took a 4-hour debug to surface.
+- **Verifier-gated AI triage.** Claude Opus writes a structured triage, then a verifier gate plus an advisory AI judge decide whether it is trustworthy before anything downstream acts on it. The AI is instructed to stay grounded; the verifier is what actually enforces it.
+- **Real attacks, not synthetic data.** The honeypot is a live, internet-exposed RDP/SMB/web box, so the telemetry is genuine adversary behavior, not lab replays.
+- **Two detection sources, one pipeline.** A Splunk saved-search webhook and a CrowdStrike Falcon Alerts-API poller both feed the same n8n triage workflow, so log-based and EDR-based alerts get the same treatment.
+- **Autonomous, with a human in the loop for response.** The Falcon poller runs every 15 minutes on its own. Network-isolation (Contain) stays a human-fired action, pinned to the host's Falcon agent ID so it cannot isolate the wrong machine.
 
 ## Tech stack
 
 | Layer | Stack |
 |---|---|
-| SIEM | Splunk Enterprise 10.2.2 + Splunk_TA_microsoft_sysmon |
-| Endpoint telemetry | Sysmon 15.20 + SwiftOnSecurity config (commit `1836897f`) + Splunk Universal Forwarder |
-| Purple-team execution | Atomic Red Team (Red Canary) + AtomicTestHarnesses |
-| SOAR | n8n on Ubuntu Server 24.04 via docker-compose |
-| AI triage | Claude Opus 4.7 via Anthropic API, agentic with tool-use (AbuseIPDB, VirusTotal, structured-output submission) |
-| Case management | DFIR-Iris v2.4.22 on Ubuntu Server 24.04 via docker-compose |
-| Lab infrastructure | VMware Workstation Pro on Windows 11 host, NVMe-resident VMs |
+| Honeypot | Azure Windows Server 2022 + Sysmon + Splunk Universal Forwarder + CrowdStrike Falcon sensor |
+| SIEM | Splunk (honeypot index, saved-search alerts) |
+| SOAR | n8n (`honeypot-triage`, `falcon-alert-poller`, `falcon-contain`) |
+| AI triage | Claude Opus 4.8 via `grounding-service` (`/normalize`, `/retrieve`, `/verify`, `/falcon/*`) |
+| RAG | qdrant (MITRE ATT&CK technique embeddings) |
+| Verifier | `triage-verifier` (eval harness + verifier gate) |
+| EDR | CrowdStrike Falcon (detect-only, plus Contain/Lift response) |
+| Case management | DFIR-Iris |
+| Enrichment | AbuseIPDB, GreyNoise, VirusTotal |
+| Notify | Discord |
 
-## Next steps
+## What's shipped
 
-- **A3 — Enrichment Expansion** ([stub](vault/subprojects/2026-05-12-enrichment-expansion/README.md)) — add 2–3 new IOC enrichment sources (urlscan.io, URLhaus, IP2Location) beyond the current AbuseIPDB + VirusTotal pair. Awaiting brainstorm.
-- **Pivot toward Microsoft Sentinel / Azure SOC tooling.** D1 was frozen to clear the runway for this. The Splunk fundamentals (SPL, detection engineering, MITRE mapping, SOAR integration) translate; KQL and Azure-native security tooling are the next learning surface. Tracked separately from this repo.
+Phase 0 is complete and the autonomous loop is live: the Azure honeypot VM with its telemetry, CrowdStrike Falcon in detect-only mode plus a validated Contain/Lift round-trip, the `grounding-service` pipeline (`/normalize`, `/retrieve`, `/verify`), the `honeypot-triage` workflow running end to end, and the `falcon-alert-poller` polling the Falcon Alerts API every 15 minutes.
 
-## Reading order for a fresh visitor
+## Roadmap
 
-1. This README (you are here)
-2. [vault/architecture/current-state.md](vault/architecture/current-state.md) — what the lab looks like today
-3. [vault/detections/t1059-001-powershell-encoded.md](vault/detections/t1059-001-powershell-encoded.md) — the worked example as a microcosm of how the whole project operates
-4. Any sub-project's spec → plan → runbook → notes — for end-to-end design + execution + ops + learnings on a specific piece of work
+- **Phase 1: Adversarial red-team.** OWASP-LLM Top-10 and MITRE ATLAS payloads against the guardrails, with before-and-after measurement.
+- **Phase 2: RAG + detection-as-code.** Claude-drafted Sigma rules on top of the existing ATT&CK RAG corpus.
+- **Phase 3: Malware-triage add-on.** File hash to VirusTotal plus Claude static de-obfuscation.
+- **Phase 4: splunk-MCP as a first-class Opus tool.**
+- **Phase 5: Multi-agent.** Separate enrichment, triage, and escalation agents under a supervisor.
 
-## What's deliberately NOT in this repo
+## Repo layout
 
-- **Secrets** — API keys, VM passwords, IRIS admin password, etc. Runtime values live in `.env` (gitignored, see `.env.example`); a human-readable lab credential sheet at `SOC-Automation-Project.md` (gitignored) is consulted by the install runbooks. See [vault/runbooks/secrets-management.md](vault/runbooks/secrets-management.md) for the full layout and the 2026-05-18 pre-publish remediation notes.
-- **VM disk images** — too large for git. The vault documents how to rebuild each VM from scratch in [vault/subprojects/2026-04-30-detection-foundations/runbook.md](vault/subprojects/2026-04-30-detection-foundations/runbook.md) and the transcripts.
-- **Splunk MCP server source** — kept locally under `splunk-mcp-main/` for development convenience but not redistributed here. Upstream: [livehybrid/splunk-mcp](https://github.com/livehybrid/splunk-mcp). Project notes on the local mirror are in [vault/sources/session-notes/2026-04-27-mcp-mirror-fork.md](vault/sources/session-notes/2026-04-27-mcp-mirror-fork.md).
-- **OneDrive-trapped legacy VMs** — see the 2026-05-08 log entry.
+| Path | What's there |
+|---|---|
+| [infra/honeypot/ARCHITECTURE.md](infra/honeypot/ARCHITECTURE.md) | The full architecture walkthrough (Layer 1 loop and Layer 2 internals) |
+| [infra/honeypot/RUNBOOK.md](infra/honeypot/RUNBOOK.md) | How to operate the system |
+| [grounding-service/](grounding-service/) | The Python triage pipeline (normalize, retrieve, verify, Falcon helpers) |
+| [triage-verifier/](triage-verifier/) | The verifier gate and eval harness |
+| [infra/honeypot/](infra/honeypot/) | Workflow generators, Falcon setup and validation docs, NSG rules, Sysmon config |
+| [JSON/](JSON/) | Importable n8n workflow exports |
+| [vault/](vault/) | The v1 documentation vault (architecture, ADRs, runbooks, detections) |
+| [docs/v1-splunk-n8n-lab.md](docs/v1-splunk-n8n-lab.md) | The v1 story this grew out of |
 
-## License + attribution
+## Where this came from: the v1 local SOAR lab
 
-Personal portfolio project. Original tutorial inspiration: MyDFIR (Stephen) — *SOC Automation Project 2.0* video series and bonus modules. This repo extends that tutorial into structured outputs, an escalation gate, detection foundations with Sysmon + ART, and a fresh-from-scratch rebuild story.
+This started as a local Splunk + n8n + VMware SOAR lab (the v1 project), built from the MyDFIR tutorial and then extended with structured outputs, an escalation gate, and detection foundations. It was re-architected into this cloud-native, autonomous, agentic honeypot SOC. The full v1 writeup is preserved at [docs/v1-splunk-n8n-lab.md](docs/v1-splunk-n8n-lab.md).
+
+## Attribution
+
+Original tutorial inspiration: MyDFIR (Stephen), *SOC Automation Project 2.0* video series (on YouTube). This repo extends that foundation into the agentic-honeypot direction: an internet-exposed honeypot, CrowdStrike Falcon EDR, verifier-gated Claude Opus triage, and an autonomous poll loop.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

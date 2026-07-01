@@ -19,11 +19,11 @@ flowchart TB
   ATT["🌐 Internet attacker"]
 
   subgraph HPNET["vnet-honeypot · 10.66.0.0/24 · UN-peered · rg-honeypot"]
-    HP["vm-honeypot-win<br/>priv 10.66.0.4 · pub 128.203.185.25<br/>Win Server 2022<br/>Sysmon + Splunk UF + Falcon sensor"]
+    HP["vm-honeypot-win<br/>priv 10.66.0.4 · pub x.x.x.x<br/>Win Server 2022<br/>Sysmon + Splunk UF + Falcon sensor"]
   end
 
   subgraph SOCNET["SOC VNet · 10.0.0.0/16 · rg-soc-v2-azure-central-us"]
-    SPL["vm-soc-v2-splunk<br/>priv 10.0.0.5 · pub 20.236.193.253<br/>honeypot index + saved-search alerts"]
+    SPL["vm-soc-v2-splunk<br/>priv 10.0.0.5 · pub x.x.x.x<br/>honeypot index + saved-search alerts"]
     subgraph N8NVM["vm-soc-v2-n8n · 10.0.0.6 · docker network 'soar-net'"]
       N8N["n8n workflows<br/>honeypot-triage · falcon-alert-poller · falcon-contain"]
       GS["grounding-service :8000<br/>/retrieve · /normalize · /verify · /falcon/*"]
@@ -54,7 +54,7 @@ flowchart TB
 | Player | Lives on | Job |
 |---|---|---|
 | **vm-honeypot-win** | `rg-honeypot`, its own un-peered VNet (`10.66.0.0/24`) | The bait. Exposed RDP/SMB/web. Runs Sysmon (deep process logging), the Splunk forwarder, and the Falcon sensor. |
-| **vm-soc-v2-splunk** | SOC VNet `10.0.0.5` (public `20.236.193.253`) | The SIEM. Receives honeypot logs into the `honeypot` index; saved searches fire alerts. |
+| **vm-soc-v2-splunk** | SOC VNet `10.0.0.5` (public `x.x.x.x`) | The SIEM. Receives honeypot logs into the `honeypot` index; saved searches fire alerts. |
 | **vm-soc-v2-n8n** | SOC VNet `10.0.0.6` | The brain box. Runs n8n (the workflows) + `grounding-service` + `qdrant`, all in Docker on the `soar-net` network. |
 | **grounding-service** | container on the n8n box, port 8000 | The Python "smarts": MITRE retrieval, enrichment normalizing, the verifier gate, and the Falcon poller helpers. |
 | **qdrant** | container on the n8n box | Vector DB holding the ATT&CK technique embeddings (the RAG part). |
@@ -87,7 +87,7 @@ flowchart TB
 
 - **The honeypot can't talk to the SOC network directly.** Its VNet is **un-peered** on purpose, and the egress
   NSG explicitly *denies* `10.0.0.0/8`. So how do logs get to Splunk? The forwarder ships to Splunk's **public**
-  IP (`20.236.193.253:9997`), with a matching allow-rule. The honeypot is treated as hostile — it never gets a
+  IP (`x.x.x.x:9997`), with a matching allow-rule. The honeypot is treated as hostile — it never gets a
   private path into the real infrastructure.
 - **Once it's "owned," the box can only reach 3 things.** The egress rules lock outbound to Splunk:9997, DNS, and
   web 80/443 — then deny everything else. No reverse shells on weird ports, no mining pools, no scanning. The
