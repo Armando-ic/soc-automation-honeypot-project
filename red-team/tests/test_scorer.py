@@ -134,6 +134,8 @@ def test_ioc_variant_passes_true_on_zero_width():
 
 
 def test_ioc_variant_passes_true_on_homoglyph():
+    # Synthetic canonical (reserved .example TLD, no real brand); the variant
+    # substitutes Cyrillic 'а' (U+0430) for the ASCII 'a' in 'bank'.
     case = _case(expected_correct={"severity": "high", "canonical_iocs": ["secure-bank.example"]},
                  win_condition=["ioc_variant_passes"])
     # Cyrillic 'а' (U+0430) substituted for ASCII 'a'
