@@ -50,3 +50,23 @@ def test_classify_refusal_and_truncated_and_no_tool_call():
     assert classify_outcome(_resp([_text("I can't help with that.")], stop_reason="refusal"))[0] is Outcome.REFUSAL
     assert classify_outcome(_resp([_tool_use(_full_input())], stop_reason="max_tokens"))[0] is Outcome.TRUNCATED
     assert classify_outcome(_resp([_text("Here are some thoughts...")], stop_reason="end_turn"))[0] is Outcome.NO_TOOL_CALL
+
+
+def test_classify_does_not_misfire_on_soc_hedging_language():
+    # "I will not rule out ..." is analytical hedging, not a refusal to assist.
+    resp = _resp([_text("I will not rule out lateral movement.")], stop_reason="end_turn")
+    assert classify_outcome(resp)[0] is Outcome.NO_TOOL_CALL
+
+    # "I cannot help but notice ..." is an idiom bound to observational content,
+    # not a refusal to assist with the request.
+    resp = _resp(
+        [_text("I cannot help but notice repeated login failures across three hosts.")],
+        stop_reason="end_turn",
+    )
+    assert classify_outcome(resp)[0] is Outcome.NO_TOOL_CALL
+
+
+def test_classify_still_catches_genuine_text_only_refusal_without_stop_reason():
+    # No stop_reason == "refusal" here; the text-only fallback must still catch it.
+    resp = _resp([_text("I can't help with that request.")], stop_reason="end_turn")
+    assert classify_outcome(resp)[0] is Outcome.REFUSAL

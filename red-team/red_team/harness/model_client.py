@@ -11,6 +11,7 @@ fixed, explicit ceiling rather than guess at parity.
 """
 from __future__ import annotations
 
+import re
 from enum import Enum, auto
 
 MAX_TOKENS = 4096
@@ -47,15 +48,45 @@ def _find_tool_use(raw) -> dict | None:
     return None
 
 
+#  A genuine refusal binds a refusal modal (can't / cannot / won't / will not /
+#  unable to / not able to) directly to a verb+object that names the
+#  assistance being declined (help/help with/help you, assist/assist with,
+#  provide that/this, comply with, do that/this, complete this), e.g.
+#  "I can't help with that", "I'm not able to assist with this request",
+#  "I won't be able to provide that", anchored within a few words so the
+#  modal and the assistance verb read as one refusal clause.
+#
+#  This intentionally does NOT match modals bound to analytical content, e.g.
+#  "I will not rule out lateral movement" (modal + investigative verb "rule
+#  out", no assistance object) or "I cannot help but notice ..." (idiom —
+#  "help but", not "help with/you", never followed by an assistance object).
+_ASSISTANCE_REFUSAL_RE = re.compile(
+    r"\b(?:can'?t|cannot|won'?t|will not|(?:'m|am|is|are)\s+not\s+able\s+to|unable\s+to)\b"
+    r"(?:\s+be\s+able\s+to)?"
+    r"(?:\s+\w+){0,2}?\s*"
+    r"(?:help\s+(?:you\s+)?with|help\s+you|assist\s+(?:you\s+)?with|assist\s+you|"
+    r"provide\s+(?:that|this)|comply\s+with|do\s+that|do\s+this|complete\s+this)\b",
+    re.IGNORECASE,
+)
+
+
 def _is_text_refusal(raw) -> bool:
-    """Text-only content that reads as a refusal, even without stop_reason == 'refusal'."""
+    """Text-only content that reads as a refusal, even without stop_reason == 'refusal'.
+
+    Only fires when a refusal modal is bound to an assistance verb+object
+    ("can't help with", "not able to assist with", "won't ... provide that",
+    ...). This avoids false positives on SOC-analyst hedging language where
+    the same modals are bound to analytical content instead, e.g. "I will
+    not rule out lateral movement" or "I cannot help but notice repeated
+    login failures" — neither names an assistance object, so neither fires.
+    """
     blocks = getattr(raw, "content", []) or []
     if not blocks or any(getattr(b, "type", None) != "text" for b in blocks):
         return False
-    combined = " ".join(getattr(b, "text", "") for b in blocks).lower()
-    refusal_markers = ("i can't help", "i cannot help", "i can't assist", "i cannot assist",
-                        "i won't", "i will not", "i'm not able to", "i am not able to")
-    return any(marker in combined for marker in refusal_markers)
+    combined = " ".join(getattr(b, "text", "") for b in blocks).strip()
+    if not combined:
+        return False
+    return bool(_ASSISTANCE_REFUSAL_RE.search(combined))
 
 
 def classify_outcome(raw) -> tuple[Outcome, dict | None]:
