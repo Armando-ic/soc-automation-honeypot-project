@@ -1,0 +1,324 @@
+{
+  "webhook_body": {
+    "sid": "scheduler__mydfir__search__RMD55a5cdeb8463e25e2_at_1782769500_471",
+    "search_name": "Honeypot - RDP/SMB Brute Force (External)",
+    "app": "search",
+    "owner": "mydfir",
+    "results_link": "http://vm-soc-v2-splunk:8000/app/search/search?q=%7Cloadjob%20scheduler__mydfir__search__RMD55a5cdeb8463e25e2_at_1782769500_471%20%7C%20head%201%20%7C%20tail%201&earliest=0&latest=now",
+    "result": {
+      "src_ip": "45.142.193.166",
+      "count": "14",
+      "user": "administrator",
+      "ComputerName": "vm-honeypot-win",
+      "earliest": "1782768757.163",
+      "latest": "1782768779.753"
+    }
+  },
+  "retrieve_output": {
+    "techniques": [
+      {
+        "id": "T1110.001",
+        "name": "Password Guessing",
+        "tactics": [
+          "credential-access"
+        ],
+        "score": 0.70985955
+      },
+      {
+        "id": "T1021.001",
+        "name": "Remote Desktop Protocol",
+        "tactics": [
+          "lateral-movement"
+        ],
+        "score": 0.6932366
+      },
+      {
+        "id": "T1556.008",
+        "name": "Network Provider DLL",
+        "tactics": [
+          "defense-impairment",
+          "persistence",
+          "credential-access"
+        ],
+        "score": 0.6907147
+      },
+      {
+        "id": "T1547.004",
+        "name": "Winlogon Helper DLL",
+        "tactics": [
+          "persistence",
+          "privilege-escalation"
+        ],
+        "score": 0.69024765
+      },
+      {
+        "id": "T1021.006",
+        "name": "Windows Remote Management",
+        "tactics": [
+          "lateral-movement"
+        ],
+        "score": 0.6884583
+      },
+      {
+        "id": "T1004",
+        "name": "Winlogon Helper DLL",
+        "tactics": [
+          "persistence"
+        ],
+        "score": 0.6857708
+      },
+      {
+        "id": "T1077",
+        "name": "Windows Admin Shares",
+        "tactics": [
+          "lateral-movement"
+        ],
+        "score": 0.6856065
+      },
+      {
+        "id": "T1552.002",
+        "name": "Credentials in Registry",
+        "tactics": [
+          "credential-access"
+        ],
+        "score": 0.68441063
+      }
+    ],
+    "ids": [
+      "T1110.001",
+      "T1021.001",
+      "T1556.008",
+      "T1547.004",
+      "T1021.006",
+      "T1004",
+      "T1077",
+      "T1552.002"
+    ]
+  },
+  "build_opus_input_output": {
+    "run_id": "275",
+    "timestamp": "2026-06-29T21:45:00.998Z",
+    "source": "splunk",
+    "search_name": "Honeypot - RDP/SMB Brute Force (External)",
+    "results_link": "http://vm-soc-v2-splunk:8000/app/search/search?q=%7Cloadjob%20scheduler__mydfir__search__RMD55a5cdeb8463e25e2_at_1782769500_471%20%7C%20head%201%20%7C%20tail%201&earliest=0&latest=now",
+    "console_link": "",
+    "src_ip": "45.142.193.166",
+    "host": "vm-honeypot-win",
+    "user": "administrator",
+    "count": "14",
+    "enrich_ips": [
+      "45.142.193.166"
+    ],
+    "observed_iocs": {
+      "ips": [
+        "45.142.193.166"
+      ],
+      "domains": [],
+      "file_hashes": [],
+      "users": [
+        "administrator"
+      ],
+      "hosts": [
+        "vm-honeypot-win"
+      ]
+    },
+    "alert_text": "RDP/SMB brute force: 14 failed Windows logons (EventCode 4625) against user administrator on host vm-honeypot-win from external source IP 45.142.193.166. Repeated failed authentication, credential access, remote service login.",
+    "enrichment_results": {
+      "45.142.193.166": "malicious"
+    },
+    "retrieved_ids": [
+      "T1110.001",
+      "T1021.001",
+      "T1556.008",
+      "T1547.004",
+      "T1021.006",
+      "T1004",
+      "T1077",
+      "T1552.002"
+    ],
+    "opus_user_message": "Honeypot Splunk alert: Honeypot - RDP/SMB Brute Force (External)\nHost: vm-honeypot-win   User: administrator   Failed logons: 14\nSplunk link: http://vm-soc-v2-splunk:8000/app/search/search?q=%7Cloadjob%20scheduler__mydfir__search__RMD55a5cdeb8463e25e2_at_1782769500_471%20%7C%20head%201%20%7C%20tail%201&earliest=0&latest=now\n\nObserved IOCs (use these EXACT strings verbatim):\n  IPs: 45.142.193.166\n  Users: administrator\n  Hosts: vm-honeypot-win\n\nEnrichment results (verdicts you MUST match; do not invent):\n- 45.142.193.166 => malicious\n\nCandidate MITRE techniques (cite ONLY from these IDs):\n- T1110.001  Password Guessing  [tactics: credential-access]\n- T1021.001  Remote Desktop Protocol  [tactics: lateral-movement]\n- T1556.008  Network Provider DLL  [tactics: defense-impairment, persistence, credential-access]\n- T1547.004  Winlogon Helper DLL  [tactics: persistence, privilege-escalation]\n- T1021.006  Windows Remote Management  [tactics: lateral-movement]\n- T1004  Winlogon Helper DLL  [tactics: persistence]\n- T1077  Windows Admin Shares  [tactics: lateral-movement]\n- T1552.002  Credentials in Registry  [tactics: credential-access]\n\nSubmit your triage with submit_triage_result now."
+  },
+  "opus_tool_input": {
+    "schema_version": "v1",
+    "alert_summary": "A honeypot Windows host (vm-honeypot-win) recorded 14 failed logons against the \"administrator\" account from external IP 45.142.193.166, consistent with an RDP/SMB brute-force / password guessing attempt. The source IP is flagged malicious by enrichment.",
+    "severity": "high",
+    "severity_rationale": "The activity targets a high-value local account (administrator) and originates from an IP with a malicious enrichment verdict, indicating an active credential-access attack against an internet-exposed service. Although this is a honeypot (no real assets at risk), the malicious IOC verdict and active brute-force behavior warrant escalation within working hours. Severity is not critical because there is no evidence of a successful authentication or compromise.",
+    "mitre_techniques": [
+      {
+        "id": "T1110.001",
+        "name": "Password Guessing",
+        "tactic": "credential-access"
+      },
+      {
+        "id": "T1021.001",
+        "name": "Remote Desktop Protocol",
+        "tactic": "lateral-movement"
+      },
+      {
+        "id": "T1077",
+        "name": "Windows Admin Shares",
+        "tactic": "lateral-movement"
+      }
+    ],
+    "iocs": {
+      "ips": [
+        "45.142.193.166"
+      ],
+      "domains": [],
+      "file_hashes": [],
+      "users": [
+        "administrator"
+      ],
+      "hosts": [
+        "vm-honeypot-win"
+      ]
+    },
+    "iocs_enriched": [
+      {
+        "value": "45.142.193.166",
+        "ioc_type": "ip",
+        "verdict": "malicious",
+        "source": "enrichment",
+        "summary": "External source IP of the brute-force attempts; flagged malicious by enrichment, consistent with known scanning/brute-force infrastructure."
+      }
+    ],
+    "recommended_actions": [
+      {
+        "description": "Block 45.142.193.166 at the perimeter firewall to prevent further connection attempts.",
+        "priority": "high"
+      },
+      {
+        "description": "Confirm no successful logon from 45.142.193.166 to the administrator account on vm-honeypot-win or any other internet-exposed host by reviewing successful authentication (EventID 4624) logs.",
+        "priority": "high"
+      },
+      {
+        "description": "Verify RDP/SMB exposure scope across the environment and ensure these services are not externally reachable on production hosts.",
+        "priority": "medium"
+      },
+      {
+        "description": "Add 45.142.193.166 to threat intel watchlists and search SIEM for any other activity sourced from this IP.",
+        "priority": "medium"
+      },
+      {
+        "description": "Enforce account lockout policies and MFA for administrative accounts to mitigate brute-force risk.",
+        "priority": "medium"
+      }
+    ]
+  },
+  "opus_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "extract_result_output": {
+    "verify_body": {
+      "result": {
+        "schema_version": "v1",
+        "alert_summary": "A honeypot Windows host (vm-honeypot-win) recorded 14 failed logons against the \"administrator\" account from external IP 45.142.193.166, consistent with an RDP/SMB brute-force / password guessing attempt. The source IP is flagged malicious by enrichment.",
+        "severity": "high",
+        "severity_rationale": "The activity targets a high-value local account (administrator) and originates from an IP with a malicious enrichment verdict, indicating an active credential-access attack against an internet-exposed service. Although this is a honeypot (no real assets at risk), the malicious IOC verdict and active brute-force behavior warrant escalation within working hours. Severity is not critical because there is no evidence of a successful authentication or compromise.",
+        "mitre_techniques": [
+          {
+            "id": "T1110.001",
+            "name": "Password Guessing",
+            "tactic": "credential-access"
+          },
+          {
+            "id": "T1021.001",
+            "name": "Remote Desktop Protocol",
+            "tactic": "lateral-movement"
+          },
+          {
+            "id": "T1077",
+            "name": "Windows Admin Shares",
+            "tactic": "lateral-movement"
+          }
+        ],
+        "iocs": {
+          "ips": [
+            "45.142.193.166"
+          ],
+          "domains": [],
+          "file_hashes": [],
+          "users": [
+            "administrator"
+          ],
+          "hosts": [
+            "vm-honeypot-win"
+          ]
+        },
+        "iocs_enriched": [
+          {
+            "value": "45.142.193.166",
+            "ioc_type": "ip",
+            "verdict": "malicious",
+            "source": "enrichment",
+            "summary": "External source IP of the brute-force attempts; flagged malicious by enrichment, consistent with known scanning/brute-force infrastructure."
+          }
+        ],
+        "recommended_actions": [
+          {
+            "description": "Block 45.142.193.166 at the perimeter firewall to prevent further connection attempts.",
+            "priority": "high"
+          },
+          {
+            "description": "Confirm no successful logon from 45.142.193.166 to the administrator account on vm-honeypot-win or any other internet-exposed host by reviewing successful authentication (EventID 4624) logs.",
+            "priority": "high"
+          },
+          {
+            "description": "Verify RDP/SMB exposure scope across the environment and ensure these services are not externally reachable on production hosts.",
+            "priority": "medium"
+          },
+          {
+            "description": "Add 45.142.193.166 to threat intel watchlists and search SIEM for any other activity sourced from this IP.",
+            "priority": "medium"
+          },
+          {
+            "description": "Enforce account lockout policies and MFA for administrative accounts to mitigate brute-force risk.",
+            "priority": "medium"
+          }
+        ],
+        "investigation_notes": "No additional analyst notes provided by automated triage."
+      },
+      "retrieved": [
+        "T1110.001",
+        "T1021.001",
+        "T1556.008",
+        "T1547.004",
+        "T1021.006",
+        "T1004",
+        "T1077",
+        "T1552.002"
+      ],
+      "enrichment_results": {
+        "45.142.193.166": "malicious"
+      },
+      "run_meta": {
+        "run_id": "275",
+        "timestamp": "2026-06-29T21:45:00.998Z",
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "latency_ms": 0
+      }
+    },
+    "discord_body": {
+      "embeds": [
+        {
+          "title": "✅ HIGH — Honeypot - RDP/SMB Brute Force (External)",
+          "description": "Host **vm-honeypot-win** • src_ip `45.142.193.166`\nMITRE: T1110.001 Password Guessing\nVerifier: **passed**\n[Splunk detection](http://x.x.x.x:8000/app/search/search?q=%7Cloadjob%20scheduler__mydfir__search__RMD55a5cdeb8463e25e2_at_1782769500_471%20%7C%20head%201%20%7C%20tail%201&earliest=0&latest=now)",
+          "color": 3066993
+        }
+      ]
+    },
+    "alert_iocs": [
+      {
+        "ioc_value": "45.142.193.166",
+        "ioc_description": "enrichment: External source IP of the brute-force attempts; flagged malicious by enrichment, consistent with known scanning/brute-force infrastructure.",
+        "ioc_tlp_id": 2,
+        "ioc_type_id": 79,
+        "ioc_tags": "soc-automation,honeypot,phase0d"
+      }
+    ],
+    "iris_description": "**Summary:** A honeypot Windows host (vm-honeypot-win) recorded 14 failed logons against the \"administrator\" account from external IP 45.142.193.166, consistent with an RDP/SMB brute-force / password guessing attempt. The source IP is flagged malicious by enrichment.\n\n**Severity:** high — The activity targets a high-value local account (administrator) and originates from an IP with a malicious enrichment verdict, indicating an active credential-access attack against an internet-exposed service. Although this is a honeypot (no real assets at risk), the malicious IOC verdict and active brute-force behavior warrant escalation within working hours. Severity is not critical because there is no evidence of a successful authentication or compromise.\n\n**MITRE Techniques:** T1110.001 (Password Guessing), T1021.001 (Remote Desktop Protocol), T1077 (Windows Admin Shares)\n\n**Enriched IOCs:**\n• `45.142.193.166` — MALICIOUS (enrichment): External source IP of the brute-force attempts; flagged malicious by enrichment, consistent with known scanning/brute-force infrastructure.\n\n**Recommended Actions:**\n• [HIGH] Block 45.142.193.166 at the perimeter firewall to prevent further connection attempts.\n• [HIGH] Confirm no successful logon from 45.142.193.166 to the administrator account on vm-honeypot-win or any other internet-exposed host by reviewing successful authentication (EventID 4624) logs.\n• [MEDIUM] Verify RDP/SMB exposure scope across the environment and ensure these services are not externally reachable on production hosts.\n• [MEDIUM] Add 45.142.193.166 to threat intel watchlists and search SIEM for any other activity sourced from this IP.\n• [MEDIUM] Enforce account lockout policies and MFA for administrative accounts to mitigate brute-force risk.\n\n**Investigation Notes:**\nNo additional analyst notes provided by automated triage.\n\n---\nSplunk: http://x.x.x.x:8000/app/search/search?q=%7Cloadjob%20scheduler__mydfir__search__RMD55a5cdeb8463e25e2_at_1782769500_471%20%7C%20head%201%20%7C%20tail%201&earliest=0&latest=now",
+    "alert_name": "Honeypot - RDP/SMB Brute Force (External)"
+  }
+}

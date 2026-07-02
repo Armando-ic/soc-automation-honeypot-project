@@ -1,0 +1,266 @@
+{
+  "webhook_body": {
+    "alert_text": "High Credential Access/Brute Force (T1110) on vm-honeypot-win - successful interactive RDP logon after sustained failed-auth brute force from external source IP 2.57.121.25 (user Administrator); suspected hands-on-keyboard compromise. [SYNTHETIC PATH-VALIDATION]",
+    "source": "falcon",
+    "console_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
+    "result": {
+      "count": 1,
+      "ComputerName": "vm-honeypot-win",
+      "user": "Administrator",
+      "src_ip": "2.57.121.25"
+    },
+    "results_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
+    "search_name": "Falcon - [SYNTHETIC PATH-VALIDATION] Brute Force (High)"
+  },
+  "retrieve_output": {
+    "techniques": [
+      {
+        "id": "T1110.001",
+        "name": "Password Guessing",
+        "tactics": [
+          "credential-access"
+        ],
+        "score": 0.71276444
+      },
+      {
+        "id": "T1021.001",
+        "name": "Remote Desktop Protocol",
+        "tactics": [
+          "lateral-movement"
+        ],
+        "score": 0.70895624
+      },
+      {
+        "id": "T1563.002",
+        "name": "RDP Hijacking",
+        "tactics": [
+          "lateral-movement"
+        ],
+        "score": 0.690601
+      },
+      {
+        "id": "T1076",
+        "name": "Remote Desktop Protocol",
+        "tactics": [
+          "lateral-movement"
+        ],
+        "score": 0.6825748
+      },
+      {
+        "id": "T1021.008",
+        "name": "Direct Cloud VM Connections",
+        "tactics": [
+          "lateral-movement"
+        ],
+        "score": 0.679234
+      },
+      {
+        "id": "T1003.006",
+        "name": "DCSync",
+        "tactics": [
+          "credential-access"
+        ],
+        "score": 0.6771404
+      },
+      {
+        "id": "T1212",
+        "name": "Exploitation for Credential Access",
+        "tactics": [
+          "credential-access"
+        ],
+        "score": 0.6768416
+      },
+      {
+        "id": "T1110.003",
+        "name": "Password Spraying",
+        "tactics": [
+          "credential-access"
+        ],
+        "score": 0.67349595
+      }
+    ],
+    "ids": [
+      "T1110.001",
+      "T1021.001",
+      "T1563.002",
+      "T1076",
+      "T1021.008",
+      "T1003.006",
+      "T1212",
+      "T1110.003"
+    ]
+  },
+  "build_opus_input_output": {
+    "run_id": "281",
+    "timestamp": "2026-06-29T23:16:19.977Z",
+    "source": "falcon",
+    "search_name": "Falcon - [SYNTHETIC PATH-VALIDATION] Brute Force (High)",
+    "results_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
+    "console_link": "https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
+    "src_ip": "2.57.121.25",
+    "host": "vm-honeypot-win",
+    "user": "Administrator",
+    "count": 1,
+    "enrich_ips": [
+      "2.57.121.25"
+    ],
+    "observed_iocs": {
+      "ips": [
+        "2.57.121.25"
+      ],
+      "domains": [],
+      "file_hashes": [],
+      "users": [
+        "Administrator"
+      ],
+      "hosts": [
+        "vm-honeypot-win"
+      ]
+    },
+    "alert_text": "High Credential Access/Brute Force (T1110) on vm-honeypot-win - successful interactive RDP logon after sustained failed-auth brute force from external source IP 2.57.121.25 (user Administrator); suspected hands-on-keyboard compromise. [SYNTHETIC PATH-VALIDATION]",
+    "enrichment_results": {
+      "2.57.121.25": "malicious"
+    },
+    "retrieved_ids": [
+      "T1110.001",
+      "T1021.001",
+      "T1563.002",
+      "T1076",
+      "T1021.008",
+      "T1003.006",
+      "T1212",
+      "T1110.003"
+    ],
+    "opus_user_message": "Honeypot Splunk alert: Falcon - [SYNTHETIC PATH-VALIDATION] Brute Force (High)\nHost: vm-honeypot-win   User: Administrator   Failed logons: 1\nSplunk link: https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation\n\nObserved IOCs (use these EXACT strings verbatim):\n  IPs: 2.57.121.25\n  Users: Administrator\n  Hosts: vm-honeypot-win\n\nEnrichment results (verdicts you MUST match; do not invent):\n- 2.57.121.25 => malicious\n\nCandidate MITRE techniques (cite ONLY from these IDs):\n- T1110.001  Password Guessing  [tactics: credential-access]\n- T1021.001  Remote Desktop Protocol  [tactics: lateral-movement]\n- T1563.002  RDP Hijacking  [tactics: lateral-movement]\n- T1076  Remote Desktop Protocol  [tactics: lateral-movement]\n- T1021.008  Direct Cloud VM Connections  [tactics: lateral-movement]\n- T1003.006  DCSync  [tactics: credential-access]\n- T1212  Exploitation for Credential Access  [tactics: credential-access]\n- T1110.003  Password Spraying  [tactics: credential-access]\n\nSubmit your triage with submit_triage_result now."
+  },
+  "opus_tool_input": {
+    "schema_version": "v1",
+    "alert_summary": "A CrowdStrike Falcon \"Brute Force (High)\" detection (synthetic path-validation) fired on the honeypot host vm-honeypot-win, targeting the Administrator account. The alert reports a single failed logon originating from external IP 2.57.121.25, which enrichment flags as malicious. The activity is consistent with an external actor attempting password-guessing brute force against a high-value local account on an internet-exposed honeypot.",
+    "severity": "high",
+    "severity_rationale": "The source IP 2.57.121.25 carries a malicious enrichment verdict, indicating a known-bad actor actively probing the Administrator account. Although only one failed logon is recorded and this is a honeypot (limiting blast radius), credential-access attempts against the Administrator account from a confirmed malicious IP constitute an active threat indicator warranting escalation within working hours. It does not rise to critical because there is no evidence of a successful authentication or compromise.",
+    "mitre_techniques": [
+      {
+        "id": "T1110.001",
+        "name": "Password Guessing",
+        "tactic": "credential-access"
+      },
+      {
+        "id": "T1021.001",
+        "name": "Remote Desktop Protocol",
+        "tactic": "lateral-movement"
+      }
+    ],
+    "iocs": {
+      "ips": [
+        "2.57.121.25"
+      ],
+      "domains": [],
+      "file_hashes": [],
+      "users": [
+        "Administrator"
+      ],
+      "hosts": [
+        "vm-honeypot-win"
+      ]
+    },
+    "iocs_enriched": [
+      {
+        "value": "2.57.121.25",
+        "ioc_type": "ip",
+        "verdict": "malicious",
+        "source": "enrichment",
+        "summary": "External source IP of the failed Administrator logon attempt; enrichment returned a malicious verdict, indicating a known-bad actor."
+      }
+    ]
+  },
+  "opus_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "extract_result_output": {
+    "verify_body": {
+      "result": {
+        "schema_version": "v1",
+        "alert_summary": "A CrowdStrike Falcon \"Brute Force (High)\" detection (synthetic path-validation) fired on the honeypot host vm-honeypot-win, targeting the Administrator account. The alert reports a single failed logon originating from external IP 2.57.121.25, which enrichment flags as malicious. The activity is consistent with an external actor attempting password-guessing brute force against a high-value local account on an internet-exposed honeypot.",
+        "severity": "high",
+        "severity_rationale": "The source IP 2.57.121.25 carries a malicious enrichment verdict, indicating a known-bad actor actively probing the Administrator account. Although only one failed logon is recorded and this is a honeypot (limiting blast radius), credential-access attempts against the Administrator account from a confirmed malicious IP constitute an active threat indicator warranting escalation within working hours. It does not rise to critical because there is no evidence of a successful authentication or compromise.",
+        "mitre_techniques": [
+          {
+            "id": "T1110.001",
+            "name": "Password Guessing",
+            "tactic": "credential-access"
+          },
+          {
+            "id": "T1021.001",
+            "name": "Remote Desktop Protocol",
+            "tactic": "lateral-movement"
+          }
+        ],
+        "iocs": {
+          "ips": [
+            "2.57.121.25"
+          ],
+          "domains": [],
+          "file_hashes": [],
+          "users": [
+            "Administrator"
+          ],
+          "hosts": [
+            "vm-honeypot-win"
+          ]
+        },
+        "iocs_enriched": [
+          {
+            "value": "2.57.121.25",
+            "ioc_type": "ip",
+            "verdict": "malicious",
+            "source": "enrichment",
+            "summary": "External source IP of the failed Administrator logon attempt; enrichment returned a malicious verdict, indicating a known-bad actor."
+          }
+        ],
+        "investigation_notes": "No additional analyst notes provided by automated triage.",
+        "recommended_actions": []
+      },
+      "retrieved": [
+        "T1110.001",
+        "T1021.001",
+        "T1563.002",
+        "T1076",
+        "T1021.008",
+        "T1003.006",
+        "T1212",
+        "T1110.003"
+      ],
+      "enrichment_results": {
+        "2.57.121.25": "malicious"
+      },
+      "run_meta": {
+        "run_id": "281",
+        "timestamp": "2026-06-29T23:16:19.977Z",
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "latency_ms": 0
+      }
+    },
+    "discord_body": {
+      "embeds": [
+        {
+          "title": "✅ HIGH — Falcon - [SYNTHETIC PATH-VALIDATION] Brute Force (High)",
+          "description": "Host **vm-honeypot-win** • src_ip `2.57.121.25`\nMITRE: T1110.001 Password Guessing\nVerifier: **passed**\n[Falcon detection](https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation)\n⚠️ **Contain recommended** — run `falcon-contain` for vm-honeypot-win",
+          "color": 3066993
+        }
+      ]
+    },
+    "alert_iocs": [
+      {
+        "ioc_value": "2.57.121.25",
+        "ioc_description": "enrichment: External source IP of the failed Administrator logon attempt; enrichment returned a malicious verdict, indicating a known-bad actor.",
+        "ioc_tlp_id": 2,
+        "ioc_type_id": 79,
+        "ioc_tags": "soc-automation,honeypot,phase0d"
+      }
+    ],
+    "iris_description": "**Summary:** A CrowdStrike Falcon \"Brute Force (High)\" detection (synthetic path-validation) fired on the honeypot host vm-honeypot-win, targeting the Administrator account. The alert reports a single failed logon originating from external IP 2.57.121.25, which enrichment flags as malicious. The activity is consistent with an external actor attempting password-guessing brute force against a high-value local account on an internet-exposed honeypot.\n\n**Severity:** high — The source IP 2.57.121.25 carries a malicious enrichment verdict, indicating a known-bad actor actively probing the Administrator account. Although only one failed logon is recorded and this is a honeypot (limiting blast radius), credential-access attempts against the Administrator account from a confirmed malicious IP constitute an active threat indicator warranting escalation within working hours. It does not rise to critical because there is no evidence of a successful authentication or compromise.\n\n**MITRE Techniques:** T1110.001 (Password Guessing), T1021.001 (Remote Desktop Protocol)\n\n**Enriched IOCs:**\n• `2.57.121.25` — MALICIOUS (enrichment): External source IP of the failed Administrator logon attempt; enrichment returned a malicious verdict, indicating a known-bad actor.\n\n**Recommended Actions:**\n_none_\n\n**Investigation Notes:**\nNo additional analyst notes provided by automated triage.\n\n---\nFalcon: https://falcon.us-2.crowdstrike.com/activity-v2/detections/synthetic-path-validation",
+    "alert_name": "Falcon - [SYNTHETIC PATH-VALIDATION] Brute Force (High)"
+  }
+}
