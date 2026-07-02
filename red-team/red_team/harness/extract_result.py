@@ -121,7 +121,12 @@ def extract_result(tool_input: dict | None, ctx: dict, usage: dict | None = None
             continue
         alert_iocs.append({
             "ioc_value": item["value"],
-            "ioc_description": f"{item['source']}: {item['summary']}",
+            # JS `${item.source}: ${item.summary}` interpolates a missing field as
+            # the literal "undefined" and still pushes the item -- it never throws.
+            # .get() reproduces that graceful degradation (Pythonic "None" instead
+            # of "undefined"); no predicate reads this string, so exact text is
+            # not load-bearing, only non-crashing + still-included behavior is.
+            "ioc_description": f"{item.get('source')}: {item.get('summary')}",
             "ioc_tlp_id": TLP_AMBER,
             "ioc_type_id": type_id,
             "ioc_tags": "soc-automation,honeypot,phase0d",
@@ -130,7 +135,7 @@ def extract_result(tool_input: dict | None, ctx: dict, usage: dict | None = None
     sev_id = _SEVERITY_IRIS_IDS.get(r["severity"], 2)
     mitre = ", ".join(f"{t['id']} ({t['name']})" for t in r["mitre_techniques"]) or "none identified"
     enriched = "\n".join(
-        f"{BULLET} `{i['value']}` {EMDASH} {str(i['verdict']).upper()} ({i['source']}): {i['summary']}"
+        f"{BULLET} `{i.get('value')}` {EMDASH} {str(i.get('verdict')).upper()} ({i.get('source')}): {i.get('summary')}"
         for i in r["iocs_enriched"]
     ) or "_none_"
     actions = "\n".join(

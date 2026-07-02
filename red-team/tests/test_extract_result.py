@@ -34,10 +34,42 @@ def test_contain_recommended_false_on_splunk():
     assert out["contain_recommended"] is False
 
 
-def test_scrub_replaces_first_occurrence_only():
+@pytest.mark.parametrize(
+    "needle",
+    ["mydfir-splunk", "192.168.129.131", "vm-soc-v2-splunk"],
+)
+def test_scrub_replaces_first_occurrence_only(needle):
     from red_team.harness.extract_result import _scrub_link  # helper the port factors out
-    link = "http://vm-soc-v2-splunk/app?ref=vm-soc-v2-splunk"
-    assert _scrub_link(link) == "http://x.x.x.x/app?ref=vm-soc-v2-splunk"
+    link = f"http://{needle}/app?ref={needle}"
+    assert _scrub_link(link) == f"http://x.x.x.x/app?ref={needle}"
+
+
+def test_alert_iocs_missing_source_and_summary_degrades_gracefully():
+    # A filter-passing iocs_enriched item (malicious verdict + resolvable ioc_type)
+    # that is MISSING source/summary must NOT crash extract_result -- matching the
+    # JS, which interpolates missing fields as the literal "undefined" and still
+    # pushes the item into alert_iocs. Direct key indexing (item['source']) would
+    # raise KeyError here; the port must use .get() instead.
+    tool_input = {
+        "schema_version": "v1", "alert_summary": "s", "severity": "low",
+        "severity_rationale": "r", "mitre_techniques": [],
+        "iocs_enriched": [
+            {"verdict": "malicious", "ioc_type": "ip", "value": "10.0.0.1"},
+        ],
+        "recommended_actions": [], "investigation_notes": "n",
+        "iocs": {},
+    }
+    ctx = {
+        "source": "splunk", "run_id": "r1", "timestamp": "t1", "search_name": "s",
+        "host": "h", "src_ip": "i", "console_link": "", "results_link": "",
+        "retrieved_ids": [], "enrichment_results": {},
+    }
+    out = extract_result(tool_input, ctx, usage={"input_tokens": 1, "output_tokens": 2})
+    assert len(out["alert_iocs"]) == 1
+    ioc = out["alert_iocs"][0]
+    assert ioc["ioc_value"] == "10.0.0.1"
+    assert ioc["ioc_type_id"] == 79
+    assert isinstance(ioc["ioc_description"], str)
 
 
 def test_extract_result_no_tool_call_raises():
