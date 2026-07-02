@@ -1,0 +1,107 @@
+"""Live Opus client (AUTO tool use, no sampling params) + outcome classifier.
+
+`ModelClient.call` sends exactly the fields the deployed n8n langchain-anthropic
+node sends: model, max_tokens, system, tools, messages. No tool_choice (AUTO),
+no temperature/top_p/top_k (they 400 on Opus 4.8), no thinking/effort/output_config
+(the deployed node sets none of these).
+
+MAX_TOKENS = 4096 is a documented harness choice: generous for a triage-JSON tool
+output; the deployed node's internal default is not exposed to us, so we pick a
+fixed, explicit ceiling rather than guess at parity.
+"""
+from __future__ import annotations
+
+from enum import Enum, auto
+
+MAX_TOKENS = 4096
+
+# Must equal the deployed submit_triage_result schema's top-level "required" array
+# (JSON/honeypot-triage.json). classify_outcome() has no schema argument, so this
+# module-level constant is the oracle for TOOL_CALL vs PARTIAL.
+REQUIRED_FIELDS = [
+    "schema_version",
+    "alert_summary",
+    "severity",
+    "severity_rationale",
+    "mitre_techniques",
+    "iocs",
+    "iocs_enriched",
+    "recommended_actions",
+    "investigation_notes",
+]
+
+
+class Outcome(Enum):
+    TOOL_CALL = auto()
+    PARTIAL = auto()
+    REFUSAL = auto()
+    TRUNCATED = auto()
+    NO_TOOL_CALL = auto()
+
+
+def _find_tool_use(raw) -> dict | None:
+    """Return the submit_triage_result tool_use input dict, or None if absent."""
+    for block in getattr(raw, "content", []) or []:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "submit_triage_result":
+            return block.input
+    return None
+
+
+def _is_text_refusal(raw) -> bool:
+    """Text-only content that reads as a refusal, even without stop_reason == 'refusal'."""
+    blocks = getattr(raw, "content", []) or []
+    if not blocks or any(getattr(b, "type", None) != "text" for b in blocks):
+        return False
+    combined = " ".join(getattr(b, "text", "") for b in blocks).lower()
+    refusal_markers = ("i can't help", "i cannot help", "i can't assist", "i cannot assist",
+                        "i won't", "i will not", "i'm not able to", "i am not able to")
+    return any(marker in combined for marker in refusal_markers)
+
+
+def classify_outcome(raw) -> tuple[Outcome, dict | None]:
+    """Classify a raw messages.create() response into one of five outcomes.
+
+    Check stop_reason FIRST (max_tokens -> TRUNCATED, refusal -> REFUSAL) before
+    scanning content for the tool_use — a truncated response may still carry a
+    full-looking tool_use block, but stop_reason takes precedence.
+    """
+    stop_reason = getattr(raw, "stop_reason", None)
+
+    if stop_reason == "max_tokens":
+        return Outcome.TRUNCATED, None
+
+    if stop_reason == "refusal":
+        return Outcome.REFUSAL, None
+
+    tool_input = _find_tool_use(raw)
+    if tool_input is not None:
+        missing = [f for f in REQUIRED_FIELDS if f not in tool_input]
+        if missing:
+            return Outcome.PARTIAL, tool_input
+        return Outcome.TOOL_CALL, tool_input
+
+    if _is_text_refusal(raw):
+        return Outcome.REFUSAL, None
+
+    return Outcome.NO_TOOL_CALL, None
+
+
+class ModelClient:
+    """Thin wrapper around an Anthropic client, calling claude-opus-4-8 exactly
+    as the deployed n8n langchain-anthropic node does: AUTO tool use, no sampling
+    parameters, no thinking/effort/output_config."""
+
+    def __init__(self, client, *, model: str = "claude-opus-4-8", system: str, tool: dict):
+        self.client = client
+        self.model = model
+        self.system = system
+        self.tool = tool
+
+    def call(self, user_message: str) -> object:
+        return self.client.messages.create(
+            model=self.model,
+            max_tokens=MAX_TOKENS,
+            system=self.system,
+            tools=[self.tool],
+            messages=[{"role": "user", "content": user_message}],
+        )
