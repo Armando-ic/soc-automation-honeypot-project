@@ -39,6 +39,85 @@ def test_load_real_seed_case(tmp_path):
     assert cases[0].id == "A1-demo" and cases[0].win_condition == ["severity_below_expected"]
 
 
+def _write(tmp_path, name, body):
+    (tmp_path / name).write_text(body, encoding="utf-8")
+
+
+# --- I-1: per-predicate backing expected_correct key must be present -------- #
+# A typo'd/missing backing key would make the predicate silently score False at
+# run time (understating the bypass rate), so the loader must reject it up front.
+
+def test_load_rejects_hot_tactic_without_backing_key(tmp_path):
+    # hot_tactic_absent_from_retrieved needs expected_correct.hot_tactic_technique_ids.
+    # Here the key is TYPO'd (missing trailing 's') -> must fail loudly at load.
+    _write(tmp_path, "bad.yaml",
+        "id: A3-bad\nclass: LLM01\natlas: AML.T0051\nsource: splunk\n"
+        "alert: {}\nfixed_enrichment: {}\nretrieval: real\n"
+        "objective: x\nexpected_correct: {hot_tactic_technique_id: [T1110]}\n"
+        "win_condition: [hot_tactic_absent_from_retrieved]\n")
+    with pytest.raises(ValueError):
+        load_cases(tmp_path)
+
+
+def test_load_rejects_injected_ioc_without_backing_key(tmp_path):
+    # injected_ioc_present needs a non-empty expected_correct.injected_iocs.
+    _write(tmp_path, "bad.yaml",
+        "id: A4-bad\nclass: LLM01\natlas: AML.T0051\nsource: splunk\n"
+        "alert: {}\nfixed_enrichment: {}\nretrieval: real\n"
+        "objective: x\nexpected_correct: {injected_iocs: []}\n"
+        "win_condition: [injected_ioc_present]\n")
+    with pytest.raises(ValueError):
+        load_cases(tmp_path)
+
+
+def test_load_rejects_contain_suppressed_without_backing_key(tmp_path):
+    # contain_suppressed needs a truthy expected_correct.contain_expected.
+    _write(tmp_path, "bad.yaml",
+        "id: B1-bad\nclass: LLM01\natlas: AML.T0051\nsource: falcon\n"
+        "alert: {}\nfixed_enrichment: {}\nretrieval: real\n"
+        "objective: x\nexpected_correct: {contain_expected: false}\n"
+        "win_condition: [contain_suppressed]\n")
+    with pytest.raises(ValueError):
+        load_cases(tmp_path)
+
+
+def test_load_rejects_ioc_variant_without_backing_key(tmp_path):
+    # ioc_variant_passes needs a non-empty expected_correct.canonical_iocs.
+    _write(tmp_path, "bad.yaml",
+        "id: E1-bad\nclass: LLM05\natlas: AML.T0051\nsource: splunk\n"
+        "alert: {}\nfixed_enrichment: {}\nretrieval: real\n"
+        "objective: x\nexpected_correct: {}\n"
+        "win_condition: [ioc_variant_passes]\n")
+    with pytest.raises(ValueError):
+        load_cases(tmp_path)
+
+
+# --- M-1: missing required TOP-LEVEL key -> path-prefixed ValueError -------- #
+
+def test_load_missing_top_level_key_is_path_prefixed_valueerror(tmp_path):
+    # A YAML missing a required top-level key (here: id) must raise a ValueError
+    # carrying the source path prefix, NOT a bare context-free KeyError.
+    _write(tmp_path, "nokey.yaml",
+        "class: LLM01\natlas: AML.T0051\nsource: splunk\n"
+        "alert: {}\nfixed_enrichment: {}\nretrieval: real\n"
+        "objective: x\nexpected_correct: {severity: high}\n"
+        "win_condition: [severity_below_expected]\n")
+    with pytest.raises(ValueError) as exc:
+        load_cases(tmp_path)
+    assert "nokey.yaml" in str(exc.value)
+
+
+def test_load_rejects_empty_win_condition(tmp_path):
+    # A case that can never deviate (empty win_condition) is a corpus error.
+    _write(tmp_path, "empty.yaml",
+        "id: X-empty\nclass: LLM01\natlas: AML.T0051\nsource: splunk\n"
+        "alert: {}\nfixed_enrichment: {}\nretrieval: real\n"
+        "objective: x\nexpected_correct: {}\n"
+        "win_condition: []\n")
+    with pytest.raises(ValueError):
+        load_cases(tmp_path)
+
+
 def test_all_seed_cases_load():
     """The authored seed corpus in red-team/attacks/ loads + validates, has >= 10
     cases, covers all eight case-class codes A1-E1, and uses only known predicates."""
