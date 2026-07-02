@@ -4,7 +4,7 @@
 finish something we check it off here, and when either of us needs to remember where we are, we read the
 "Where we are right now" pointer and scan the phase we're in. Keep it current as work lands.
 
-**Last updated:** 2026-07-01
+**Last updated:** 2026-07-02
 
 **Companion docs (read these for detail, this file is the index):**
 - Build state: [`HANDOFF.md`](HANDOFF.md) (canonical 🟢 0D-2 block)
@@ -16,8 +16,18 @@ finish something we check it off here, and when either of us needs to remember w
 
 ---
 
-## ▶ Where we are right now (2026-07-01)
-Pre-Phase-1 portfolio prep. Phase 0 is fully shipped and the autonomous loop is live. Sub-projects **A, B, C,
+## ▶ Where we are right now (2026-07-02)
+**Phase 1 (adversarial red-team) is underway and half-built.** Brainstormed → spec v2.1 → plan v2.1, and the
+**snapshot-independent half of the red-team harness is BUILT, reviewed, and green** (65/65 tests). It lives as
+local commits `b6b263e..4d7811f` on `ai-upgrade`, **15 ahead of the public remote and intentionally NOT pushed**
+until the harness is runnable (pushing now would publish a half-built harness to the public repo). Everything
+still deferred (the n8n JS ports → runner → report → the actual baseline run that is Gate-3, plus the
+blind-authored held-out corpus) was gated on the Task-2 n8n snapshot capture — **now DONE (2026-07-02, commit
+`b266570`)**, so the JS ports (T4/5/6) are the next step and run fully offline. Read
+`session-logs/2026-07-02-SESSION8-BUILD-COMPLETE-HANDOFF.md` first and the SDD ledger
+`.superpowers/sdd/progress.md` for the per-task recovery map. See the Phase 1 detail block below.
+
+Pre-Phase-1 portfolio prep is DONE. Phase 0 is fully shipped and the autonomous loop is live. Sub-projects **A, B, C,
 and D are all done**, and the **repo is now PUBLIC** (flipped 2026-07-01; `ai-upgrade` is pushed and in sync
 with `origin`). D landed the honeypot-forward README, the structure cleanup, a broader public-IP scrub, a scan
 gate, and a multi-agent pre-publish audit that caught four secrets the regex scanners missed (a reused lab
@@ -27,14 +37,13 @@ force-pushed, and verified clean. Today also landed the **five-diagram Mermaid v
 (`4009320`) plus the **Layer-1 edge-readability follow-up** (`1411f72`). **No blocking manual items remain:**
 the reused lab passwords are throwaway lab credentials and are intentionally **not** being rotated (user
 decision 2026-07-01); the pending IRIS admin API key gets rotated when `vm-soc-v2-iris` is next allocated, not
-before (it's offline now). **The next substantive work item is Phase 1** (adversarial red-team) — brainstorm to
-spec to plan. The portfolio video and the live-Falcon footage are both deferred by decision (see those sections
-below).
+before (it's offline now). The portfolio video and the live-Falcon footage are both deferred by decision (see
+those sections below).
 
 ---
 
 ## ⏰ On a clock (time-sensitive, not deliverables)
-- ⏰ **Falcon trial expires 2026-07-13** (12 days out as of 2026-07-01 — recompute against today). Anything
+- ⏰ **Falcon trial expires 2026-07-13** (11 days out as of 2026-07-02 — recompute against today). Anything
   that needs the live Falcon API (real poller pulls, contain round-trip, demo footage) has to happen before then.
 - 🖥️ **All VMs currently deallocated** (verified 2026-07-01): `vm-soc-v2-n8n`, `vm-soc-v2-splunk`,
   `vm-soc-v2-iris`, `vm-soc-v2-win`, and `vm-honeypot-win`. No organic-capture window is open right now. Start
@@ -142,9 +151,27 @@ This is split from video production on purpose. The raw clips need live Falcon; 
 ## Phases 1–5 — Roadmap ⬜ (not yet planned)
 Each phase gets brainstormed into its own spec then plan before any building starts.
 
-- ⬜ **Phase 1 — Adversarial red-team (the differentiator).** OWASP-LLM Top-10 / MITRE ATLAS payloads
+- 🟡 **Phase 1 — Adversarial red-team (the differentiator).** OWASP-LLM Top-10 / MITRE ATLAS payloads
   against the guardrails, with before/after measurement. Note: much of the scaffolding (verifier gate,
   advisory judge, eval harness) already exists, so this is "wire up + measure," not "build from scratch."
+  - ✅ **Brainstormed → spec v2.1 → plan v2.1** (PARENT `docs/superpowers/`, non-git):
+    `specs/2026-07-01-honeypot-phase1-adversarial-redteam-design.md` +
+    `plans/2026-07-01-honeypot-phase1-redteam-harness-baseline.md`.
+  - ✅ **Snapshot-independent half of the harness BUILT + reviewed + green (2026-07-02).** Package `red-team/`:
+    scaffold, `system_prompt`, `model_client`, `retriever`, `cases`, `scorer`, `stats`, and the 12-case A1–E1
+    seed corpus. Local commits `b6b263e..4d7811f` on `ai-upgrade` (15 ahead of public, NOT pushed), 65/65 tests
+    pristine, 12-agent adversarial final review + fixes done. Ledger: `.superpowers/sdd/progress.md`.
+  - ✅ **Task 2 (n8n snapshot capture) DONE (2026-07-02, commit `b266570`).** Splunk run 275 + Falcon run 281
+    captured from n8n history into `red-team/snapshots/`, six load-bearing fields each, link-drift reconciled to
+    committed behavior, SOC infra IPs stripped, attacker IPs kept public (user decision). VM can deallocate.
+  - ✅ **T4/5/6 JS→Python ports DONE (2026-07-02).** `parse_alert` + `build_opus_input` + case body-builders
+    (`input_builder.py`) + `extract_result.py`, all TDD byte-fidelity vs the snapshots, each SDD-reviewed clean
+    (Task 6 took one fix round: graceful `.get()` on malformed IOC fields). Full red-team suite **85/85**. Commits
+    `5513e9b`, `71b9b67`, `7cac133`..`0f86daf` on `ai-upgrade` (local).
+  - ⬜ **Next (offline): T12 runner** (`run_case` + K-trial loop) → **T13 report** (`build_baseline_report`,
+    Clopper-Pearson CIs). **T15 baseline run** = **Gate-3**, needs a live `ANTHROPIC_API_KEY` + a local seeded
+    Qdrant. **T14b held-out corpus** must be authored by a blind subagent. Final whole-branch review after the build.
+  - ⬜ **Gate-3 = the committed baseline report** (from T15). Plan 2 (hardening) is written only after it exists.
 - ⬜ **Phase 2 — RAG + detection-as-code.** Qdrant corpus already live; add Claude-drafted Sigma rules.
 - ⬜ **Phase 3 — Malware-triage add-on.** hash → VirusTotal + Claude static de-obfuscation.
 - ⬜ **Phase 4 — splunk-MCP as a first-class Opus tool** (`splunk-mcp-main/` is staged).
