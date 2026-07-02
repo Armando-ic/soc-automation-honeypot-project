@@ -1,0 +1,27 @@
+{
+  "type": "bundle",
+  "objects": [
+    {
+      "type": "attack-pattern", "name": "Brute Force",
+      "description": "Adversaries may use brute force to gain access.",
+      "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "credential-access"}],
+      "external_references": [{"source_name": "mitre-attack", "external_id": "T1110"}]
+    },
+    {
+      "type": "attack-pattern", "name": "PowerShell",
+      "description": "Adversaries may abuse PowerShell for execution.",
+      "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "execution"}],
+      "external_references": [{"source_name": "mitre-attack", "external_id": "T1059.001"}]
+    },
+    {
+      "type": "attack-pattern", "name": "Remote Desktop Protocol",
+      "description": "Adversaries may use RDP for lateral movement.",
+      "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "lateral-movement"}],
+      "external_references": [{"source_name": "mitre-attack", "external_id": "T1021.001"}]
+    },
+    {
+      "type": "attack-pattern", "name": "Deprecated Thing", "x_mitre_deprecated": true,
+      "external_references": [{"source_name": "mitre-attack", "external_id": "T9999"}]
+    }
+  ]
+}
