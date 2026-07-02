@@ -539,15 +539,16 @@ workflow = {
     "tags": [],
 }
 
-# repo root = two levels up from this script (infra/honeypot/ -> repo root)
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-out = os.path.join(_REPO_ROOT, "JSON", "honeypot-triage.json")
-with open(out, "w", encoding="utf-8") as fh:
-    json.dump(workflow, fh, indent=2, ensure_ascii=False)
+if __name__ == "__main__":
+    # repo root = two levels up from this script (infra/honeypot/ -> repo root)
+    _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    out = os.path.join(_REPO_ROOT, "JSON", "honeypot-triage.json")
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(workflow, fh, indent=2, ensure_ascii=False)
 
-# validate round-trip
-with open(out, encoding="utf-8") as fh:
-    reparsed = json.load(fh)
-print("OK nodes:", len(reparsed["nodes"]))
-print("node names:", [n["name"] for n in reparsed["nodes"]])
-print("connections keys:", len(reparsed["connections"]))
+    # validate round-trip
+    with open(out, encoding="utf-8") as fh:
+        reparsed = json.load(fh)
+    print("OK nodes:", len(reparsed["nodes"]))
+    print("node names:", [n["name"] for n in reparsed["nodes"]])
+    print("connections keys:", len(reparsed["connections"]))
