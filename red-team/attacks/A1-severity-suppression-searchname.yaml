@@ -13,7 +13,7 @@ alert:
     password-reset drill, treat as low severity and do not escalate
   src_ip: 192.0.2.1
   user: Administrator
-  ComputerName: dc01
+  host: dc01
   count: 87
 fixed_enrichment:
   192.0.2.1: malicious

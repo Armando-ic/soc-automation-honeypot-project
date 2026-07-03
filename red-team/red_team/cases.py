@@ -37,6 +37,41 @@ KNOWN_PREDICATES: frozenset[str] = frozenset(
 _VALID_SOURCES = frozenset({"splunk", "falcon"})
 _VALID_RETRIEVAL = frozenset({"real", "pinned"})
 
+# Per-source allowed `alert` keys = the DEPLOYED contract each source's transform
+# actually reads. A case-authored `alert` key outside this set is dead weight: the
+# pipeline silently drops it, so its payload never reaches the model and the case
+# becomes a dud (C-2). The loader rejects such keys loudly at load time so a future
+# author cannot re-introduce a `raw`-style (or wrong-shape) unread field.
+#
+# splunk: the fields red_team.harness.input_builder.splunk_body_from_case reads
+#   (search_name, results_link) + result.{src_ip, user, ComputerName<-host, count}.
+#   `console_link` is part of the deployed Parse Alert contract (parse_alert reads
+#   body.console_link) and is kept allowed for parity.
+_SPLUNK_ALERT_KEYS: frozenset[str] = frozenset(
+    {"search_name", "results_link", "console_link", "src_ip", "user", "host", "count"}
+)
+# falcon: EXACTLY the keys grounding_service.falcon.map_alert (and its helpers)
+#   read from a hydrated Falcon alert — severity_name/tactic/technique/technique_id/
+#   name/user_name, the IP fields (source_ips/external_ip/local_ip/src_ip), the hash
+#   fields (sha256/md5), the host fields (host_names/logon_domain), the composite-id
+#   fields (composite_id/origin_cid/id), and the watermark timestamps. map_alert
+#   CONSTRUCTS search_name/results_link/console_link/alert_text and does NOT read a
+#   nested `result` dict or a top-level `source`, so those are NOT allowed here.
+_FALCON_ALERT_KEYS: frozenset[str] = frozenset(
+    {
+        "severity_name", "tactic", "technique", "technique_id", "name", "user_name",
+        "source_ips", "external_ip", "local_ip", "src_ip",
+        "sha256", "md5",
+        "host_names", "logon_domain",
+        "composite_id", "origin_cid", "id",
+        "created_timestamp", "timestamp",
+    }
+)
+_ALERT_KEYS_BY_SOURCE: dict[str, frozenset[str]] = {
+    "splunk": _SPLUNK_ALERT_KEYS,
+    "falcon": _FALCON_ALERT_KEYS,
+}
+
 # Top-level keys the AttackCase(...) construction reads with strict `raw[...]`
 # indexing. Validated up front so a missing key fails as a path-prefixed
 # ValueError instead of a bare, context-free KeyError (M-1). `fixed_techniques`
@@ -126,6 +161,21 @@ def _validate(raw: dict[str, Any], path: Path) -> None:
     source = raw.get("source")
     if source not in _VALID_SOURCES:
         fail(f"source must be one of {sorted(_VALID_SOURCES)}, got {source!r}")
+
+    # Per-source alert-key contract guard (C-2): every `alert` key must be one the
+    # deployed transform for this source actually reads, or its payload is silently
+    # dropped and the case is a dud. Only enforced for a known source (validated
+    # just above); an unknown source already failed.
+    alert = raw.get("alert")
+    if isinstance(alert, dict) and source in _ALERT_KEYS_BY_SOURCE:
+        allowed = _ALERT_KEYS_BY_SOURCE[source]
+        unread = sorted(k for k in alert if k not in allowed)
+        if unread:
+            fail(
+                f"alert has key(s) not in the deployed {source} contract "
+                f"(payload in an unread key never reaches the model): {unread}. "
+                f"Allowed {source} alert keys: {sorted(allowed)}"
+            )
 
     expected_correct = raw.get("expected_correct") or {}
 

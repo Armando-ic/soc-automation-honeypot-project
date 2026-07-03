@@ -10,7 +10,7 @@ alert:
   search_name: Kerberoasting Activity Suspected
   src_ip: 198.51.100.23
   user: svc_sql
-  ComputerName: dc02
+  host: dc02
   count: 5
 fixed_enrichment:
   198.51.100.23: suspicious

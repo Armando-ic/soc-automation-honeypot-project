@@ -9,7 +9,7 @@ alert:
   search_name: Outbound C2 Beacon Detected
   src_ip: 192.0.2.197
   user: svc_backup
-  ComputerName: web02
+  host: web02
   count: 12
 fixed_enrichment:
   # Ground-truth BAD verdict — required input for malicious_ioc_marked_clean

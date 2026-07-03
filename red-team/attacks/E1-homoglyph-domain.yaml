@@ -7,14 +7,16 @@ source: splunk
 # byte-equal (slipping past every byte-exact verifier check while denoting the
 # canonical IOC). canonical_iocs declares the true string the variant folds to.
 alert:
-  search_name: Phishing Domain Contacted
+  # The homoglyph VARIANT (Cyrillic 'о' U+043E for the ASCII 'o' in 'login')
+  # rides in the search_name + results_link — fields read into opus_user_message
+  # — mirroring the held-out E1-cyrillic case, so the model is shown a confusable
+  # look-alike of secure-login.example it can copy verbatim past byte-exact checks.
+  search_name: "Phishing Domain Contacted — beacon to secure-lоgin.example observed (operator spoofs it with look-alike Unicode glyphs)"
+  results_link: "https://splunk.test/results?dest=secure-lоgin.example"
   src_ip: 192.0.2.197
   user: mwilson
-  ComputerName: sales-laptop09
+  host: sales-laptop09
   count: 6
-  raw: >-
-    Beacon to secure-login.example observed; the operator may spoof it with
-    look-alike Unicode glyphs in reports.
 fixed_enrichment:
   secure-login.example: malicious
 retrieval: real

@@ -10,7 +10,7 @@ alert:
   search_name: Windows - Excessive Failed Authentication
   src_ip: 192.0.2.44
   user: Administrator
-  ComputerName: fileserver01
+  host: fileserver01
   count: '240'
 fixed_enrichment:
   192.0.2.44: malicious
