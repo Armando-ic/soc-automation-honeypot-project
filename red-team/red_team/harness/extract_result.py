@@ -52,6 +52,19 @@ def _scrub_link(link: str) -> str:
     return link
 
 
+def _field(elem, key):
+    """JS member access on a model-supplied list element: `elem.key`.
+
+    In the deployed JS, `elem.key` yields `undefined` (never throws) whether
+    `elem` is an object missing `key` OR a primitive (string/number/None). The
+    port mirrors that graceful degradation with `.get()` on a dict and `None`
+    on anything else -- rendering Python's `None` (str -> "None") exactly as the
+    sibling iocs `.get()` code already does. These strings are display-only
+    (iris_description / discord_body) and read by no gate predicate, so mirroring
+    the existing non-crashing behavior matters, not the exact sentinel text."""
+    return elem.get(key) if isinstance(elem, dict) else None
+
+
 def _resolve_iris_type_id(ioc_type: str, value) -> int | None:
     if ioc_type == "ip":
         return IRIS_IOC_TYPE_IDS["ip"]
@@ -100,12 +113,25 @@ def extract_result(tool_input: dict | None, ctx: dict, usage: dict | None = None
     r["mitre_techniques"] = r.get("mitre_techniques") if isinstance(r.get("mitre_techniques"), list) else []
     r["iocs_enriched"] = r.get("iocs_enriched") if isinstance(r.get("iocs_enriched"), list) else []
     r["recommended_actions"] = r.get("recommended_actions") if isinstance(r.get("recommended_actions"), list) else []
-    # dict(tool_input) is a SHALLOW copy -- r["iocs"] would still be the caller's own
-    # dict object. Copy it too before filling missing buckets in place, or we'd mutate
-    # the caller's nested dict even though the top-level dict is "copied".
-    r["iocs"] = dict(r["iocs"]) if isinstance(r.get("iocs"), dict) else {}
-    for bucket in ("ips", "domains", "file_hashes", "users", "hosts"):
-        if not isinstance(r["iocs"].get(bucket), list):
+    # JS: `r.iocs = (r.iocs && typeof r.iocs === 'object') ? r.iocs : {}` KEEPS any
+    # non-null object -- including a JS array -- and only replaces a primitive/null
+    # with `{}`. Mirror `typeof === 'object'` (dict OR list), replacing only
+    # primitives/None. dict(tool_input) is a SHALLOW copy, so copy a dict/list iocs
+    # too before the in-place bucket fill, or we'd mutate the caller's nested value.
+    raw_iocs = r.get("iocs")
+    if isinstance(raw_iocs, dict):
+        r["iocs"] = dict(raw_iocs)
+        # Bucket-fill only runs on a dict (JS array string-index -> undefined ->
+        # sets buckets on the array; a Python list can't carry string keys, and
+        # the brief keeps the list as-is in verify_body.result.iocs).
+        for bucket in ("ips", "domains", "file_hashes", "users", "hosts"):
+            if not isinstance(r["iocs"].get(bucket), list):
+                r["iocs"][bucket] = []
+    elif isinstance(raw_iocs, list):
+        r["iocs"] = list(raw_iocs)
+    else:
+        r["iocs"] = {}
+        for bucket in ("ips", "domains", "file_hashes", "users", "hosts"):
             r["iocs"][bucket] = []
 
     usage = usage or {}
@@ -114,32 +140,47 @@ def extract_result(tool_input: dict | None, ctx: dict, usage: dict | None = None
 
     alert_iocs = []
     for item in r["iocs_enriched"]:
-        if item.get("verdict") not in ("malicious", "suspicious"):
+        # JS `i.verdict` on a non-object element is `undefined` -> fails the
+        # malicious/suspicious filter -> skipped (never throws). _field mirrors
+        # that: a str/int/None element yields None here and is skipped.
+        if _field(item, "verdict") not in ("malicious", "suspicious"):
             continue
-        type_id = _resolve_iris_type_id(item.get("ioc_type"), item.get("value"))
+        type_id = _resolve_iris_type_id(_field(item, "ioc_type"), _field(item, "value"))
         if type_id is None:
             continue
         alert_iocs.append({
-            "ioc_value": item["value"],
+            "ioc_value": _field(item, "value"),
             # JS `${item.source}: ${item.summary}` interpolates a missing field as
             # the literal "undefined" and still pushes the item -- it never throws.
             # .get() reproduces that graceful degradation (Pythonic "None" instead
             # of "undefined"); no predicate reads this string, so exact text is
             # not load-bearing, only non-crashing + still-included behavior is.
-            "ioc_description": f"{item.get('source')}: {item.get('summary')}",
+            "ioc_description": f"{_field(item, 'source')}: {_field(item, 'summary')}",
             "ioc_tlp_id": TLP_AMBER,
             "ioc_type_id": type_id,
             "ioc_tags": "soc-automation,honeypot,phase0d",
         })
 
-    sev_id = _SEVERITY_IRIS_IDS.get(r["severity"], 2)
-    mitre = ", ".join(f"{t['id']} ({t['name']})" for t in r["mitre_techniques"]) or "none identified"
+    # _SEVERITY_IRIS_IDS.get needs a hashable key; a non-str (e.g. list) severity
+    # would be unhashable -> TypeError. JS `{...}[r.severity]` yields undefined ->
+    # `|| 2` for any non-matching key and never throws, so coalesce to the default.
+    try:
+        sev_id = _SEVERITY_IRIS_IDS.get(r["severity"], 2)
+    except TypeError:
+        sev_id = 2
+    # `.get()` / _field on every model-supplied nested field: a missing key OR a
+    # non-dict list element renders as None (JS "undefined") instead of raising,
+    # mirroring the sibling iocs .get() degradation a few lines above.
+    mitre = ", ".join(
+        f"{_field(t, 'id')} ({_field(t, 'name')})" for t in r["mitre_techniques"]
+    ) or "none identified"
     enriched = "\n".join(
-        f"{BULLET} `{i.get('value')}` {EMDASH} {str(i.get('verdict')).upper()} ({i.get('source')}): {i.get('summary')}"
+        f"{BULLET} `{_field(i, 'value')}` {EMDASH} {str(_field(i, 'verdict')).upper()} "
+        f"({_field(i, 'source')}): {_field(i, 'summary')}"
         for i in r["iocs_enriched"]
     ) or "_none_"
     actions = "\n".join(
-        f"{BULLET} [{str(a['priority']).upper()}] {a['description']}"
+        f"{BULLET} [{str(_field(a, 'priority')).upper()}] {_field(a, 'description')}"
         for a in r["recommended_actions"]
     ) or "_none_"
 
@@ -183,10 +224,13 @@ def extract_result(tool_input: dict | None, ctx: dict, usage: dict | None = None
         },
     }
 
-    top_mitre = (
-        f"{r['mitre_techniques'][0]['id']} {r['mitre_techniques'][0]['name']}"
-        if r["mitre_techniques"] else "n/a"
-    )
+    # JS: `(r.mitre_techniques && r.mitre_techniques[0]) ? `${[0].id} ${[0].name}` : 'n/a'`.
+    # A non-dict first element yields undefined for .id/.name (never throws) -> _field.
+    if r["mitre_techniques"]:
+        first = r["mitre_techniques"][0]
+        top_mitre = f"{_field(first, 'id')} {_field(first, 'name')}"
+    else:
+        top_mitre = "n/a"
 
     sev = str(r.get("severity") or "").lower()
     contain_recommended = ctx["source"] == "falcon" and sev in ("high", "critical")

@@ -72,6 +72,86 @@ def test_alert_iocs_missing_source_and_summary_degrades_gracefully():
     assert isinstance(ioc["ioc_description"], str)
 
 
+def _adversarial_ctx():
+    return {
+        "source": "splunk", "run_id": "r1", "timestamp": "t1", "search_name": "s",
+        "host": "h", "src_ip": "i", "console_link": "", "results_link": "",
+        "retrieved_ids": [], "enrichment_results": {},
+    }
+
+
+def _min_tool_input(**overrides):
+    ti = {
+        "schema_version": "v1", "alert_summary": "s", "severity": "low",
+        "severity_rationale": "r", "mitre_techniques": [], "iocs_enriched": [],
+        "recommended_actions": [], "investigation_notes": "n", "iocs": {},
+    }
+    ti.update(overrides)
+    return ti
+
+
+def test_nameless_mitre_technique_does_not_crash():
+    # C1: a model tool call that omits mitre_techniques[].name must NOT raise --
+    # the deployed JS renders the missing key as "undefined" (never throws). The
+    # port must degrade via .get() and still build a full result.
+    ti = _min_tool_input(mitre_techniques=[{"id": "T1110.001", "tactic": "credential-access"}])
+    out = extract_result(ti, _adversarial_ctx(), usage={"input_tokens": 1, "output_tokens": 2})
+    assert "T1110.001" in out["iris_description"]         # degraded string still rendered
+    assert out["top_mitre"].startswith("T1110.001 ")      # name -> None, no crash
+
+
+def test_descriptionless_action_does_not_crash():
+    # C1: an action with priority but no description must NOT raise (JS a.description
+    # -> undefined).
+    ti = _min_tool_input(recommended_actions=[{"priority": "high"}])
+    out = extract_result(ti, _adversarial_ctx(), usage={"input_tokens": 1, "output_tokens": 2})
+    assert "[HIGH]" in out["iris_description"]             # priority upper-cased, no crash
+
+
+def test_non_dict_list_elements_do_not_crash():
+    # C1/I1: schema-shaped-but-adversarial output whose list fields hold non-dict
+    # elements (str/int/None) must flow through extract_result with NO exception --
+    # JS member access on a primitive yields undefined and never throws.
+    ti = _min_tool_input(
+        mitre_techniques=["T1110"],
+        recommended_actions=["x"],
+        iocs_enriched=["x"],
+    )
+    out = extract_result(ti, _adversarial_ctx(), usage={"input_tokens": 1, "output_tokens": 2})
+    # No exception; the degraded strings still render, alert_iocs skips the
+    # non-dict enriched element (its verdict is undefined -> not malicious).
+    # A non-dict element's field access is undefined (JS) / None (port), so
+    # top_mitre degrades to "None None" -- byte-parity with JS "undefined undefined".
+    assert isinstance(out["iris_description"], str)
+    assert out["alert_iocs"] == []
+    assert out["top_mitre"] == "None None"
+
+
+def test_non_dict_iocs_enriched_int_and_none_do_not_crash():
+    # I1: int / None list elements in iocs_enriched must not raise either.
+    ti = _min_tool_input(mitre_techniques=[42], recommended_actions=[None], iocs_enriched=[None])
+    out = extract_result(ti, _adversarial_ctx(), usage={"input_tokens": 1, "output_tokens": 2})
+    assert isinstance(out["iris_description"], str)
+    assert out["alert_iocs"] == []
+
+
+def test_non_str_severity_does_not_crash_on_unhashable_lookup():
+    # I1: a list-valued severity is unhashable -> _SEVERITY_IRIS_IDS.get would
+    # TypeError. JS `{...}[r.severity]` yields undefined -> `|| 2` and never throws.
+    ti = _min_tool_input(severity=["high"])
+    out = extract_result(ti, _adversarial_ctx(), usage={"input_tokens": 1, "output_tokens": 2})
+    assert out["severity_iris_id"] == 2                   # coalesced to default, no crash
+
+
+def test_array_valued_iocs_survives_into_verify_body():
+    # M1: JS keeps r.iocs when `typeof === 'object'` (true for a JS array); the
+    # port must keep a list-valued iocs in verify_body.result.iocs rather than
+    # replacing it with the five-bucket empty dict.
+    ti = _min_tool_input(iocs=["evil.example"])
+    out = extract_result(ti, _adversarial_ctx(), usage={"input_tokens": 1, "output_tokens": 2})
+    assert out["verify_body"]["result"]["iocs"] == ["evil.example"]
+
+
 def test_extract_result_no_tool_call_raises():
     with pytest.raises(NoToolCall):
         extract_result(None, _ctx_from(load_snapshot("splunk_baseline")))
