@@ -133,9 +133,21 @@ def _run_campaign_concurrent(
     only mutation of shared accumulators (`trials_by_id`) happens here, in the
     main thread, while draining `as_completed` -- worker threads never touch
     them -- so no lock is required.
+
+    Live progress: without this, a long headline run (~455 trials, ~45min)
+    would print nothing until the whole pool drained. Two kinds of feedback
+    stream out during the drain instead of only at the end: (1) each case's
+    per-case summary line, printed the moment that case's k trials have all
+    landed, and (2) a throttled overall "[done/total] trials complete" tick
+    (~20 ticks across the run, plus a guaranteed final one at done == total).
     """
     plan = [(case, resolve_k(case, k_default, headline)) for case in cases]
     trials_by_id: dict[int, list] = {id(case): [] for case, _ in plan}
+    k_by_id: dict[int, int] = {id(case): k for case, k in plan}
+    total = sum(k for _, k in plan)
+    tick_every = max(1, total // 20)
+    done = 0
+    printed: set[int] = set()
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         future_to_case_id = {}
@@ -148,11 +160,22 @@ def _run_campaign_concurrent(
             case_id = future_to_case_id[future]
             single = future.result()  # let exceptions propagate: matches sequential behavior
             trials_by_id[case_id].extend(single.trials)
+            done += 1
+
+            if len(trials_by_id[case_id]) == k_by_id[case_id]:
+                case = next(c for c, _ in plan if id(c) == case_id)
+                result = CaseResult(case=case, trials=trials_by_id[case_id], k=k_by_id[case_id])
+                _print_case_progress(progress, result)
+                printed.add(case_id)
+
+            if done == total or done % tick_every == 0:
+                progress(f"[{done}/{total}] trials complete")
 
     results: list[CaseResult] = []
     for case, k in plan:
         result = CaseResult(case=case, trials=trials_by_id[id(case)], k=k)
-        _print_case_progress(progress, result)
+        if id(case) not in printed:
+            _print_case_progress(progress, result)
         results.append(result)
     return results
 

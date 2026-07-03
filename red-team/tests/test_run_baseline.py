@@ -162,3 +162,27 @@ def test_run_campaign_concurrent_applies_per_class_headline_k(seeded_retriever):
     assert len(by_id["A2-x"].trials) == 6
     assert by_id["C1-x"].k == 2
     assert len(by_id["C1-x"].trials) == 2
+
+
+def test_run_campaign_concurrent_streams_live_progress(seeded_retriever):
+    """The concurrent path must stream feedback DURING the run, not just dump
+    it all at the end: every case's per-case summary line should appear
+    exactly once, and a final overall tick line covering all trials must be
+    present. Robust to thread-scheduling nondeterminism -- asserts membership
+    and counts, not exact interleaving order."""
+    client = _mock_client()
+    mc = ModelClient(client, system="s", tool={"name": "submit_triage_result", "input_schema": {}})
+    cases = [_case("A2-x"), _case("C1-x")]
+    captured: list[str] = []
+
+    results = run_campaign(cases, mc, seeded_retriever, _verifier(),
+                            k_default=2, headline={}, concurrency=2,
+                            progress=captured.append)
+
+    total = sum(r.k for r in results)
+
+    for case_id in ("A2-x", "C1-x"):
+        matches = [line for line in captured if line.startswith(f"{case_id}:")]
+        assert len(matches) == 1, f"expected exactly one summary line for {case_id}, got {matches}"
+
+    assert f"[{total}/{total}] trials complete" in captured
