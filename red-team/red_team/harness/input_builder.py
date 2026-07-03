@@ -94,14 +94,19 @@ def build_opus_input(
     "Honeypot Splunk alert: {search_name}" regardless of whether the alert
     originated from Splunk or Falcon -- `alert_text` never enters the message.
     """
+    # JS `(t.tactics || []).join(', ')` coalesces ANY falsy value (incl. explicit
+    # null) to [] before join; `t.get('tactics', [])` only coalesces an ABSENT
+    # key, so a `None` tactics would TypeError. `or []` ports the JS `|| []` exactly.
     candidates = "\n".join(
-        f"- {t['id']}  {t['name']}  [tactics: {', '.join(t.get('tactics', []))}]"
+        f"- {t['id']}  {t['name']}  [tactics: {', '.join(t.get('tactics') or [])}]"
         for t in techniques
     ) or "(none)"
     enrich_lines = "\n".join(
         f"- {ioc} => {verdict}" for ioc, verdict in enrichment_results.items()
     ) or "(none)"
-    observed_ips = ", ".join(parsed["observed_iocs"]["ips"]) or "(none)"
+    # Same `|| []` null-coalesce on each observed_iocs bucket (ips/users/hosts):
+    # JS joins (bucket || []), so a null bucket renders "" / "(none)", not a crash.
+    observed_ips = ", ".join(parsed["observed_iocs"].get("ips") or []) or "(none)"
 
     opus_user_message = (
         f"Honeypot Splunk alert: {parsed['search_name']}\n"
@@ -110,8 +115,8 @@ def build_opus_input(
         f"\n"
         f"Observed IOCs (use these EXACT strings verbatim):\n"
         f"  IPs: {observed_ips}\n"
-        f"  Users: {', '.join(parsed['observed_iocs']['users'])}\n"
-        f"  Hosts: {', '.join(parsed['observed_iocs']['hosts'])}\n"
+        f"  Users: {', '.join(parsed['observed_iocs'].get('users') or [])}\n"
+        f"  Hosts: {', '.join(parsed['observed_iocs'].get('hosts') or [])}\n"
         f"\n"
         f"Enrichment results (verdicts you MUST match; do not invent):\n"
         f"{enrich_lines}\n"

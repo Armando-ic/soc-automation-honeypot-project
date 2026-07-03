@@ -74,6 +74,25 @@ def test_build_opus_input_no_candidates_or_enrichment_shows_none():
     assert "Enrichment results (verdicts you MUST match; do not invent):\n(none)" in out["opus_user_message"]
 
 
+def test_build_opus_input_null_observed_ioc_buckets_coalesce_like_js():
+    """M2: JS `(bucket || []).join(', ')` coalesces an explicit null bucket to []
+    (renders "" / "(none)"), never a TypeError. A hand-built parsed dict with
+    None ips/users/hosts and a technique with tactics=None must not crash."""
+    parsed = {
+        "search_name": "s", "host": "h", "user": "u", "count": "1",
+        "results_link": "",
+        "observed_iocs": {"ips": None, "domains": [], "file_hashes": [],
+                          "users": None, "hosts": None},
+    }
+    techniques = [{"id": "T1110", "name": "Brute Force", "tactics": None}]
+    out = build_opus_input(parsed, enrichment_results={}, techniques=techniques,
+                           retrieved_ids=["T1110"])  # must not raise
+    msg = out["opus_user_message"]
+    assert "IPs: (none)" in msg          # null ips -> [] -> "" -> "(none)"
+    assert "Users: \n" in msg            # null users -> [] -> "" (empty line)
+    assert "[tactics: ]" in msg          # null tactics -> [] -> ""
+
+
 def test_splunk_body_from_case_round_trips_through_parse_alert():
     alert = {
         "search_name": "Honeypot - Case Alert",

@@ -48,20 +48,29 @@ def _find_tool_use(raw) -> dict | None:
     return None
 
 
-#  A genuine refusal binds a refusal modal (can't / cannot / won't / will not /
-#  unable to / not able to) directly to a verb+object that names the
-#  assistance being declined (help/help with/help you, assist/assist with,
-#  provide that/this, comply with, do that/this, complete this), e.g.
-#  "I can't help with that", "I'm not able to assist with this request",
-#  "I won't be able to provide that", anchored within a few words so the
-#  modal and the assistance verb read as one refusal clause.
+#  A genuine refusal binds a FIRST-PERSON assistant subject (I / I'm / we / we're)
+#  to a refusal modal (can't / cannot / won't / will not / unable to / not able
+#  to) and then to a verb+object that names the assistance being declined
+#  (help/help with/help you, assist/assist with, provide that/this, comply with,
+#  do that/this, complete this), e.g. "I can't help with that", "I'm not able to
+#  assist with this request", "I won't be able to provide that", "we cannot comply
+#  with this". The subject, modal, and assistance verb must read as one refusal
+#  clause (bound within a few words).
 #
-#  This intentionally does NOT match modals bound to analytical content, e.g.
-#  "I will not rule out lateral movement" (modal + investigative verb "rule
-#  out", no assistance object) or "I cannot help but notice ..." (idiom —
-#  "help but", not "help with/you", never followed by an assistance object).
+#  Requiring the first-person subject is what keeps THIRD-PERSON analytical prose
+#  out of the REFUSAL bucket (M4): "The attacker cannot complete this
+#  authentication...", "This host is unable to assist with domain resolution",
+#  "The account won't be able to provide those credentials" describe the incident,
+#  not a refusal to help, and no longer false-positive.
+#
+#  It also still does NOT match first-person modals bound to analytical content,
+#  e.g. "I will not rule out lateral movement" (investigative verb "rule out", no
+#  assistance object) or "I cannot help but notice ..." (idiom — "help but", not
+#  "help with/you", never followed by an assistance object).
 _ASSISTANCE_REFUSAL_RE = re.compile(
-    r"\b(?:can'?t|cannot|won'?t|will not|(?:'m|am|is|are)\s+not\s+able\s+to|unable\s+to)\b"
+    r"\b(?:I|I['’]m|I\s+am|we|we['’]re|we\s+are)\s+"     # first-person assistant subject
+    r"(?:\w+\s+){0,2}?"                                   # 0-2 filler words (e.g. "really", "simply")
+    r"(?:can'?t|cannot|won'?t|will\s+not|(?:am|'m|are)\s+not\s+able\s+to|not\s+able\s+to|unable\s+to)\b"
     r"(?:\s+be\s+able\s+to)?"
     r"(?:\s+\w+){0,2}?\s*"
     r"(?:help\s+(?:you\s+)?with|help\s+you|assist\s+(?:you\s+)?with|assist\s+you|"

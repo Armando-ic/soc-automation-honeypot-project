@@ -126,6 +126,41 @@ def test_header_records_model_max_tokens_commit_and_k():
     assert "10" in md  # K appears somewhere in the header/class row
 
 
+def test_multi_case_class_k_header_shows_per_case_k_not_class_total():
+    """I6: a class with >=2 cases each at K=50 must render the per-case K (50) in
+    the 'K (trials/case)' header, NOT the class total (100 = sum of per-case K)."""
+    c1 = CaseResult(case=_case("A3-x", "LLM01", ["cites_technique_not_in_retrieved"]),
+                    trials=[_trial(False, False) for _ in range(50)], k=50)
+    c2 = CaseResult(case=_case("A3-y", "LLM01", ["cites_technique_not_in_retrieved"]),
+                    trials=[_trial(False, False) for _ in range(50)], k=50)
+    md = build_baseline_report([c1, c2])
+    a3_start = md.index("## A3")
+    rest = md[a3_start:]
+    next_heading = rest.find("\n## ", 1)
+    a3_section = rest if next_heading == -1 else rest[:next_heading]
+    assert "K (trials/case): 50" in a3_section
+    # The mislabeled class total must NOT appear as the per-case K value.
+    assert "K (trials/case): 100" not in a3_section
+    # Sanity: 2 cases, 100 total trials.
+    assert "Cases: 2" in a3_section
+    assert "Total trials: 100" in a3_section
+
+
+def test_varying_k_class_header_shows_distinct_set():
+    """I6: if per-case K varies within a class, the header renders the sorted
+    distinct set rather than a single (wrong) number."""
+    c1 = CaseResult(case=_case("A3-x", "LLM01", ["cites_technique_not_in_retrieved"]),
+                    trials=[_trial(False, False) for _ in range(50)], k=50)
+    c2 = CaseResult(case=_case("A3-y", "LLM01", ["cites_technique_not_in_retrieved"]),
+                    trials=[_trial(False, False) for _ in range(10)], k=10)
+    md = build_baseline_report([c1, c2])
+    a3_start = md.index("## A3")
+    rest = md[a3_start:]
+    next_heading = rest.find("\n## ", 1)
+    a3_section = rest if next_heading == -1 else rest[:next_heading]
+    assert "K (trials/case): [10, 50]" in a3_section
+
+
 def test_zero_valid_trials_does_not_raise_zero_division():
     """A class whose trials are ALL invalid has n==0 -- must not divide by
     zero, and must render an n/a-style message instead."""

@@ -103,7 +103,6 @@ def _outcome_name(outcome) -> str:
 
 def _render_class_section(class_code: str, results: list[CaseResult]) -> str:
     all_trials = [t for r in results for t in r.trials]
-    total_k = sum(r.k for r in results)
 
     valid = [t for t in all_trials if not t.score.invalid]
     invalid_count = len(all_trials) - len(valid)
@@ -114,8 +113,15 @@ def _render_class_section(class_code: str, results: list[CaseResult]) -> str:
 
     open_label = " **[OPEN]**" if _class_is_open(results) else ""
 
+    # Per-case K is CaseResult.k (the K passed to run_case), NOT the class total.
+    # Under the intended uniform-K shape render the single value; if K varies
+    # across cases in the class, render the sorted distinct set so the figure is
+    # never a misleading class total mislabeled as per-case K.
+    ks = sorted({r.k for r in results})
+    k_label = str(ks[0]) if len(ks) == 1 else str(ks)
+
     lines = [f"## {class_code}{open_label}", ""]
-    lines.append(f"- Cases: {len(results)}  |  K (trials/case): {total_k}  |  Total trials: {len(all_trials)}")
+    lines.append(f"- Cases: {len(results)}  |  K (trials/case): {k_label}  |  Total trials: {len(all_trials)}")
     lines.append(f"- Model-deviation rate: {_fmt_rate(k_dev, n)}")
     lines.append(f"- Guardrail-bypass rate: {_fmt_rate(k_byp, n)}")
     lines.append(f"- Invalid trials (excluded from rates above): {invalid_count}")
