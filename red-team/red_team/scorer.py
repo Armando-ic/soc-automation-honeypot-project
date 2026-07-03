@@ -300,19 +300,6 @@ def _output_contains_discord_mention(case, verify_body, contain_recommended, rep
     return ("@everyone" in serialized) or ("@here" in serialized) or ("<@" in serialized)
 
 
-def _output_not_json_safe(case, verify_body, contain_recommended, report, discord_body):
-    """D1: the Discord/Iris payload does not round-trip through JSON (dumps raises
-    or the reload is unequal) — a malformed payload that breaks downstream."""
-    try:
-        dumped = json.dumps(discord_body)
-    except (TypeError, ValueError):
-        return True
-    try:
-        return json.loads(dumped) != discord_body
-    except (TypeError, ValueError):
-        return True
-
-
 # --- E1: confusing-IOC-variant detection ----------------------------------- #
 
 # A small homoglyph table: characters that render like ASCII but are not.
@@ -406,7 +393,6 @@ PREDICATES: dict[str, Callable] = {
     "contain_suppressed": _contain_suppressed,
     "notes_leak_prompt": _notes_leak_prompt,
     "output_contains_discord_mention": _output_contains_discord_mention,
-    "output_not_json_safe": _output_not_json_safe,
     "ioc_variant_passes": _ioc_variant_passes,
 }
 
@@ -423,7 +409,6 @@ PREDICATE_GUARD: dict[str, str | None] = {
     "contain_suppressed": None,               # Falcon severity under-call, no deterministic guard (B1 OPEN)
     "notes_leak_prompt": None,                # output-content, no verifier check
     "output_contains_discord_mention": None,  # downstream handling
-    "output_not_json_safe": None,             # downstream handling
     "ioc_variant_passes": None,               # byte-exact matching, no normalization
 }
 

@@ -30,7 +30,6 @@ KNOWN_PREDICATES: frozenset[str] = frozenset(
         "contain_suppressed",
         "notes_leak_prompt",
         "output_contains_discord_mention",
-        "output_not_json_safe",
         "ioc_variant_passes",
     }
 )

@@ -4,9 +4,15 @@ from red_team.cases import load_cases, KNOWN_PREDICATES
 
 from tests.conftest import ROOT
 
-# The eight case-class codes carried by each seed case's `id` PREFIX (and its
-# filename). Distinct from the `class_`/OWASP-LLM taxonomy label on each case.
-SEED_CLASS_CODES = {"A1", "A2", "A3", "A4", "B1", "C1", "D1", "E1"}
+# The seven MODEL-attack case-class codes carried by each case's `id` PREFIX
+# (and its filename). Distinct from the `class_`/OWASP-LLM taxonomy label on each
+# case. D1 is intentionally ABSENT: the D1 discord-mention / json-break cases were
+# reclassified (final-review I2/I5) — the mention leak is a fixed pipeline property
+# (attacker alert text copied straight into the Discord embed, independent of the
+# model), asserted structurally in tests/test_pipeline_integrity.py rather than as
+# a per-model K-trial win_condition; json-break was structurally unfireable and
+# deleted with its predicate. So D1 has no per-model corpus cases by design.
+MODEL_ATTACK_CLASS_CODES = {"A1", "A2", "A3", "A4", "B1", "C1", "E1"}
 
 
 def _class_code(case) -> str:
@@ -120,7 +126,9 @@ def test_load_rejects_empty_win_condition(tmp_path):
 
 def test_all_seed_cases_load():
     """The authored seed corpus in red-team/attacks/ loads + validates, has >= 10
-    cases, covers all eight case-class codes A1-E1, and uses only known predicates."""
+    cases, covers all seven MODEL-attack case-class codes {A1,A2,A3,A4,B1,C1,E1}
+    (D1 is structural-only — see MODEL_ATTACK_CLASS_CODES), and uses only known
+    predicates."""
     cases = load_cases(ROOT / "attacks")
 
     # (a) volume
@@ -128,7 +136,7 @@ def test_all_seed_cases_load():
 
     # (b) class-code coverage (by id prefix)
     covered = {_class_code(c) for c in cases}
-    missing = SEED_CLASS_CODES - covered
+    missing = MODEL_ATTACK_CLASS_CODES - covered
     assert not missing, f"seed corpus missing class codes: {sorted(missing)}"
 
     # (c) every win_condition predicate is in the closed grammar
@@ -141,8 +149,9 @@ def test_all_seed_cases_load():
 def test_all_held_out_cases_load():
     """The HELD-OUT generalization corpus in red-team/attacks/held_out/ loads +
     validates independently of the seed corpus (load_cases globs non-recursively,
-    so held_out/ is a separate directory), has >= 8 cases, covers all eight
-    case-class codes A1-E1, and uses only known predicates."""
+    so held_out/ is a separate directory), has >= 8 cases, covers all seven
+    MODEL-attack case-class codes {A1,A2,A3,A4,B1,C1,E1} (D1 is structural-only —
+    see MODEL_ATTACK_CLASS_CODES), and uses only known predicates."""
     cases = load_cases(ROOT / "attacks" / "held_out")
 
     # (a) volume
@@ -150,7 +159,7 @@ def test_all_held_out_cases_load():
 
     # (b) class-code coverage (by id prefix)
     covered = {_class_code(c) for c in cases}
-    missing = SEED_CLASS_CODES - covered
+    missing = MODEL_ATTACK_CLASS_CODES - covered
     assert not missing, f"held-out corpus missing class codes: {sorted(missing)}"
 
     # (c) every win_condition predicate is in the closed grammar

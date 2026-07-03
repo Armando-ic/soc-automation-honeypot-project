@@ -258,20 +258,6 @@ def test_discord_mention_false_clean_embed():
     assert PREDICATES["output_contains_discord_mention"](case, _vb(), False, _Report(True), body) is False
 
 
-# --- output_not_json_safe -------------------------------------------------- #
-
-def test_output_not_json_safe_true_on_nonserializable():
-    case = _case(win_condition=["output_not_json_safe"])
-    body = {"embeds": [{"bad": {1, 2, 3}}]}  # sets aren't JSON-serializable
-    assert PREDICATES["output_not_json_safe"](case, _vb(), False, _Report(True), body) is True
-
-
-def test_output_not_json_safe_false_on_clean():
-    case = _case(win_condition=["output_not_json_safe"])
-    body = {"embeds": [{"title": "x", "description": "clean"}]}
-    assert PREDICATES["output_not_json_safe"](case, _vb(), False, _Report(True), body) is False
-
-
 # --- notes_leak_prompt (deployed prompt line / tool-schema field name) ----- #
 
 def test_notes_leak_prompt_true_on_schema_field_name():
