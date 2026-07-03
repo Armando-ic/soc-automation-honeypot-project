@@ -111,3 +111,54 @@ def test_dry_run_makes_zero_live_calls_needs_no_key_and_writes_nothing(tmp_path,
     main(["--dry-run", "--out", str(out_file)])
 
     assert not out_file.exists()
+
+
+def test_run_campaign_concurrent_runs_all_trials_grouped_by_case(seeded_retriever):
+    client = _mock_client()
+    mc = ModelClient(client, system="s", tool={"name": "submit_triage_result", "input_schema": {}})
+    cases = [_case("A2-x"), _case("C1-x")]
+    results = run_campaign(cases, mc, seeded_retriever, _verifier(),
+                            k_default=3, headline={}, concurrency=4,
+                            progress=lambda *a, **k: None)
+    by_id = {r.case.id: r for r in results}
+    assert set(by_id.keys()) == {"A2-x", "C1-x"}
+    assert len(by_id["A2-x"].trials) == 3
+    assert by_id["A2-x"].k == 3
+    assert len(by_id["C1-x"].trials) == 3
+    assert by_id["C1-x"].k == 3
+    assert client.messages.create.call_count == 6
+
+
+def test_run_campaign_concurrent_structure_matches_sequential(seeded_retriever):
+    cases = [_case("A2-x"), _case("C1-x")]
+
+    client_seq = _mock_client()
+    mc_seq = ModelClient(client_seq, system="s", tool={"name": "submit_triage_result", "input_schema": {}})
+    results_seq = run_campaign(cases, mc_seq, seeded_retriever, _verifier(),
+                                k_default=3, headline={}, concurrency=1,
+                                progress=lambda *a, **k: None)
+
+    client_par = _mock_client()
+    mc_par = ModelClient(client_par, system="s", tool={"name": "submit_triage_result", "input_schema": {}})
+    results_par = run_campaign(cases, mc_par, seeded_retriever, _verifier(),
+                                k_default=3, headline={}, concurrency=4,
+                                progress=lambda *a, **k: None)
+
+    def _shape(results):
+        return {r.case.id: (len(r.trials), r.k) for r in results}
+
+    assert _shape(results_seq) == _shape(results_par)
+
+
+def test_run_campaign_concurrent_applies_per_class_headline_k(seeded_retriever):
+    client = _mock_client()
+    mc = ModelClient(client, system="s", tool={"name": "submit_triage_result", "input_schema": {}})
+    cases = [_case("A2-x"), _case("C1-x")]
+    results = run_campaign(cases, mc, seeded_retriever, _verifier(),
+                            k_default=2, headline={"A2": 6}, concurrency=4,
+                            progress=lambda *a, **k: None)
+    by_id = {r.case.id: r for r in results}
+    assert by_id["A2-x"].k == 6
+    assert len(by_id["A2-x"].trials) == 6
+    assert by_id["C1-x"].k == 2
+    assert len(by_id["C1-x"].trials) == 2

@@ -23,6 +23,7 @@ import argparse
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
 
@@ -77,6 +78,85 @@ def parse_headline(spec: str | None) -> dict[str, int]:
     return headline
 
 
+def _print_case_progress(progress: Callable[[str], None], result: CaseResult) -> None:
+    """The one progress line for a finished case's `CaseResult`. Shared by the
+    sequential and concurrent paths so both print an identical format."""
+    valid = [t for t in result.trials if not t.score.invalid]
+    deviated = sum(1 for t in valid if t.score.deviated)
+    bypassed = sum(1 for t in valid if t.score.bypassed)
+    invalid = len(result.trials) - len(valid)
+    progress(
+        f"{result.case.id}: k={result.k} deviated={deviated}/{len(valid)} "
+        f"bypassed={bypassed}/{len(valid)} invalid={invalid}"
+    )
+
+
+def _run_campaign_sequential(
+    cases: list[AttackCase],
+    model_client: ModelClient,
+    retriever,
+    verifier,
+    *,
+    k_default: int,
+    headline: dict[str, int],
+    progress: Callable[[str], None],
+) -> list[CaseResult]:
+    """Today's exact behavior: one case at a time, in order."""
+    results: list[CaseResult] = []
+    for case in cases:
+        k = resolve_k(case, k_default, headline)
+        result = run_case(case, model_client, retriever, verifier, k=k)
+        _print_case_progress(progress, result)
+        results.append(result)
+    return results
+
+
+def _run_campaign_concurrent(
+    cases: list[AttackCase],
+    model_client: ModelClient,
+    retriever,
+    verifier,
+    *,
+    k_default: int,
+    headline: dict[str, int],
+    concurrency: int,
+    progress: Callable[[str], None],
+) -> list[CaseResult]:
+    """Trial-level thread pool: submit every (case, trial) unit as an
+    independent `run_case(..., k=1)` call and merge single-trial results back
+    into one `CaseResult` per case, in the original `cases` order.
+
+    Thread-safety: `model_client` wraps the thread-safe `anthropic` client,
+    `retriever.search` is a stateless per-call Qdrant query, and
+    `verifier.verify` is pure -- all three are read-only shared state across
+    threads, and `run_case` builds all of its per-trial state internally. The
+    only mutation of shared accumulators (`trials_by_id`) happens here, in the
+    main thread, while draining `as_completed` -- worker threads never touch
+    them -- so no lock is required.
+    """
+    plan = [(case, resolve_k(case, k_default, headline)) for case in cases]
+    trials_by_id: dict[int, list] = {id(case): [] for case, _ in plan}
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        future_to_case_id = {}
+        for case, k in plan:
+            for _ in range(k):
+                future = executor.submit(run_case, case, model_client, retriever, verifier, 1)
+                future_to_case_id[future] = id(case)
+
+        for future in as_completed(future_to_case_id):
+            case_id = future_to_case_id[future]
+            single = future.result()  # let exceptions propagate: matches sequential behavior
+            trials_by_id[case_id].extend(single.trials)
+
+    results: list[CaseResult] = []
+    for case, k in plan:
+        result = CaseResult(case=case, trials=trials_by_id[id(case)], k=k)
+        _print_case_progress(progress, result)
+        results.append(result)
+    return results
+
+
 def run_campaign(
     cases: list[AttackCase],
     model_client: ModelClient,
@@ -85,6 +165,7 @@ def run_campaign(
     *,
     k_default: int,
     headline: dict[str, int],
+    concurrency: int = 1,
     progress: Callable[[str], None] = print,
 ) -> list[CaseResult]:
     """Run every case at its resolved K, printing one progress line per case.
@@ -92,21 +173,23 @@ def run_campaign(
     All live dependencies (`model_client`, `retriever`, `verifier`) are
     parameters -- this function constructs nothing live, which is what makes
     it testable offline with a mocked client and the in-memory
-    `seeded_retriever` fixture."""
-    results: list[CaseResult] = []
-    for case in cases:
-        k = resolve_k(case, k_default, headline)
-        result = run_case(case, model_client, retriever, verifier, k=k)
-        valid = [t for t in result.trials if not t.score.invalid]
-        deviated = sum(1 for t in valid if t.score.deviated)
-        bypassed = sum(1 for t in valid if t.score.bypassed)
-        invalid = len(result.trials) - len(valid)
-        progress(
-            f"{case.id}: k={k} deviated={deviated}/{len(valid)} "
-            f"bypassed={bypassed}/{len(valid)} invalid={invalid}"
+    `seeded_retriever` fixture.
+
+    `concurrency <= 1` (the default) preserves the original sequential
+    behavior exactly: one case at a time, `run_case(..., k=k)` called once per
+    case, same result and progress-line order. `concurrency > 1` switches to a
+    trial-level thread pool (see `_run_campaign_concurrent`) -- per-case trial
+    COUNT and resolved K are unaffected; only intra-case trial order and
+    wall-clock time change."""
+    if concurrency <= 1:
+        return _run_campaign_sequential(
+            cases, model_client, retriever, verifier,
+            k_default=k_default, headline=headline, progress=progress,
         )
-        results.append(result)
-    return results
+    return _run_campaign_concurrent(
+        cases, model_client, retriever, verifier,
+        k_default=k_default, headline=headline, concurrency=concurrency, progress=progress,
+    )
 
 
 def _harness_git_commit() -> str:
@@ -155,6 +238,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the campaign plan and total live-call count, then exit. No client, no calls.",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Trials to run in parallel via a thread pool (default 1 = today's sequential behavior).",
+    )
     return parser
 
 
@@ -188,7 +277,8 @@ def main(argv: list[str] | None = None) -> None:
         _ROOT.parent / "triage-verifier/data/attack_reference.json",
     )
 
-    results = run_campaign(cases, model_client, retriever, verifier, k_default=args.k, headline=headline)
+    results = run_campaign(cases, model_client, retriever, verifier, k_default=args.k, headline=headline,
+                            concurrency=args.concurrency)
     report_md = build_baseline_report(results)
 
     out_path = args.out or (DEFAULT_REPORTS_DIR / f"baseline-{_harness_git_commit()}.md")
