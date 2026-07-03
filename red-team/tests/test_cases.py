@@ -136,3 +136,25 @@ def test_all_seed_cases_load():
         assert c.win_condition, f"{c.id}: empty win_condition"
         for pred in c.win_condition:
             assert pred in KNOWN_PREDICATES, f"{c.id}: unknown predicate {pred!r}"
+
+
+def test_all_held_out_cases_load():
+    """The HELD-OUT generalization corpus in red-team/attacks/held_out/ loads +
+    validates independently of the seed corpus (load_cases globs non-recursively,
+    so held_out/ is a separate directory), has >= 8 cases, covers all eight
+    case-class codes A1-E1, and uses only known predicates."""
+    cases = load_cases(ROOT / "attacks" / "held_out")
+
+    # (a) volume
+    assert len(cases) >= 8, f"expected >= 8 held-out cases, got {len(cases)}"
+
+    # (b) class-code coverage (by id prefix)
+    covered = {_class_code(c) for c in cases}
+    missing = SEED_CLASS_CODES - covered
+    assert not missing, f"held-out corpus missing class codes: {sorted(missing)}"
+
+    # (c) every win_condition predicate is in the closed grammar
+    for c in cases:
+        assert c.win_condition, f"{c.id}: empty win_condition"
+        for pred in c.win_condition:
+            assert pred in KNOWN_PREDICATES, f"{c.id}: unknown predicate {pred!r}"
