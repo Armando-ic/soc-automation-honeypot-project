@@ -142,9 +142,9 @@ This is split from video production on purpose. The raw clips need live Falcon; 
 - ⏸️ **Deferred:** rotate the pending IRIS admin API key when `vm-soc-v2-iris` is next allocated (not before —
   it's offline now). Load the new value from the gitignored creds file, never inline.
 - ✅ **Loose end resolved (2026-07-01):** `v4-gcp-native` was rebased `--onto` the clean `v3` base (`77c9952`) so
-  it inherits no purged secrets, and backed up to the **PRIVATE** repo `Armando-ic/soc-v4-gcp-redacted`
-  (gh-confirmed private). It **must stay private** (it documents the live redacted.com security design and
-  blind spots) and would need a genericization pass before it could ever go public. See memory `soc-v4-gcp-redacted`.
+  it inherits no purged secrets, and was backed up to a **separate private repository** (gh-confirmed private).
+  It **must stay private** and would need a genericization pass before it could ever go public. See the
+  private-project note in local memory.
 
 ---
 
