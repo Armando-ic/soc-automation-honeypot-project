@@ -21,7 +21,8 @@ def build_report(
     judge = ClaudeJudge(client, model=settings.model) if client is not None else StubJudge()
     try:
         verifier = TriageVerifier.from_paths(
-            settings.schema_path, settings.attack_ref_path, judge=judge
+            settings.schema_path, settings.attack_ref_path, judge=judge,
+            prompt_path=settings.prompt_path,
         )
         report = verifier.verify(
             result, retrieved=retrieved, enrichment_results=enrichment_results

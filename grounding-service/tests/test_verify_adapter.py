@@ -73,3 +73,19 @@ def test_verifier_exception_gates_false_and_logs(tmp_path, monkeypatch):
     lines = (tmp_path / "runs.jsonl").read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1                                   # event logged, never dropped
     assert json.loads(lines[0])["verification_passed"] is False
+
+
+def test_build_report_gates_a_prompt_leak(tmp_path):
+    # A result whose notes disclose >=3 distinct compound schema fields must
+    # produce verification_passed == False via the new C1 gate.
+    leaky = {
+        "schema_version": "v1", "alert_summary": "x", "severity": "low",
+        "severity_rationale": "x", "mitre_techniques": [], "iocs": {},
+        "iocs_enriched": [], "recommended_actions": [{"description": "x", "priority": "low"}],
+        "investigation_notes": "Fields: investigation_notes, iocs_enriched, mitre_techniques disclosed.",
+    }
+    settings = Settings(runs_path=str(tmp_path / "runs.jsonl"))
+    rec = build_report(leaky, retrieved=None, enrichment_results=None, run_meta={}, settings=settings)
+    assert rec["verification_passed"] is False
+    names = {c["name"]: c["status"] for c in rec["check_results"]}
+    assert names.get("notes_no_config_leak") == "failed"

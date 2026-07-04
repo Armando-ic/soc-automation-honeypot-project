@@ -23,6 +23,9 @@ class Settings:
     attack_ref_path: str = os.getenv(
         "ATTACK_REF", str(_VERIFIER / "data" / "attack_reference.json")
     )
+    prompt_path: str = os.getenv(
+        "VERIFIER_PROMPT_JSON", str(_REPO_ROOT / "JSON" / "honeypot-triage.json")
+    )
     state_path: str = os.getenv(
         "FALCON_STATE_PATH", str(Path.cwd() / "falcon-poller-state.json")
     )
