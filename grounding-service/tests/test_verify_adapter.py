@@ -89,3 +89,53 @@ def test_build_report_gates_a_prompt_leak(tmp_path):
     assert rec["verification_passed"] is False
     names = {c["name"]: c["status"] for c in rec["check_results"]}
     assert names.get("notes_no_config_leak") == "failed"
+
+
+# A sentinel prompt line that (a) is >=24 chars, (b) is NOT a severity-band line
+# (doesn't start with low/medium/high/critical:), and (c) does NOT appear in the
+# real deployed JSON/honeypot-triage.json. The ONLY way the C1 gate can fire on
+# notes carrying this line — with <3 distinct compound schema field names present —
+# is if settings.prompt_path was genuinely consulted to load THIS prompt.
+_SENTINEL_PROMPT_LINE = "SENTINEL_PLUMBING_MARKER: this exact line proves prompt_path was consulted."
+
+
+def _sentinel_leaky():
+    # Same skeleton as test_build_report_gates_a_prompt_leak, but the notes carry
+    # the sentinel prompt line verbatim and NAME NO compound schema fields, so the
+    # schema-token path (>=3 distinct compound tokens) cannot fire — only the
+    # prompt-line-signature path can.
+    return {
+        "schema_version": "v1", "alert_summary": "x", "severity": "low",
+        "severity_rationale": "x", "mitre_techniques": [], "iocs": {},
+        "iocs_enriched": [], "recommended_actions": [{"description": "x", "priority": "low"}],
+        "investigation_notes": "Analyst narration follows.\n" + _SENTINEL_PROMPT_LINE,
+    }
+
+
+def test_prompt_path_is_actually_consulted(tmp_path):
+    # DISCRIMINATING: proves settings.prompt_path drives the verifier's leak
+    # signature. A broken plumbing (wrong field / unconditional None) would fall
+    # back to the real deployed prompt, whose lines don't match the sentinel, and
+    # with <3 schema tokens the gate would PASS — so this test FAILs iff the
+    # explicit prompt_path is honoured.
+    prompt_json = tmp_path / "wf.json"
+    prompt_json.write_text(json.dumps({"nodes": [{
+        "type": "@n8n/n8n-nodes-langchain.anthropic",
+        "parameters": {"options": {"system": "You are a SOC analyst.\n" + _SENTINEL_PROMPT_LINE}},
+    }]}), encoding="utf-8")
+
+    settings = Settings(runs_path=str(tmp_path / "runs.jsonl"), prompt_path=str(prompt_json))
+    rec = build_report(_sentinel_leaky(), retrieved=None, enrichment_results=None,
+                       run_meta={}, settings=settings)
+    assert rec["verification_passed"] is False
+    names = {c["name"]: c["status"] for c in rec["check_results"]}
+    assert names.get("notes_no_config_leak") == "failed"
+
+    # Negative control: same sentinel notes with the DEFAULT (real deployed)
+    # prompt -> the sentinel line matches nothing, <3 schema tokens -> gate PASSES.
+    # Proves the temp prompt (not the default) drove the FAIL above.
+    default = Settings(runs_path=str(tmp_path / "runs2.jsonl"))
+    rec2 = build_report(_sentinel_leaky(), retrieved=None, enrichment_results=None,
+                        run_meta={}, settings=default)
+    names2 = {c["name"]: c["status"] for c in rec2["check_results"]}
+    assert names2.get("notes_no_config_leak") == "passed"
