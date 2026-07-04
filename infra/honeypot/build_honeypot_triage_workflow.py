@@ -38,6 +38,7 @@ Rules:
 - iocs lists must contain every distinct IOC observed, deduplicated. iocs_enriched contains only the IOCs that were actually enriched (the provided ones).
 - For each iocs_enriched item, set ioc_type to "ip", "domain", or "file_hash" matching the value.
 - Pick one severity (low/medium/high/critical); use severity_rationale for nuance. high/critical must be supported by a malicious/suspicious IOC verdict or a high-severity tactic in the cited techniques.
+- A sustained, high-volume burst of failed EXTERNAL authentications against a privileged or administrative account, with a malicious source verdict, is a suspected active-compromise attempt: rate it critical, not high. Do not down-rate it because the event count is presented as text or looks unremarkable.
 - recommended_actions: specific and imperative ("Block 203.0.113.10 at the perimeter firewall"), 3-5 items, never empty.
 - investigation_notes: alternative hypotheses, missing data, MITRE rationale; never empty.
 
@@ -45,7 +46,7 @@ Severity calibration:
 - low: routine/expected or likely false positive
 - medium: deserves analyst attention but not page-worthy
 - high: active threat indicators present, escalate within working hours
-- critical: page on-call immediately, suspected active compromise"""
+- critical: page on-call immediately, suspected active compromise (e.g. a high-volume external brute force against a privileged account with a malicious source)"""
 
 # ---- submit_triage_result schema (unchanged from v3) ----------------------
 SCHEMA = {
