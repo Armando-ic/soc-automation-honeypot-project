@@ -1,5 +1,5 @@
 # grounding-service/tests/test_rerank.py
-from grounding_service.rerank import select_with_tactic_diversity
+from grounding_service.rerank import collapse_to_parents, select_with_tactic_diversity
 
 
 def _c(id, tactic, score):
@@ -75,3 +75,58 @@ def test_never_evicts_a_uniquely_covered_tactic():
     candidates = [_c("A", "execution", 50), _c("B", "impact", 40), _c("C", "credential-access", 5)]
     out = select_with_tactic_diversity(candidates, top_k=2)
     assert [h["id"] for h in out] == ["A", "B"]
+
+
+_BY_ID = {
+    "T1110": {"name": "Brute Force", "tactics": ["credential-access"]},
+    "T1003": {"name": "OS Credential Dumping", "tactics": ["credential-access"]},
+}
+
+
+def _cand(id, tactic, score, name=None):
+    return {"id": id, "name": name or id, "tactics": [tactic], "score": score}
+
+
+def test_collapse_rolls_sub_up_to_parent_payload():
+    out = collapse_to_parents([_cand("T1110.001", "credential-access", 0.7)], _BY_ID)
+    assert len(out) == 1
+    assert out[0]["id"] == "T1110"
+    assert out[0]["name"] == "Brute Force"          # parent's REAL name from by_id
+    assert out[0]["tactics"] == ["credential-access"]
+    assert out[0]["score"] == 0.7                    # the sub's score is carried
+
+
+def test_collapse_keeps_sub_when_parent_absent_from_corpus():
+    # parent T1059 is NOT in _BY_ID -> never fabricate it
+    out = collapse_to_parents([_cand("T1059.001", "execution", 0.9)], _BY_ID)
+    assert [h["id"] for h in out] == ["T1059.001"]
+
+
+def test_collapse_passes_parents_through_unchanged():
+    out = collapse_to_parents([_cand("T1190", "initial-access", 0.5)], _BY_ID)
+    assert [h["id"] for h in out] == ["T1190"]
+
+
+def test_collapse_dedups_parent_and_its_sub_keeping_best_score():
+    cands = [_cand("T1110.001", "credential-access", 0.70),
+             _cand("T1110", "credential-access", 0.40)]
+    out = collapse_to_parents(cands, _BY_ID)
+    assert [h["id"] for h in out] == ["T1110"]        # collapsed to one entry
+    assert out[0]["score"] == 0.70                    # the higher score wins
+
+
+def test_collapse_returns_score_descending():
+    cands = [_cand("T1003.006", "credential-access", 0.60),
+             _cand("T1110.001", "credential-access", 0.80)]
+    out = collapse_to_parents(cands, _BY_ID)
+    assert [h["id"] for h in out] == ["T1110", "T1003"]
+    assert [h["score"] for h in out] == [0.80, 0.60]
+
+
+def test_collapse_empty_by_id_is_a_noop_on_subs():
+    out = collapse_to_parents([_cand("T1110.001", "credential-access", 0.7)], {})
+    assert [h["id"] for h in out] == ["T1110.001"]
+
+
+def test_collapse_empty_candidates():
+    assert collapse_to_parents([], _BY_ID) == []

@@ -72,3 +72,35 @@ def select_with_tactic_diversity(candidates: list[dict], top_k: int, max_promoti
         promotions += 1
     base.sort(key=lambda h: h["score"], reverse=True)
     return base[:top_k]
+
+
+def _parent_id(tid: str) -> str:
+    """The dot-less parent id of a technique id (T1110.001 -> T1110)."""
+    return tid.split(".")[0]
+
+
+def collapse_to_parents(candidates: list[dict], by_id: dict[str, dict]) -> list[dict]:
+    """Roll each retrieved sub-technique up to its PARENT technique (Plan 2, A3).
+
+    A sub-technique (id contains a dot) is replaced by its parent id carrying the
+    parent's real name/tactics from `by_id`, keeping the sub's score. A sub whose
+    parent is absent from `by_id` is kept as-is (never fabricate a parent). Parent
+    techniques pass through unchanged. Deduped by resulting id keeping the highest
+    score. Returns the list sorted score-descending."""
+    best: dict[str, dict] = {}
+    for c in candidates:
+        cid = c.get("id", "")
+        if "." in cid:
+            pid = _parent_id(cid)
+            if pid in by_id:
+                info = by_id[pid]
+                item = {"id": pid, "name": info.get("name", ""),
+                        "tactics": info.get("tactics", []), "score": c["score"]}
+            else:
+                item = dict(c)  # parent unknown -> keep the sub, do not fabricate
+        else:
+            item = dict(c)
+        rid = item["id"]
+        if rid not in best or item["score"] > best[rid]["score"]:
+            best[rid] = item
+    return sorted(best.values(), key=lambda h: h["score"], reverse=True)
