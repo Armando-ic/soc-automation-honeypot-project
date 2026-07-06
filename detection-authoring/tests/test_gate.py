@@ -105,3 +105,16 @@ def test_uneval_condition_fails_gracefully():
     assert not r.passed
     assert not r.subset_ok
     assert r.unsupported
+
+
+def test_pathological_nesting_is_rejected_not_crashed():
+    # Deeply-nested YAML can exhaust the parser stack: a pure-Python
+    # RecursionError, or worse a native libyaml C-stack overflow that kills the
+    # whole process (no catchable exception). run_gate must reject such input up
+    # front and return a failing verdict, never raise. Depth 1200 sits in the
+    # RecursionError band but well below the native-crash threshold, so it is
+    # safe to exercise here.
+    deep = "a: " + "[" * 1200 + "1" + "]" * 1200
+    r = run_gate(deep, "T1059.001")
+    assert not r.passed
+    assert r.unsupported

@@ -12,6 +12,28 @@ from detection_authoring.matcher import matches
 from detection_authoring.sigma_subset import check_supported
 
 
+# Sanity bounds on candidate YAML before any parser sees it. A real Sigma rule
+# is small and shallow (a few nested levels); anything past these bounds is not a
+# plausible drafter rule and could exhaust the parser stack. Deep enough nesting
+# overflows libyaml's C stack and kills the whole process, which no try/except
+# can catch, so the only safe defense is to reject it up front.
+_MAX_YAML_CHARS = 100_000
+_MAX_YAML_NESTING = 100
+
+
+def _max_nesting_depth(text: str) -> int:
+    depth = max_depth = 0
+    for ch in text:
+        if ch in "[{":
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        elif ch in "]}":
+            if depth > 0:
+                depth -= 1
+    return max_depth
+
+
 @dataclass
 class GateResult:
     t1_parse_ok: bool = False
@@ -30,14 +52,22 @@ class GateResult:
 def run_gate(yaml_text: str, technique_id: str) -> GateResult:
     """Run the deterministic 4-tier gate over candidate Sigma YAML and return a
     GateResult. Never raises on the yaml_text side (untrusted, LLM-drafted text
-    can be malformed or well-formed-but-non-mapping) - any parse problem there
-    routes to a failing verdict instead.
+    can be malformed or well-formed-but-non-mapping) - any parse problem routes
+    to a failing verdict, and pathologically large or deeply-nested input is
+    rejected up front before it can exhaust a parser stack.
 
     technique_id must have a frozen positive corpus (see corpus/positives/); a
     missing one raises FileNotFoundError by design, surfacing misconfiguration
     rather than silently corrupting the verdict.
     """
     res = GateResult()
+
+    # Reject pathologically large or deeply-nested input before any parser sees
+    # it: otherwise a plain RecursionError or an uncatchable native stack
+    # overflow escapes the tier guards below.
+    if len(yaml_text) > _MAX_YAML_CHARS or _max_nesting_depth(yaml_text) > _MAX_YAML_NESTING:
+        res.unsupported = ["rule is too large or too deeply nested to evaluate"]
+        return res
 
     # T1: valid Sigma
     res.t1_parse_errors = parse_errors(yaml_text)
@@ -48,7 +78,10 @@ def run_gate(yaml_text: str, technique_id: str) -> GateResult:
     # check_supported() walks a plain mapping, not a SigmaRule object).
     try:
         rule_dict = yaml.safe_load(yaml_text) or {}
-    except yaml.YAMLError as exc:
+    except Exception as exc:
+        # Broad on purpose: safe_load can raise RecursionError (not a
+        # yaml.YAMLError) on nesting the up-front guard did not catch, plus the
+        # ordinary YAML parse errors. Any of them routes to a failing verdict.
         res.unsupported = [f"yaml load failed: {exc}"]
         return res
     if not isinstance(rule_dict, dict):
