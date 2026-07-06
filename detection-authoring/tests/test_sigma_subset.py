@@ -84,3 +84,17 @@ def test_non_string_condition_flagged():
 def test_unknown_condition_token_flagged():
     out = check_supported(yaml.safe_load(UNKNOWN_TOKEN))
     assert any("ghost" in f for f in out)
+
+
+# Task 4 review follow-up: a detection with zero selections makes "all of them"
+# vacuously match everything (all([]) is True). The guard must reject it.
+NO_SELECTIONS = """
+title: x
+logsource: {product: windows, category: process_creation}
+detection: {condition: all of them}
+"""
+
+
+def test_detection_with_no_selections_flagged():
+    out = check_supported(yaml.safe_load(NO_SELECTIONS))
+    assert any("no selections" in f for f in out)

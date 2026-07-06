@@ -26,6 +26,11 @@ def check_supported(rule_dict: dict) -> list[str]:
         findings.append(f"logsource.category must be '{SUPPORTED_CATEGORY}', got {logsource.get('category')!r}")
 
     detection = rule_dict.get("detection", {}) or {}
+    if not [n for n in detection if n != "condition"]:
+        # A detection with zero selections makes "all of them" vacuously match
+        # everything (all([]) is True), so reject it here rather than let the
+        # matcher silently match-all.
+        findings.append("detection defines no selections")
     for name, sel in detection.items():
         if name == "condition":
             continue
