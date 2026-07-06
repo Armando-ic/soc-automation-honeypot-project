@@ -86,3 +86,22 @@ def test_malformed_inner_structure_fails_gracefully():
         r = run_gate(bad, "T1059.001")
         assert not r.passed
         assert r.unsupported  # routed to a failing verdict, not crashed
+
+
+def test_uneval_condition_fails_gracefully():
+    # A bare wildcard selection reference with no `1 of`/`all of` quantifier
+    # slips past pySigma (T1) and the subset guard, but the matcher can't
+    # resolve the raw token 'selection1*'. run_gate must route that to a failing
+    # verdict, not raise a KeyError out of the matcher.
+    rule = (
+        "title: Bad\n"
+        "logsource: {product: windows, category: process_creation}\n"
+        "detection:\n"
+        "  selection1:\n"
+        "    Image|endswith: '\\notepad.exe'\n"
+        "  condition: selection1*\n"
+    )
+    r = run_gate(rule, "T1059.001")
+    assert not r.passed
+    assert not r.subset_ok
+    assert r.unsupported

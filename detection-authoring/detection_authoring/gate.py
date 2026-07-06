@@ -72,13 +72,26 @@ def run_gate(yaml_text: str, technique_id: str) -> GateResult:
     # T3/T4 only run when the rule is inside the subset the matcher models.
     if res.subset_ok and res.t1_parse_ok:
         detection = rule_dict["detection"]
+        # Corpus loads stay outside the try: a missing frozen corpus for
+        # technique_id is a config precondition failure, loud by design.
         positives = load_positives(technique_id)
-        res.positives_matched = [matches(detection, ev) for ev in positives]
-        res.t3_tp_ok = all(res.positives_matched) and len(positives) > 0
-
         benign = load_benign()
-        res.benign_false_positives = [ev for ev in benign if matches(detection, ev)]
-        res.t4_tn_ok = not res.benign_false_positives
+        try:
+            res.positives_matched = [matches(detection, ev) for ev in positives]
+            res.t3_tp_ok = all(res.positives_matched) and len(positives) > 0
+            res.benign_false_positives = [ev for ev in benign if matches(detection, ev)]
+            res.t4_tn_ok = not res.benign_false_positives
+        except Exception as exc:
+            # The subset guard is meant to admit only rules the matcher can
+            # evaluate, but the two do not model the condition grammar
+            # identically (e.g. a bare wildcard selection token with no
+            # quantifier). If the matcher can't evaluate a rule the guard let
+            # through, the rule is not faithfully in the modeled subset: fail it
+            # and record why, rather than raising out of run_gate.
+            res.unsupported.append(f"matcher could not evaluate rule: {exc}")
+            res.subset_ok = False
+            res.t3_tp_ok = False
+            res.t4_tn_ok = False
 
     res.passed = res.t1_parse_ok and res.subset_ok and res.t2_compile_ok and res.t3_tp_ok and res.t4_tn_ok
     return res
