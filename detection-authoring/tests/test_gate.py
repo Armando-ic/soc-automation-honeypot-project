@@ -62,3 +62,12 @@ def test_unsupported_feature_fails_subset_and_skips_behavioral():
     r = run_gate(UNSUPPORTED, "T1059.001")
     assert not r.subset_ok
     assert not r.passed
+
+
+def test_non_mapping_yaml_fails_gracefully():
+    # untrusted drafter text can parse to a non-mapping (scalar or list);
+    # the gate must return a failing verdict, not raise
+    for bad in ("just a scalar string", "- 1\n- 2\n"):
+        r = run_gate(bad, "T1059.001")
+        assert not r.passed
+        assert r.unsupported  # flagged out-of-subset, not crashed

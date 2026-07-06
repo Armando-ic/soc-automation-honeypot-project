@@ -28,17 +28,31 @@ class GateResult:
 
 
 def run_gate(yaml_text: str, technique_id: str) -> GateResult:
+    """Run the deterministic 4-tier gate over candidate Sigma YAML and return a
+    GateResult. Never raises on the yaml_text side (untrusted, LLM-drafted text
+    can be malformed or well-formed-but-non-mapping) - any parse problem there
+    routes to a failing verdict instead.
+
+    technique_id must have a frozen positive corpus (see corpus/positives/); a
+    missing one raises FileNotFoundError by design, surfacing misconfiguration
+    rather than silently corrupting the verdict.
+    """
     res = GateResult()
 
     # T1: valid Sigma
     res.t1_parse_errors = parse_errors(yaml_text)
     res.t1_parse_ok = not res.t1_parse_errors
 
-    # Subset guard (needs a loadable mapping; guard the yaml.safe_load itself)
+    # Subset guard needs a plain dict (pySigma's SigmaRule loader above already
+    # parsed yaml_text for T1; this second, raw yaml.safe_load is intentional -
+    # check_supported() walks a plain mapping, not a SigmaRule object).
     try:
         rule_dict = yaml.safe_load(yaml_text) or {}
     except yaml.YAMLError as exc:
         res.unsupported = [f"yaml load failed: {exc}"]
+        return res
+    if not isinstance(rule_dict, dict):
+        res.unsupported = [f"rule is not a mapping: {type(rule_dict).__name__}"]
         return res
     res.unsupported = check_supported(rule_dict)
     res.subset_ok = not res.unsupported
