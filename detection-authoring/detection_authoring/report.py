@@ -33,7 +33,9 @@ def build_authoring_report(runs: list[AuthoringRun]) -> str:
         invalid = [r for r in group if r.outcome in _INVALID]
         k = sum(1 for r in valid if r.passed)
         n = len(valid)
-        lo, hi = clopper_pearson(k, n) if n else (0.0, 0.0)
+        # clopper_pearson is n=0-safe and returns (0.0, 1.0) for no data - the
+        # honest "no information" interval, not a false-certainty [0.0, 0.0].
+        lo, hi = clopper_pearson(k, n)
         tiers = defaultdict(int)
         for r in valid:
             if not r.passed and r.first_fail_tier:
