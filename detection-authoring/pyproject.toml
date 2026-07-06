@@ -1,0 +1,28 @@
+[project]
+name = "detection-authoring"
+version = "0.1.0"
+description = "RAG-grounded, gate-verified Sigma authoring for the honeypot (Phase 2)"
+requires-python = ">=3.12"
+dependencies = [
+  "pysigma>=0.11",
+  "pysigma-backend-splunk>=1.1",
+  "qdrant-client>=1.9",
+  "fastembed>=0.3",
+  "anthropic>=0.40",
+  "scipy>=1.11",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "black>=24.0", "isort>=5.13", "mypy>=1.8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["detection_authoring*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
