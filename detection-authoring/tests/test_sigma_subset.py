@@ -48,3 +48,39 @@ def test_unknown_modifier_flagged():
 def test_unknown_field_flagged():
     out = check_supported(yaml.safe_load(BAD_FIELD))
     assert any("TotallyMadeUpField" in f for f in out)
+
+
+# Task 2 review follow-up: cover the three guard branches the brief's tests missed
+# (wrong logsource.product, non-string condition, unmatched condition token).
+BAD_PRODUCT = """
+title: x
+logsource: {product: linux, category: process_creation}
+detection: {sel: {Image: 'x'}, condition: sel}
+"""
+
+NON_STRING_CONDITION = """
+title: x
+logsource: {product: windows, category: process_creation}
+detection: {sel: {Image: 'x'}, condition: [sel]}
+"""
+
+UNKNOWN_TOKEN = """
+title: x
+logsource: {product: windows, category: process_creation}
+detection: {sel: {Image: 'x'}, condition: sel and ghost}
+"""
+
+
+def test_wrong_product_flagged():
+    out = check_supported(yaml.safe_load(BAD_PRODUCT))
+    assert any("product" in f for f in out)
+
+
+def test_non_string_condition_flagged():
+    out = check_supported(yaml.safe_load(NON_STRING_CONDITION))
+    assert any("condition" in f for f in out)
+
+
+def test_unknown_condition_token_flagged():
+    out = check_supported(yaml.safe_load(UNKNOWN_TOKEN))
+    assert any("ghost" in f for f in out)
