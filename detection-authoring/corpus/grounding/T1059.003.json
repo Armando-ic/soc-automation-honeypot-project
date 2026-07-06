@@ -1,0 +1,7 @@
+{
+  "technique_id": "T1059.003",
+  "name": "Command and Scripting Interpreter: Windows Command Shell",
+  "tactics": ["execution"],
+  "description": "Adversaries abuse cmd.exe for execution. A behavioral signal is cmd.exe /c with an embedded IOC-shaped string (an IPv4 literal, a SHA-256 hash, or an http(s) URL) in the CommandLine, which legitimate shells rarely contain.",
+  "query_hint": "Windows command shell embedded IOC IP hash URL"
+}

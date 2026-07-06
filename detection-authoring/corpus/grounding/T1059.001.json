@@ -1,0 +1,7 @@
+{
+  "technique_id": "T1059.001",
+  "name": "Command and Scripting Interpreter: PowerShell",
+  "tactics": ["execution"],
+  "description": "Adversaries abuse PowerShell for execution. A common obfuscation is powershell.exe with -EncodedCommand (and its valid shortenings -e/-en/-enc), which takes a base64-encoded command line. Sysmon EventID 1 captures the full CommandLine including the encoded blob.",
+  "query_hint": "PowerShell encoded command execution obfuscation"
+}
