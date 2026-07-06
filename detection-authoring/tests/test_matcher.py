@@ -1,4 +1,4 @@
-from detection_authoring.matcher import selection_matches
+from detection_authoring.matcher import matches, selection_matches
 
 PS_EVENT = {
     "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
@@ -50,3 +50,40 @@ def test_regex_is_case_sensitive_without_inline_flag():
 
 def test_startswith_case_insensitive():
     assert selection_matches({"CommandLine|startswith": "PowerShell.EXE"}, PS_EVENT)
+
+
+DET = {
+    "selection": {"Image|endswith": "\\powershell.exe"},
+    "filter": {"ParentImage|endswith": "\\explorer.exe"},
+    "condition": "selection and not filter",
+}
+
+
+def test_and_not_true_when_filter_absent():
+    ev = {"Image": "x\\powershell.exe", "ParentImage": "x\\WmiPrvSE.exe"}
+    assert matches(DET, ev)
+
+
+def test_and_not_false_when_filter_present():
+    ev = {"Image": "x\\powershell.exe", "ParentImage": "x\\explorer.exe"}
+    assert not matches(DET, ev)
+
+
+def test_one_of_pattern():
+    det = {
+        "sel_ip": {"CommandLine|re": r"\b\d{1,3}(\.\d{1,3}){3}\b"},
+        "sel_url": {"CommandLine|contains": "http://"},
+        "condition": "1 of sel_*",
+    }
+    assert matches(det, {"CommandLine": "cmd /c curl http://evil"})
+    assert not matches(det, {"CommandLine": "cmd /c dir"})
+
+
+def test_all_of_them():
+    det = {
+        "a": {"Image|endswith": "\\cmd.exe"},
+        "b": {"CommandLine|contains": "/c"},
+        "condition": "all of them",
+    }
+    assert matches(det, {"Image": "x\\cmd.exe", "CommandLine": "cmd /c dir"})
+    assert not matches(det, {"Image": "x\\cmd.exe", "CommandLine": "cmd /k dir"})

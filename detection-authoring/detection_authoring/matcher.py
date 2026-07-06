@@ -9,6 +9,7 @@ semantics.
 """
 from __future__ import annotations
 
+import fnmatch
 import re
 from typing import Any
 
@@ -62,3 +63,85 @@ def _field_matches(field_expr: str, expected: Any, event: dict) -> bool:
 def selection_matches(selection: dict, event: dict) -> bool:
     """Every field entry in a selection is AND-ed together."""
     return all(_field_matches(fe, val, event) for fe, val in selection.items())
+
+
+def _selection_names(detection: dict) -> list[str]:
+    return [n for n in detection if n != "condition"]
+
+
+def _resolve_pattern(pattern: str, detection: dict, event: dict) -> list[bool]:
+    if pattern == "them":
+        names = _selection_names(detection)
+    else:
+        names = [n for n in _selection_names(detection) if fnmatch.fnmatchcase(n, pattern)]
+    return [selection_matches(detection[n], event) for n in names]
+
+
+def _tokenize(condition: str) -> list[str]:
+    return condition.replace("(", " ( ").replace(")", " ) ").split()
+
+
+class _Parser:
+    """Recursive-descent over the supported condition grammar. Evaluates as it
+    parses against the given detection + event (no separate AST needed)."""
+
+    def __init__(self, tokens: list[str], detection: dict, event: dict) -> None:
+        self.toks = tokens
+        self.i = 0
+        self.detection = detection
+        self.event = event
+
+    def _peek(self) -> str | None:
+        return self.toks[self.i] if self.i < len(self.toks) else None
+
+    def _next(self) -> str:
+        tok = self.toks[self.i]
+        self.i += 1
+        return tok
+
+    def parse(self) -> bool:
+        val = self._or()
+        if self.i != len(self.toks):
+            raise ValueError(f"unparsed condition tokens: {self.toks[self.i:]}")
+        return val
+
+    def _or(self) -> bool:
+        val = self._and()
+        while self._peek() == "or":
+            self._next()
+            val = self._and() or val
+        return val
+
+    def _and(self) -> bool:
+        val = self._not()
+        while self._peek() == "and":
+            self._next()
+            val = self._not() and val
+        return val
+
+    def _not(self) -> bool:
+        if self._peek() == "not":
+            self._next()
+            return not self._not()
+        return self._primary()
+
+    def _primary(self) -> bool:
+        tok = self._next()
+        if tok == "(":
+            val = self._or()
+            if self._next() != ")":
+                raise ValueError("unbalanced parentheses in condition")
+            return val
+        if tok in ("1", "all"):
+            if self._next() != "of":
+                raise ValueError("expected 'of' after quantifier")
+            pattern = self._next()
+            results = _resolve_pattern(pattern, self.detection, self.event)
+            return all(results) if tok == "all" else any(results)
+        # bare selection identifier
+        return selection_matches(self.detection[tok], self.event)
+
+
+def matches(detection: dict, event: dict) -> bool:
+    condition = detection["condition"]
+    return _Parser(_tokenize(condition), detection, event).parse()
