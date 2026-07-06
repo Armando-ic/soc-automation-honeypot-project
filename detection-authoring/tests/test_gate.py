@@ -118,3 +118,15 @@ def test_pathological_nesting_is_rejected_not_crashed():
     r = run_gate(deep, "T1059.001")
     assert not r.passed
     assert r.unsupported
+
+
+def test_pathological_block_sequence_is_rejected():
+    # The same deep-nesting crash is reachable via YAML block/compact sequence
+    # syntax, which uses zero bracket characters, so a bracket char-scan misses
+    # it. The guard measures nesting from the event stream instead. ~2700 levels
+    # is past the native libyaml crash threshold, so this must be rejected by the
+    # guard's crash-safe pure-Python event scan before parse_errors ever runs.
+    deep = "- " * 2700 + "1"
+    r = run_gate(deep, "T1059.001")
+    assert not r.passed
+    assert r.unsupported

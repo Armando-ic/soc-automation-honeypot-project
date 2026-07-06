@@ -14,24 +14,36 @@ from detection_authoring.sigma_subset import check_supported
 
 # Sanity bounds on candidate YAML before any parser sees it. A real Sigma rule
 # is small and shallow (a few nested levels); anything past these bounds is not a
-# plausible drafter rule and could exhaust the parser stack. Deep enough nesting
-# overflows libyaml's C stack and kills the whole process, which no try/except
-# can catch, so the only safe defense is to reject it up front.
+# plausible drafter rule and could exhaust a parser stack. Deep enough nesting
+# overflows libyaml's C stack (via pySigma) and kills the whole process, which no
+# try/except can catch, so the only safe defense is to reject it up front.
 _MAX_YAML_CHARS = 100_000
 _MAX_YAML_NESTING = 100
 
 
-def _max_nesting_depth(text: str) -> int:
-    depth = max_depth = 0
-    for ch in text:
-        if ch in "[{":
-            depth += 1
-            if depth > max_depth:
-                max_depth = depth
-        elif ch in "]}":
-            if depth > 0:
+def _exceeds_limits(yaml_text: str) -> bool:
+    """True if yaml_text is too large or nests deeper than the gate will hand to
+    a parser. Nesting is measured syntax-independently from PyYAML's event stream
+    (block, flow, and compact '-' sequences all count) using the pure-Python
+    parser, which walks an explicit state stack and so cannot C-stack-overflow
+    the way pySigma's libyaml loader can. Bails as soon as the limit is crossed,
+    so a pathological document costs O(limit), not O(input)."""
+    if len(yaml_text) > _MAX_YAML_CHARS:
+        return True
+    depth = 0
+    try:
+        for event in yaml.parse(yaml_text):
+            if isinstance(event, (yaml.SequenceStartEvent, yaml.MappingStartEvent)):
+                depth += 1
+                if depth > _MAX_YAML_NESTING:
+                    return True
+            elif isinstance(event, (yaml.SequenceEndEvent, yaml.MappingEndEvent)):
                 depth -= 1
-    return max_depth
+    except RecursionError:
+        return True  # pathological even for the safe event parser
+    except yaml.YAMLError:
+        return False  # ordinary malformed-but-shallow doc; let the tier path report it
+    return False
 
 
 @dataclass
@@ -54,7 +66,10 @@ def run_gate(yaml_text: str, technique_id: str) -> GateResult:
     GateResult. Never raises on the yaml_text side (untrusted, LLM-drafted text
     can be malformed or well-formed-but-non-mapping) - any parse problem routes
     to a failing verdict, and pathologically large or deeply-nested input is
-    rejected up front before it can exhaust a parser stack.
+    rejected up front before it can exhaust a parser stack. This totality covers
+    plausible drafter output and arbitrary nesting depth; it is not a hardened
+    defense against deliberately adversarial YAML (e.g. alias/anchor expansion
+    bombs), which is outside the lab threat model.
 
     technique_id must have a frozen positive corpus (see corpus/positives/); a
     missing one raises FileNotFoundError by design, surfacing misconfiguration
@@ -63,9 +78,9 @@ def run_gate(yaml_text: str, technique_id: str) -> GateResult:
     res = GateResult()
 
     # Reject pathologically large or deeply-nested input before any parser sees
-    # it: otherwise a plain RecursionError or an uncatchable native stack
-    # overflow escapes the tier guards below.
-    if len(yaml_text) > _MAX_YAML_CHARS or _max_nesting_depth(yaml_text) > _MAX_YAML_NESTING:
+    # it: otherwise a plain RecursionError or an uncatchable native libyaml stack
+    # overflow (via parse_errors) escapes the tier guards below.
+    if _exceeds_limits(yaml_text):
         res.unsupported = ["rule is too large or too deeply nested to evaluate"]
         return res
 
