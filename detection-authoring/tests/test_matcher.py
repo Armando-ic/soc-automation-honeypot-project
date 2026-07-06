@@ -38,3 +38,15 @@ def test_missing_field_does_not_match():
 def test_and_across_fields():
     sel = {"Image|endswith": "\\powershell.exe", "ParentImage|endswith": "\\WmiPrvSE.exe"}
     assert selection_matches(sel, PS_EVENT)
+
+
+# Task 3 review follow-up: regression-guard the |re case-sensitivity semantics
+# and cover the startswith modifier branch.
+def test_regex_is_case_sensitive_without_inline_flag():
+    # Bare |re is case-sensitive: a lowercase pattern must NOT match "-E " in
+    # PS_EVENT. Guards against a future re.IGNORECASE regression in _match_scalar.
+    assert not selection_matches({"CommandLine|re": r"-e[nc]* "}, PS_EVENT)
+
+
+def test_startswith_case_insensitive():
+    assert selection_matches({"CommandLine|startswith": "PowerShell.EXE"}, PS_EVENT)
