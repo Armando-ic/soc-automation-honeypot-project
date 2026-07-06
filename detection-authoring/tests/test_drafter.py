@@ -52,3 +52,13 @@ def test_draft_no_yaml_is_no_rule():
 def test_draft_refusal_stop_reason():
     r = draft_rule(PACK, _FakeClient(_Resp("", stop_reason="refusal")))
     assert r.outcome == "refusal"
+    assert r.yaml_text is None
+
+
+def test_draft_truncated_takes_precedence_over_fence():
+    # a max_tokens stop is "truncated" even if the partial content held a fence -
+    # we do not trust a cut-off rule
+    fenced = "```yaml\ntitle: x\ndetection: {sel: {Image: a}, condition: sel}\n```"
+    r = draft_rule(PACK, _FakeClient(_Resp(fenced, stop_reason="max_tokens")))
+    assert r.outcome == "truncated"
+    assert r.yaml_text is None
