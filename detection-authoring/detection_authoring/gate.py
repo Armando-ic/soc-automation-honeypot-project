@@ -1,0 +1,62 @@
+"""The deterministic 4-tier gate (spec section 6). Pure function of
+(yaml_text, frozen corpus): no network, no Qdrant, no Claude."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+import yaml
+
+from detection_authoring.compile import compile_spl, parse_errors
+from detection_authoring.corpus import load_benign, load_positives
+from detection_authoring.matcher import matches
+from detection_authoring.sigma_subset import check_supported
+
+
+@dataclass
+class GateResult:
+    t1_parse_ok: bool = False
+    t1_parse_errors: list[str] = field(default_factory=list)
+    subset_ok: bool = False
+    unsupported: list[str] = field(default_factory=list)
+    t2_compile_ok: bool = False
+    spl: str | None = None
+    t3_tp_ok: bool = False
+    positives_matched: list[bool] = field(default_factory=list)
+    t4_tn_ok: bool = False
+    benign_false_positives: list[dict] = field(default_factory=list)
+    passed: bool = False
+
+
+def run_gate(yaml_text: str, technique_id: str) -> GateResult:
+    res = GateResult()
+
+    # T1: valid Sigma
+    res.t1_parse_errors = parse_errors(yaml_text)
+    res.t1_parse_ok = not res.t1_parse_errors
+
+    # Subset guard (needs a loadable mapping; guard the yaml.safe_load itself)
+    try:
+        rule_dict = yaml.safe_load(yaml_text) or {}
+    except yaml.YAMLError as exc:
+        res.unsupported = [f"yaml load failed: {exc}"]
+        return res
+    res.unsupported = check_supported(rule_dict)
+    res.subset_ok = not res.unsupported
+
+    # T2: compiles to SPL (independent of T3/T4)
+    res.spl = compile_spl(yaml_text)
+    res.t2_compile_ok = res.spl is not None
+
+    # T3/T4 only run when the rule is inside the subset the matcher models.
+    if res.subset_ok and res.t1_parse_ok:
+        detection = rule_dict["detection"]
+        positives = load_positives(technique_id)
+        res.positives_matched = [matches(detection, ev) for ev in positives]
+        res.t3_tp_ok = all(res.positives_matched) and len(positives) > 0
+
+        benign = load_benign()
+        res.benign_false_positives = [ev for ev in benign if matches(detection, ev)]
+        res.t4_tn_ok = not res.benign_false_positives
+
+    res.passed = res.t1_parse_ok and res.subset_ok and res.t2_compile_ok and res.t3_tp_ok and res.t4_tn_ok
+    return res
