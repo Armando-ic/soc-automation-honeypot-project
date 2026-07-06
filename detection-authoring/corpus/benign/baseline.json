@@ -1,0 +1,10 @@
+[
+  {"EventID": 1, "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "CommandLine": "powershell.exe -NoProfile -File C:\\scripts\\update.ps1", "ParentImage": "C:\\Windows\\explorer.exe", "User": "DESKTOP-VNEF7PC\\mydfir"},
+  {"EventID": 1, "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "CommandLine": "powershell.exe Get-Process", "ParentImage": "C:\\Windows\\explorer.exe", "User": "DESKTOP-VNEF7PC\\mydfir"},
+  {"EventID": 1, "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "CommandLine": "powershell.exe -ExecutionPolicy Bypass -File C:\\agent\\run.ps1", "ParentImage": "C:\\Windows\\System32\\services.exe", "User": "NT AUTHORITY\\SYSTEM"},
+  {"EventID": 1, "Image": "C:\\Windows\\System32\\cmd.exe", "CommandLine": "cmd.exe /c dir C:\\Users", "ParentImage": "C:\\Windows\\explorer.exe", "User": "DESKTOP-VNEF7PC\\mydfir"},
+  {"EventID": 1, "Image": "C:\\Windows\\System32\\cmd.exe", "CommandLine": "cmd.exe /c echo hello", "ParentImage": "C:\\Windows\\System32\\services.exe", "User": "NT AUTHORITY\\SYSTEM"},
+  {"EventID": 1, "Image": "C:\\Windows\\System32\\cmd.exe", "CommandLine": "cmd.exe /c ping 8.8.8.8", "ParentImage": "C:\\Windows\\explorer.exe", "User": "DESKTOP-VNEF7PC\\mydfir"},
+  {"EventID": 1, "Image": "C:\\Windows\\System32\\svchost.exe", "CommandLine": "svchost.exe -k netsvcs -p", "ParentImage": "C:\\Windows\\System32\\services.exe", "User": "NT AUTHORITY\\SYSTEM"},
+  {"EventID": 1, "Image": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "CommandLine": "\"chrome.exe\" --type=renderer", "ParentImage": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "User": "DESKTOP-VNEF7PC\\mydfir"}
+]

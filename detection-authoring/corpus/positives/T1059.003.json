@@ -1,0 +1,9 @@
+[
+  {
+    "EventID": 1,
+    "Image": "C:\\Windows\\System32\\cmd.exe",
+    "CommandLine": "\"C:\\Windows\\system32\\cmd.exe\" /c \"echo demo-1a2b && echo IOC_IP=185.220.101.42 && echo IOC_HASH=275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f && exit\"",
+    "ParentImage": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "User": "DESKTOP-VNEF7PC\\mydfir"
+  }
+]

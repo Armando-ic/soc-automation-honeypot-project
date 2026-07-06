@@ -1,0 +1,23 @@
+[
+  {
+    "EventID": 1,
+    "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "CommandLine": "powershell.exe -NoProfile -E VwByAGkAdABlAC0ASABvAHMAdAAg",
+    "ParentImage": "C:\\Windows\\System32\\wbem\\WmiPrvSE.exe",
+    "User": "DESKTOP-VNEF7PC\\mydfir"
+  },
+  {
+    "EventID": 1,
+    "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "CommandLine": "powershell.exe -enc VwByAGkAdABlAC0ASABvAHMAdAAg",
+    "ParentImage": "C:\\Windows\\System32\\cmd.exe",
+    "User": "DESKTOP-VNEF7PC\\mydfir"
+  },
+  {
+    "EventID": 1,
+    "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "CommandLine": "powershell.exe -EncodedCommand VwByAGkAdABlAC0ASABvAHMAdAAg",
+    "ParentImage": "C:\\Windows\\System32\\wbem\\WmiPrvSE.exe",
+    "User": "DESKTOP-VNEF7PC\\mydfir"
+  }
+]
