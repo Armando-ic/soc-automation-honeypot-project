@@ -54,7 +54,15 @@ def run_gate(yaml_text: str, technique_id: str) -> GateResult:
     if not isinstance(rule_dict, dict):
         res.unsupported = [f"rule is not a mapping: {type(rule_dict).__name__}"]
         return res
-    res.unsupported = check_supported(rule_dict)
+    try:
+        res.unsupported = check_supported(rule_dict)
+    except Exception as exc:
+        # check_supported assumes mapping-shaped logsource/detection/selections;
+        # untrusted drafter YAML can nest a list or a non-string key one level
+        # down. Any structural surprise routes to a failing verdict, keeping
+        # run_gate total over the yaml_text side (mirrors compile.py's except).
+        res.unsupported = [f"malformed rule structure: {exc}"]
+        return res
     res.subset_ok = not res.unsupported
 
     # T2: compiles to SPL (independent of T3/T4)

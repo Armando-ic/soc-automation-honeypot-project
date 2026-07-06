@@ -71,3 +71,18 @@ def test_non_mapping_yaml_fails_gracefully():
         r = run_gate(bad, "T1059.001")
         assert not r.passed
         assert r.unsupported  # flagged out-of-subset, not crashed
+
+
+def test_malformed_inner_structure_fails_gracefully():
+    # top-level is a mapping, but logsource/detection (or a selection key) is
+    # itself malformed. The gate must still return a failing verdict, not raise
+    # an AttributeError out of check_supported.
+    bad_rules = (
+        "logsource: [a, b]\ndetection: {selection: {Image: x}, condition: selection}\n",
+        "logsource: {product: windows, category: process_creation}\ndetection: [1, 2, 3]\n",
+        "logsource: {product: windows, category: process_creation}\ndetection: {selection: {1: x}, condition: selection}\n",
+    )
+    for bad in bad_rules:
+        r = run_gate(bad, "T1059.001")
+        assert not r.passed
+        assert r.unsupported  # routed to a failing verdict, not crashed
