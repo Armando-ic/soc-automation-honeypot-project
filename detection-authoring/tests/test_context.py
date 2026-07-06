@@ -17,3 +17,9 @@ def test_grounding_pack_from_committed_pack(seeded_retriever):
 def test_grounding_pack_has_neighbors(seeded_retriever):
     pack = build_grounding_pack("T1059.001", seeded_retriever, grounding_dir=GROUNDING)
     assert isinstance(pack.neighbors, list)
+    # the seeded corpus holds other techniques, so there is at least one neighbor
+    assert pack.neighbors
+    assert all(isinstance(n, dict) and "id" in n for n in pack.neighbors)
+    # the core promise: the target technique is never its own neighbor
+    ids = [n["id"] for n in pack.neighbors]
+    assert "T1059.001" not in ids
