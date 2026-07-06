@@ -8,3 +8,4 @@ __pycache__/
 rules/*.yml
 rules/*.spl
 rules/*.gate.md
+reports/*.md
