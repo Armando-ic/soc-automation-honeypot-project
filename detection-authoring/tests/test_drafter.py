@@ -36,6 +36,16 @@ def test_system_prompt_lists_allowed_fields_and_subset():
     assert "contains" in sp
 
 
+def test_system_prompt_forbids_list_of_maps_selections():
+    # A selection written as a YAML list of maps is valid Sigma but outside our
+    # supported subset (the owned matcher models single-map selections only). The
+    # prompt must steer the model to single-map selections + condition-level OR,
+    # else every realistic OR-across-fields rule fails the subset guard.
+    sp = build_system_prompt(PACK)
+    assert "list of mappings" in sp
+    assert "separate named selections" in sp
+
+
 def test_draft_extracts_fenced_yaml():
     fenced = "Here is the rule:\n```yaml\ntitle: x\ndetection: {sel: {Image: a}, condition: sel}\n```\nDone."
     r = draft_rule(PACK, _FakeClient(_Resp(fenced)))
