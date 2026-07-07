@@ -188,6 +188,6 @@ Image IN ("*\\powershell.exe", "*\\pwsh.exe") OR OriginalFileName IN ("PowerShel
 | T3 | Fires on the frozen positive corpus | PASS |
 | T4 | Quiet on the frozen benign baseline | PASS |
 
-**Matcher faithfulness: Zircolite cross-check pending.** T3/T4 use our owned Sigma matcher; the one-time cross-check against Zircolite (a real community Sigma engine) that banks the faithfulness evidence hasn't been run yet (Zircolite isn't pip-installable, and our cross-check script needs a `--jsononly` to `--json-input` flag fix first). Tracked as a follow-up.
+**Matcher faithfulness: cross-checked against Zircolite (2026-07-07).** T3/T4 use our owned Sigma matcher, so its faithfulness to real Sigma semantics matters. We ran the one-time cross-check (`detection-authoring/scripts/crosscheck_zircolite.py`) against **Zircolite v3.7.6**, a real community offline Sigma engine: the T1059.001 reference rule was evaluated by both engines over the whole frozen corpus (3 positives + 8 benign) and they returned the identical detect/no-detect verdict on every event. Result: `Owned matcher agrees with Zircolite on the whole corpus.` So a gate PASS here means what a real Sigma engine would say, not just what our own matcher thinks.
 
 Worth noting vs the analyst rule above: Claude's regex reaches `-encodedcommand` by nesting optional groups rather than the hand-written `[ncodedommand]*` character-class trick, equivalent in intent, and it added an `OriginalFileName` branch the hand-written SPL doesn't have.
