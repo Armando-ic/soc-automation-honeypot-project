@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from detection_authoring.config import load_config
 from detection_authoring.context import GroundingPack
 
-MAX_TOKENS = 4096
 _FENCE_RE = re.compile(r"```(?:yaml)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
@@ -74,7 +73,7 @@ def draft_rule(pack: GroundingPack, client) -> DraftResult:
     cfg = load_config()
     raw = client.messages.create(
         model=cfg.model,
-        max_tokens=MAX_TOKENS,
+        max_tokens=cfg.max_tokens,
         system=build_system_prompt(pack),
         messages=[{"role": "user", "content": _build_user_message(pack)}],
     )

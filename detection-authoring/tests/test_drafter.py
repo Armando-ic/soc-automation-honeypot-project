@@ -72,3 +72,24 @@ def test_draft_truncated_takes_precedence_over_fence():
     r = draft_rule(PACK, _FakeClient(_Resp(fenced, stop_reason="max_tokens")))
     assert r.outcome == "truncated"
     assert r.yaml_text is None
+
+
+def test_draft_uses_config_max_tokens(monkeypatch):
+    # config.max_tokens must actually drive the API call, not a hardcoded constant.
+    from detection_authoring import drafter as drafter_mod
+    from detection_authoring.config import Config
+
+    monkeypatch.setattr(drafter_mod, "load_config", lambda: Config(max_tokens=1234))
+    captured = {}
+
+    class _CapMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return _Resp("```yaml\ntitle: x\ndetection: {sel: {Image: a}, condition: sel}\n```")
+
+    class _CapClient:
+        def __init__(self):
+            self.messages = _CapMessages()
+
+    draft_rule(PACK, _CapClient())
+    assert captured["max_tokens"] == 1234
