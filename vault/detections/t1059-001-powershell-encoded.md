@@ -145,3 +145,49 @@ This is now captured in [[../subprojects/2026-04-30-detection-foundations/runboo
 - **AtomicTestHarnesses install needs TLS 1.2 explicit-enable** on Win10 default PowerShell 5.1. `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12` before `Install-Module`.
 - **`Splunk_TA_windows` lookup CSVs are missing** on the rebuilt Splunk install. Three `Could not load lookup=LOOKUP-*_for_windows` warnings appear on every search. **Cosmetic only** — these lookups apply to `wineventlog` sourcetype, not Sysmon. Doesn't affect this detection's results.
 - **`alert_status_id=1` maps to "Unspecified"** on IRIS v2.4.22 (not "New" as historically documented). Workflow's hardcoded `1` should be re-derived; see workflow doc Known Issues.
+
+## Claude-drafted Sigma (Phase 2)
+
+Phase 2 (RAG + detection-as-code) adds an AI-vs-analyst artifact: a Sigma rule for this technique **drafted by Claude Opus 4.8**, RAG-grounded on the ATT&CK corpus, then judged by a deterministic 4-tier gate. It sits beside the hand-written SPL above. The point isn't to replace the analyst rule, it's to measure whether an LLM can author a detection a verifier will actually vouch for.
+
+**Live authoring run (2026-07-07):** 5 trials, **5/5 passed the gate**, 95% CI [0.48, 1.00]. Full report: `detection-authoring/reports/authoring-cab1e37.md`.
+
+**Honest before/after.** The first run scored **0/5** here. Every draft used an idiomatic Sigma *list-of-maps* selection (the standard way to OR across different fields, e.g. match PowerShell by `Image` OR by `OriginalFileName`), a construct the owned matcher doesn't model, so the subset guard correctly rejected all of them. The fix was a drafter prompt constraint steering the model to single-map selections combined with condition-level OR; the hardened gate and matcher were left untouched (fix commit `cab1e37`). Post-fix: 0/5 to 5/5. The gate was sound the whole time, the finding was about the authoring *subset boundary*, not the verifier.
+
+**The generated rule** (`detection-authoring/rules/T1059.001.yml`):
+
+```yaml
+detection:
+    selection_image:
+        Image|endswith:
+            - '\powershell.exe'
+            - '\pwsh.exe'
+    selection_origname:
+        OriginalFileName:
+            - 'PowerShell.EXE'
+            - 'pwsh.dll'
+    selection_encoded:
+        CommandLine|re: '(?i)\s-e(nc?(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?\s'
+    condition: (selection_image or selection_origname) and selection_encoded
+```
+
+**Compiled SPL** (`detection-authoring/rules/T1059.001.spl`, produced by pySigma, not hand-written):
+
+```spl
+Image IN ("*\\powershell.exe", "*\\pwsh.exe") OR OriginalFileName IN ("PowerShell.EXE", "pwsh.dll")
+| regex CommandLine="(?i)\\s-e(nc?(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?\\s"
+```
+
+**Gate verdict** (`detection-authoring/rules/T1059.001.gate.md`), all four tiers **PASS**:
+
+| Tier | Check | Result |
+|---|---|---|
+| T1 | Valid Sigma (pySigma parse) | PASS |
+| subset | Inside the owned matcher's supported subset | PASS |
+| T2 | Compiles to SPL | PASS |
+| T3 | Fires on the frozen positive corpus | PASS |
+| T4 | Quiet on the frozen benign baseline | PASS |
+
+**Matcher faithfulness: Zircolite cross-check pending.** T3/T4 use our owned Sigma matcher; the one-time cross-check against Zircolite (a real community Sigma engine) that banks the faithfulness evidence hasn't been run yet (Zircolite isn't pip-installable, and our cross-check script needs a `--jsononly` to `--json-input` flag fix first). Tracked as a follow-up.
+
+Worth noting vs the analyst rule above: Claude's regex reaches `-encodedcommand` by nesting optional groups rather than the hand-written `[ncodedommand]*` character-class trick, equivalent in intent, and it added an `OriginalFileName` branch the hand-written SPL doesn't have.

@@ -1,0 +1,29 @@
+title: PowerShell EncodedCommand Execution
+id: 8f3c2b1a-6e4d-4a7f-9c2e-1b5d3a7e9f01
+status: experimental
+description: Detects PowerShell execution using the -EncodedCommand parameter (and valid shortenings) which takes a base64-encoded command, commonly used to obfuscate malicious commands.
+references:
+    - https://attack.mitre.org/techniques/T1059/001/
+author: Detection Engineering
+date: 2024-01-01
+tags:
+    - attack.execution
+    - attack.t1059.001
+logsource:
+    product: windows
+    category: process_creation
+detection:
+    selection_image:
+        Image|endswith:
+            - '\powershell.exe'
+            - '\pwsh.exe'
+    selection_origname:
+        OriginalFileName:
+            - 'PowerShell.EXE'
+            - 'pwsh.dll'
+    selection_encoded:
+        CommandLine|re: '(?i)\s-e(nc?(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?\s'
+    condition: (selection_image or selection_origname) and selection_encoded
+falsepositives:
+    - Legitimate administration scripts or management tools that pass encoded commands
+level: medium
