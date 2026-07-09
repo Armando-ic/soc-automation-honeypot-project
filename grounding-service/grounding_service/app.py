@@ -46,11 +46,24 @@ class FalconContainGuardRequest(BaseModel):
     resolved_ids: list[str]
 
 
+class DeobfuscateRequest(BaseModel):
+    payload: str
+    max_bytes: int | None = None
+
+
+class TriageVerdictRequest(BaseModel):
+    behavioral_hits: list[dict] = []
+    ioc_verdicts: dict[str, str] = {}
+    fully_resolved: bool = True
+    flags: list[str] = []
+
+
 def create_app(
     retriever: AttackRetriever,
     settings: Settings,
     *,
     judge_client_factory: Callable[[], object] | None = None,
+    deobf_client_factory: Callable[[], object] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="grounding-service", version="0.1.0")
 
@@ -84,6 +97,60 @@ def create_app(
             settings=settings,
             client=client,
         )
+
+    @app.post("/deobfuscate")
+    def deobfuscate(req: DeobfuscateRequest) -> dict:
+        from malware_triage.behavioral import behavioral_hits
+        from malware_triage.config import load_config
+        from malware_triage.extractor import extract_from_result
+        from malware_triage.gate import decode_and_verify
+
+        cfg = load_config()
+        client = None
+        if deobf_client_factory is not None:
+            try:
+                client = deobf_client_factory()
+            except Exception:      # a Claude outage must never block triage
+                client = None
+        result = decode_and_verify(req.payload, client, cfg)
+        result.iocs = extract_from_result(result)
+        hits = behavioral_hits(result)
+        return {
+            "verified_layers": [
+                {"transform": l.transform, "params": l.params, "source": l.source,
+                 "input_sha256": l.input_sha256, "output_sha256": l.output_sha256}
+                for l in result.verified_layers
+            ],
+            "final_plaintext": result.final_plaintext,
+            "rejected_layers": [
+                {"transform": r.transform, "reason": r.reason} for r in result.rejected_layers
+            ],
+            "iocs": [
+                {"value": i.value, "ioc_type": i.ioc_type, "defanged_original": i.defanged_original}
+                for i in result.iocs
+            ],
+            "advisory_intent": result.advisory_intent,
+            "flags": result.flags,
+            # forwarded verbatim by n8n to /triage-verdict after the VT lookups:
+            "verdict_inputs": {
+                "behavioral_hits": [
+                    {"rule_id": h.rule_id, "category": h.category, "evidence": h.evidence} for h in hits
+                ],
+                "fully_resolved": result.fully_resolved,
+                "flags": result.flags,
+            },
+        }
+
+    @app.post("/triage-verdict")
+    def triage_verdict(req: TriageVerdictRequest) -> dict:
+        from malware_triage.models import BehavioralHit, DeobfuscationResult
+        from malware_triage.verdict import fuse
+
+        result = DeobfuscationResult(fully_resolved=req.fully_resolved, flags=list(req.flags))
+        hits = [BehavioralHit(h["rule_id"], h.get("category", "other"), h.get("evidence", ""))
+                for h in req.behavioral_hits]
+        v = fuse(result, req.ioc_verdicts, hits)
+        return {"verdict": v.verdict, "evidence": v.evidence, "flags": v.flags}
 
     @app.get("/falcon/state")
     def falcon_state() -> dict:

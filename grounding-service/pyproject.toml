@@ -3,6 +3,9 @@ name = "grounding-service"
 version = "0.1.0"
 description = "MITRE ATT&CK retrieval + triage-verifier gate service for the honeypot SOAR (Phase 0D-1a)"
 requires-python = ">=3.12"
+# Sibling path dependencies (editable-installed, not PyPI packages — see README):
+#   pip install -e "../triage-verifier"
+#   pip install -e "../malware-triage"
 dependencies = [
   "fastapi>=0.110",
   "uvicorn>=0.29",
