@@ -26,6 +26,40 @@ def test_deobfuscate_survives_client_outage(seeded_retriever, tmp_path):
     assert r.status_code == 200 and r.json()["final_plaintext"] == "Write-Host "
 
 
+def test_deobfuscate_survives_midcall_outage(seeded_retriever, tmp_path):
+    # Distinct from test_deobfuscate_survives_client_outage: the FACTORY succeeds
+    # (returns a client), but that client's messages.create() raises mid-decode
+    # (rate-limit/network/5xx). A DeflateStream-style payload trips the prefilter
+    # (has_encoded_payload True) but has no builtin recognizer and no [char]
+    # tokens (try_builtin returns None), so the gate must consult the client and
+    # hit the raising create() call. F6: this must NOT propagate to HTTP 500.
+    class _RaisingClient:
+        def __init__(self):
+            self.messages = self
+
+        def create(self, **kwargs):
+            raise RuntimeError("mid-decode outage")
+
+    c = _client(seeded_retriever, tmp_path, factory=_RaisingClient)
+    payload = "New-Object IO.Compression.DeflateStream decode"
+    r = c.post("/deobfuscate", json={"payload": payload})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["verdict_inputs"]["fully_resolved"] is False
+    assert "residual-encoding" in body["flags"]
+
+
+def test_triage_verdict_rejects_malformed_hit(seeded_retriever, tmp_path):
+    # D5/F7: a behavioral hit missing rule_id must NOT be silently dropped (that
+    # could launder a suspicious verdict into a clean one). Today (pre-fix) this
+    # raises a bare KeyError -> HTTP 500; post-fix it's a clean 422.
+    c = _client(seeded_retriever, tmp_path)
+    r = c.post("/triage-verdict", json={
+        "behavioral_hits": [{"category": "exec", "evidence": "IEX"}],
+        "ioc_verdicts": {}, "fully_resolved": True, "flags": []})
+    assert r.status_code == 422
+
+
 def test_deobfuscate_caps_payload(seeded_retriever, tmp_path):
     # F4/D2/D6: /deobfuscate must cap the attacker payload before feeding the
     # engine, and max_bytes must NOT be usable to raise the cap above the config

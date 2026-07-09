@@ -157,6 +157,10 @@ def create_app(
         from malware_triage.verdict import fuse
 
         result = DeobfuscationResult(fully_resolved=req.fully_resolved, flags=list(req.flags))
+        # F7/D5: a malformed hit must NOT be silently dropped (that could launder
+        # a suspicious verdict into a clean one) or 500 with a bare KeyError.
+        if any("rule_id" not in h for h in req.behavioral_hits):
+            raise HTTPException(status_code=422, detail="behavioral hit missing rule_id")
         hits = [BehavioralHit(h["rule_id"], h.get("category", "other"), h.get("evidence", ""))
                 for h in req.behavioral_hits]
         v = fuse(result, req.ioc_verdicts, hits)
