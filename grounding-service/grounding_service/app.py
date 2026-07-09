@@ -106,13 +106,23 @@ def create_app(
         from malware_triage.gate import decode_and_verify
 
         cfg = load_config()
+        # F4/D6: read req.max_bytes (was declared but never used) and cap the
+        # attacker payload BEFORE the engine touches it. min(...) means max_bytes
+        # can only LOWER the cap, never raise it above the config ceiling. Chopping
+        # a tail is the D4 false-clean hazard, so signal truncation -> the verdict
+        # floors to unknown, never a silent clean.
+        cap = min(req.max_bytes or cfg.max_payload_bytes, cfg.max_payload_bytes)
+        entry_truncated = len(req.payload) > cap
+        payload = req.payload[:cap]
         client = None
         if deobf_client_factory is not None:
             try:
                 client = deobf_client_factory()
             except Exception:      # a Claude outage must never block triage
                 client = None
-        result = decode_and_verify(req.payload, client, cfg)
+        result = decode_and_verify(payload, client, cfg)
+        if entry_truncated and "truncated" not in result.flags:
+            result.flags.append("truncated")
         result.iocs = extract_from_result(result)
         hits = behavioral_hits(result)
         return {
