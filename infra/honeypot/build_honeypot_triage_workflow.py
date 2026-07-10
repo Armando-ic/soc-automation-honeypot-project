@@ -13,6 +13,19 @@ CRED_GREY = {"httpHeaderAuth": {"id": "REPLACE_ME", "name": "GreyNoise account"}
 CRED_ANTH = {"anthropicApi": {"id": "REPLACE_ME", "name": "Anthropic account"}}
 CRED_IRIS = {"dfirIrisApi": {"id": "REPLACE_ME", "name": "DFIR IRIS account"}}
 
+# ---- de-obfuscation pre-gate regex (single source of truth) ------------------
+# TRUE superset of malware_triage/prefilter.py _PATTERNS (equal on enc/frombase64/
+# gzip/hex, broader on char_array). Valid identically in Python re and JS RegExp.
+# Embedded into the Deobf Pre-gate JS node via new RegExp(json.dumps(SOURCE), 'i')
+# and imported by test_prefilter_agreement.py, so what ships == what is tested.
+N8N_PREGATE_SOURCE = (
+    r"(?:^|\s|/|-)(?:encodedcommand|enc|en|ec|e)\s+[A-Za-z0-9+/=]{16,}"
+    r"|frombase64string"
+    r"|(?:gzipstream|deflatestream|io\.compression)"
+    r"|(?:[0-9a-fA-F]{2}){16,}"
+    r"|\[char\]"
+)
+
 # ---- forked Opus system prompt (triage-honeypot.md body) -------------------
 PROMPT = """You are a Tier 1 SOC analyst triaging alerts from a honeypot monitored by Splunk. Enrichment and candidate MITRE techniques are ALREADY PROVIDED to you in the user message - you do not call any tools to gather them. Your only job is to reason over the provided context and submit one structured analysis.
 
