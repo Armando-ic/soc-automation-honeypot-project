@@ -368,7 +368,7 @@ JS_TRIAGE_BODY = r"""// Assemble the /triage-verdict request. Reached from eithe
 // always comes from /deobfuscate. Behavioral hits + fully_resolved + flags are the
 // deterministic fuser's inputs; ioc_verdicts are the VT-normalized verdicts.
 const er = $json.enrichment_results || {};
-const vi = $('deobfuscate').item.json.verdict_inputs || {};
+const vi = $('deobfuscate').first().json.verdict_inputs || {};   // .first() not .item: the upstream N-to-1 VT collapse (Build Deobf Normalize Body) breaks pairedItem lineage, so .item fails on the multi-IOC path
 return [{ json: {
   behavioral_hits: vi.behavioral_hits || [],
   ioc_verdicts: er,

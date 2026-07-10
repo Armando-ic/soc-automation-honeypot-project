@@ -606,7 +606,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Assemble the /triage-verdict request. Reached from either the VT path (input\n// carries enrichment_results from /normalize) or the no-IOC path (none). verdict_inputs\n// always comes from /deobfuscate. Behavioral hits + fully_resolved + flags are the\n// deterministic fuser's inputs; ioc_verdicts are the VT-normalized verdicts.\nconst er = $json.enrichment_results || {};\nconst vi = $('deobfuscate').item.json.verdict_inputs || {};\nreturn [{ json: {\n  behavioral_hits: vi.behavioral_hits || [],\n  ioc_verdicts: er,\n  fully_resolved: (vi.fully_resolved !== undefined) ? vi.fully_resolved : true,\n  flags: vi.flags || [],\n} }];"
+        "jsCode": "// Assemble the /triage-verdict request. Reached from either the VT path (input\n// carries enrichment_results from /normalize) or the no-IOC path (none). verdict_inputs\n// always comes from /deobfuscate. Behavioral hits + fully_resolved + flags are the\n// deterministic fuser's inputs; ioc_verdicts are the VT-normalized verdicts.\nconst er = $json.enrichment_results || {};\nconst vi = $('deobfuscate').first().json.verdict_inputs || {};   // .first() not .item: the upstream N-to-1 VT collapse (Build Deobf Normalize Body) breaks pairedItem lineage, so .item fails on the multi-IOC path\nreturn [{ json: {\n  behavioral_hits: vi.behavioral_hits || [],\n  ioc_verdicts: er,\n  fully_resolved: (vi.fully_resolved !== undefined) ? vi.fully_resolved : true,\n  flags: vi.flags || [],\n} }];"
       },
       "id": "build-triage-body",
       "name": "Build Triage Body",
