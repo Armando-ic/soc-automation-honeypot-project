@@ -170,6 +170,18 @@ def test_deobfuscate_max_bytes_below_ceiling_isolates_tail(seeded_retriever, tmp
     assert "truncated" in body["flags"]
 
 
+def test_deobfuscate_overlong_char_token_no_500(seeded_retriever, tmp_path):
+    # BLOCKER 1 (re-audit round 2): an overlong [char] numeric token tripped Python's
+    # 4300-digit int<->str limit inside decoder._char_codepoint -> uncaught ValueError
+    # -> HTTP 500 (try_builtin catches only DecodeError). Availability-only (a crash,
+    # not a false-clean), same class as N1/H2. Must be a clean 200 now.
+    c = _client(seeded_retriever, tmp_path, factory=None)
+    for payload in ["[char]" + "9" * 5000, "[char]0x" + "a" * 5000]:
+        r = c.post("/deobfuscate", json={"payload": payload})
+        assert r.status_code == 200
+        r.json()  # decodable JSON
+
+
 def test_triage_verdict_purity_extra_free_text_key_is_ignored(seeded_retriever, tmp_path):
     # F9/D7 (b): a well-formed benign body (no malicious IOC, no behavioral hit) plus
     # an EXTRA unknown JSON key carrying hostile-looking free text must still verdict
