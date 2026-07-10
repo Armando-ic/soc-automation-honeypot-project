@@ -12,6 +12,7 @@ CRED_HDR = {"httpHeaderAuth": {"id": "REPLACE_ME", "name": "Header Auth account"
 CRED_GREY = {"httpHeaderAuth": {"id": "REPLACE_ME", "name": "GreyNoise account"}}
 CRED_ANTH = {"anthropicApi": {"id": "REPLACE_ME", "name": "Anthropic account"}}
 CRED_IRIS = {"dfirIrisApi": {"id": "REPLACE_ME", "name": "DFIR IRIS account"}}
+CRED_VT = {"httpHeaderAuth": {"id": "REPLACE_ME", "name": "VirusTotal account"}}
 
 # ---- de-obfuscation pre-gate regex (single source of truth) ------------------
 # TRUE superset of malware_triage/prefilter.py _PATTERNS (equal on enc/frombase64/
@@ -117,6 +118,9 @@ const src_ip = canonIp(r.src_ip);
 const host = r.ComputerName || r.dest || r.host || 'unknown-host';
 const user = r.user || r.Account_Name || 'unknown-user';
 const count = r.count || 'multiple';
+const alert_command = String(
+  r.CommandLine || r.Process_Command_Line || r.process || body.alert_command || ''
+);
 
 const enrich_ips = (src_ip && !isPrivate(src_ip)) ? [src_ip] : [];
 
@@ -134,6 +138,7 @@ return [{ json: {
   results_link: body.results_link || '',
   console_link: body.console_link || '',
   src_ip, host, user, count,
+  alert_command,
   enrich_ips,
   observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },
   alert_text,
@@ -317,6 +322,60 @@ return [{ json: {
   host: ctx.host,
 } }];"""
 
+JS_PREGATE = (
+    "// Deterministic pre-gate: does the captured command look encoded? SUPERSET of the\n"
+    "// engine prefilter (malware_triage/prefilter.py). Over-calling only costs an extra\n"
+    "// /deobfuscate call; under-calling would miss a real payload, so this is broad by design.\n"
+    "const p = $('Parse Alert').item.json;\n"
+    "const cmd = String(p.alert_command || '');\n"
+    "const N8N_PREGATE = new RegExp(" + json.dumps(N8N_PREGATE_SOURCE) + ", 'i');\n"
+    "const deobf = N8N_PREGATE.test(cmd);\n"
+    "return [{ json: { ...p, deobf } }];"
+)
+
+JS_VT_REQUESTS = r"""// One n8n item per extracted IOC, each carrying its VirusTotal v3 URL (endpoint
+// differs by IOC type). Reached only when there is >=1 IOC (guarded upstream).
+const d = $('deobfuscate').item.json;
+const iocs = Array.isArray(d.iocs) ? d.iocs : [];
+const VT = 'https://www.virustotal.com/api/v3/';
+const urlId = (u) => Buffer.from(String(u)).toString('base64url').replace(/=+$/, '');
+const out = [];
+for (const i of iocs) {
+  const t = i.ioc_type, v = String(i.value);
+  let vt_url = null;
+  if (t === 'ip') vt_url = VT + 'ip_addresses/' + encodeURIComponent(v);
+  else if (t === 'domain') vt_url = VT + 'domains/' + encodeURIComponent(v);
+  else if (t === 'url') vt_url = VT + 'urls/' + urlId(v);
+  else if (t === 'file_hash') vt_url = VT + 'files/' + encodeURIComponent(v);
+  if (vt_url) out.push({ json: { ioc_value: v, ioc_type: t, vt_url } });
+}
+return out;"""
+
+JS_DEOBF_NORMBODY = r"""// Collapse the per-IOC VirusTotal responses into /normalize items. Align each
+// response to its request by index (n8n preserves item order through the HTTP node,
+// and continueRegularOutput yields one output item per input even on VT errors).
+const reqs = $('Build VT Requests').all();
+const resps = $input.all();
+const items = resps.map((x, idx) => ({
+  ioc: (reqs[idx] && reqs[idx].json.ioc_value) || '',
+  provider: 'virustotal',
+  response: x.json,
+}));
+return [{ json: { items } }];"""
+
+JS_TRIAGE_BODY = r"""// Assemble the /triage-verdict request. Reached from either the VT path (input
+// carries enrichment_results from /normalize) or the no-IOC path (none). verdict_inputs
+// always comes from /deobfuscate. Behavioral hits + fully_resolved + flags are the
+// deterministic fuser's inputs; ioc_verdicts are the VT-normalized verdicts.
+const er = $json.enrichment_results || {};
+const vi = $('deobfuscate').item.json.verdict_inputs || {};
+return [{ json: {
+  behavioral_hits: vi.behavioral_hits || [],
+  ioc_verdicts: er,
+  fully_resolved: (vi.fully_resolved !== undefined) ? vi.fully_resolved : true,
+  flags: vi.flags || [],
+} }];"""
+
 TOOLCODE_JS = "return {\n  success: true,\n  message: \"Triage analysis received. Workflow will route to downstream consumers.\"\n};"
 
 NEEDS_DISCORD = ("={{ JSON.stringify({ embeds: [{ "
@@ -347,6 +406,16 @@ POS = {
     "Needs-Human Iris": [3184, 704],
     "Needs-Human Discord": [3184, 848],
     "Has IOC": [480, 720],
+    "Deobf Pre-gate": [360, 960],
+    "Is Encoded?": [560, 960],
+    "deobfuscate": [760, 1040],
+    "Has Deobf IOCs?": [960, 1040],
+    "Build VT Requests": [1160, 960],
+    "enrich_virustotal": [1360, 960],
+    "Build Deobf Normalize Body": [1560, 960],
+    "deobf normalize": [1760, 960],
+    "Build Triage Body": [1960, 1040],
+    "triage-verdict": [2160, 1040],
 }
 
 
@@ -458,6 +527,48 @@ nodes = [
                                          "operator": {"type": "string", "operation": "notEmpty", "singleValue": True}}],
                          "combinator": "and"},
           "options": {}}, [470, 200]),
+    node("Deobf Pre-gate", "n8n-nodes-base.code", 2,
+         {"jsCode": JS_PREGATE}, [360, 960]),
+    node("Is Encoded?", "n8n-nodes-base.if", 2.2,
+         {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                         "conditions": [{"id": "isenc", "leftValue": "={{ $json.deobf }}",
+                                         "rightValue": "", "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                         "combinator": "and"},
+          "options": {}}, [560, 960]),
+    node("deobfuscate", "n8n-nodes-base.httpRequest", 4.4,
+         {"method": "POST", "url": "http://grounding-service:8000/deobfuscate",
+          "sendBody": True, "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ payload: $('Parse Alert').item.json.alert_command }) }}",
+          "options": {}}, [760, 1040], extra={"retryOnFail": True, "waitBetweenTries": 5000}),
+    node("Has Deobf IOCs?", "n8n-nodes-base.if", 2.2,
+         {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                         "conditions": [{"id": "hasdeobfioc", "leftValue": "={{ ($json.iocs || []).length }}",
+                                         "rightValue": 0, "operator": {"type": "number", "operation": "gt"}}],
+                         "combinator": "and"},
+          "options": {}}, [960, 1040]),
+    node("Build VT Requests", "n8n-nodes-base.code", 2,
+         {"jsCode": JS_VT_REQUESTS}, [1160, 960]),
+    node("enrich_virustotal", "n8n-nodes-base.httpRequest", 4.4,
+         {"method": "GET", "url": "={{ $json.vt_url }}",
+          "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": True, "headerParameters": {"parameters": [
+              {"name": "Accept", "value": "application/json"}]},
+          "options": {"response": {"response": {"neverError": True}}}},
+         [1360, 960], creds=CRED_VT, extra={"onError": "continueRegularOutput"}),
+    node("Build Deobf Normalize Body", "n8n-nodes-base.code", 2,
+         {"jsCode": JS_DEOBF_NORMBODY}, [1560, 960]),
+    node("deobf normalize", "n8n-nodes-base.httpRequest", 4.4,
+         {"method": "POST", "url": "http://grounding-service:8000/normalize",
+          "sendBody": True, "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ items: $json.items }) }}", "options": {}},
+         [1760, 960]),
+    node("Build Triage Body", "n8n-nodes-base.code", 2,
+         {"jsCode": JS_TRIAGE_BODY}, [1960, 1040]),
+    node("triage-verdict", "n8n-nodes-base.httpRequest", 4.4,
+         {"method": "POST", "url": "http://grounding-service:8000/triage-verdict",
+          "sendBody": True, "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json) }}", "options": {}},
+         [2160, 1040]),
 ]
 
 # ---- presentation sticky notes (cosmetic; zero effect on execution) -----------
@@ -520,7 +631,22 @@ nodes += [
 
 connections = {
     "Webhook": {"main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]},
-    "Parse Alert": {"main": [[{"node": "Has IOC", "type": "main", "index": 0}]]},
+    "Parse Alert": {"main": [[{"node": "Deobf Pre-gate", "type": "main", "index": 0}]]},
+    "Deobf Pre-gate": {"main": [[{"node": "Is Encoded?", "type": "main", "index": 0}]]},
+    "Is Encoded?": {"main": [
+        [{"node": "deobfuscate", "type": "main", "index": 0}],   # true: looks encoded
+        [{"node": "Has IOC", "type": "main", "index": 0}],       # false: existing brute-force path
+    ]},
+    "deobfuscate": {"main": [[{"node": "Has Deobf IOCs?", "type": "main", "index": 0}]]},
+    "Has Deobf IOCs?": {"main": [
+        [{"node": "Build VT Requests", "type": "main", "index": 0}],   # true: >=1 IOC
+        [{"node": "Build Triage Body", "type": "main", "index": 0}],   # false: skip VT, empty verdicts
+    ]},
+    "Build VT Requests": {"main": [[{"node": "enrich_virustotal", "type": "main", "index": 0}]]},
+    "enrich_virustotal": {"main": [[{"node": "Build Deobf Normalize Body", "type": "main", "index": 0}]]},
+    "Build Deobf Normalize Body": {"main": [[{"node": "deobf normalize", "type": "main", "index": 0}]]},
+    "deobf normalize": {"main": [[{"node": "Build Triage Body", "type": "main", "index": 0}]]},
+    "Build Triage Body": {"main": [[{"node": "triage-verdict", "type": "main", "index": 0}]]},
     "Has IOC": {"main": [
         [{"node": "enrich_abuseipdb", "type": "main", "index": 0}],     # true: has IOC -> enrich
         [{"node": "Build Normalize Body", "type": "main", "index": 0}], # false: skip enrichment

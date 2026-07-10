@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse alert -> canonical IOCs + alert_text. Source-aware: splunk brute-force (synthesize)\n// vs falcon (use the supplied alert_text). CF#2 canonical form; empty-safe src_ip.\nconst body = $input.first().json.body || {};\nconst r = body.result || {};\nconst source = body.source || 'splunk';\n\nconst canonIp = (v) => String(v || '').trim();                       // plain IPv4: no change\nconst isPrivate = (ip) =>\n  /^10\\./.test(ip) || /^192\\.168\\./.test(ip) ||\n  /^172\\.(1[6-9]|2\\d|3[0-1])\\./.test(ip) || /^127\\./.test(ip) || ip === '';\nconst canonDomain = (v) =>\n  String(v || '').trim().toLowerCase().replace(/\\[\\.\\]/g, '.').replace(/^hxxp/, 'http').replace(/\\.$/, '');\nconst canonHash = (v) => String(v || '').trim().toLowerCase();\n\nconst src_ip = canonIp(r.src_ip);\nconst host = r.ComputerName || r.dest || r.host || 'unknown-host';\nconst user = r.user || r.Account_Name || 'unknown-user';\nconst count = r.count || 'multiple';\n\nconst enrich_ips = (src_ip && !isPrivate(src_ip)) ? [src_ip] : [];\n\nconst alert_text = (source === 'falcon' && body.alert_text)\n  ? String(body.alert_text)\n  : `RDP/SMB brute force: ${count} failed Windows logons (EventCode 4625) ` +\n    `against user ${user} on host ${host} from external source IP ${src_ip}. ` +\n    `Repeated failed authentication, credential access, remote service login.`;\n\nreturn [{ json: {\n  run_id: String($execution.id),\n  timestamp: new Date().toISOString(),\n  source,\n  search_name: body.search_name || '',\n  results_link: body.results_link || '',\n  console_link: body.console_link || '',\n  src_ip, host, user, count,\n  enrich_ips,\n  observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },\n  alert_text,\n}}];"
+        "jsCode": "// Parse alert -> canonical IOCs + alert_text. Source-aware: splunk brute-force (synthesize)\n// vs falcon (use the supplied alert_text). CF#2 canonical form; empty-safe src_ip.\nconst body = $input.first().json.body || {};\nconst r = body.result || {};\nconst source = body.source || 'splunk';\n\nconst canonIp = (v) => String(v || '').trim();                       // plain IPv4: no change\nconst isPrivate = (ip) =>\n  /^10\\./.test(ip) || /^192\\.168\\./.test(ip) ||\n  /^172\\.(1[6-9]|2\\d|3[0-1])\\./.test(ip) || /^127\\./.test(ip) || ip === '';\nconst canonDomain = (v) =>\n  String(v || '').trim().toLowerCase().replace(/\\[\\.\\]/g, '.').replace(/^hxxp/, 'http').replace(/\\.$/, '');\nconst canonHash = (v) => String(v || '').trim().toLowerCase();\n\nconst src_ip = canonIp(r.src_ip);\nconst host = r.ComputerName || r.dest || r.host || 'unknown-host';\nconst user = r.user || r.Account_Name || 'unknown-user';\nconst count = r.count || 'multiple';\nconst alert_command = String(\n  r.CommandLine || r.Process_Command_Line || r.process || body.alert_command || ''\n);\n\nconst enrich_ips = (src_ip && !isPrivate(src_ip)) ? [src_ip] : [];\n\nconst alert_text = (source === 'falcon' && body.alert_text)\n  ? String(body.alert_text)\n  : `RDP/SMB brute force: ${count} failed Windows logons (EventCode 4625) ` +\n    `against user ${user} on host ${host} from external source IP ${src_ip}. ` +\n    `Repeated failed authentication, credential access, remote service login.`;\n\nreturn [{ json: {\n  run_id: String($execution.id),\n  timestamp: new Date().toISOString(),\n  source,\n  search_name: body.search_name || '',\n  results_link: body.results_link || '',\n  console_link: body.console_link || '',\n  src_ip, host, user, count,\n  alert_command,\n  enrich_ips,\n  observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },\n  alert_text,\n}}];"
       },
       "id": "parse-alert",
       "name": "Parse Alert",
@@ -423,6 +423,220 @@
     },
     {
       "parameters": {
+        "jsCode": "// Deterministic pre-gate: does the captured command look encoded? SUPERSET of the\n// engine prefilter (malware_triage/prefilter.py). Over-calling only costs an extra\n// /deobfuscate call; under-calling would miss a real payload, so this is broad by design.\nconst p = $('Parse Alert').item.json;\nconst cmd = String(p.alert_command || '');\nconst N8N_PREGATE = new RegExp(\"(?:^|\\\\s|/|-)(?:encodedcommand|enc|en|ec|e)\\\\s+[A-Za-z0-9+/=]{16,}|frombase64string|(?:gzipstream|deflatestream|io\\\\.compression)|(?:[0-9a-fA-F]{2}){16,}|\\\\[char\\\\]\", 'i');\nconst deobf = N8N_PREGATE.test(cmd);\nreturn [{ json: { ...p, deobf } }];"
+      },
+      "id": "deobf-pre-gate",
+      "name": "Deobf Pre-gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "isenc",
+              "leftValue": "={{ $json.deobf }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-encoded?",
+      "name": "Is Encoded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/deobfuscate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ payload: $('Parse Alert').item.json.alert_command }) }}",
+        "options": {}
+      },
+      "id": "deobfuscate",
+      "name": "deobfuscate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        760,
+        1040
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasdeobfioc",
+              "leftValue": "={{ ($json.iocs || []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-deobf-iocs?",
+      "name": "Has Deobf IOCs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One n8n item per extracted IOC, each carrying its VirusTotal v3 URL (endpoint\n// differs by IOC type). Reached only when there is >=1 IOC (guarded upstream).\nconst d = $('deobfuscate').item.json;\nconst iocs = Array.isArray(d.iocs) ? d.iocs : [];\nconst VT = 'https://www.virustotal.com/api/v3/';\nconst urlId = (u) => Buffer.from(String(u)).toString('base64url').replace(/=+$/, '');\nconst out = [];\nfor (const i of iocs) {\n  const t = i.ioc_type, v = String(i.value);\n  let vt_url = null;\n  if (t === 'ip') vt_url = VT + 'ip_addresses/' + encodeURIComponent(v);\n  else if (t === 'domain') vt_url = VT + 'domains/' + encodeURIComponent(v);\n  else if (t === 'url') vt_url = VT + 'urls/' + urlId(v);\n  else if (t === 'file_hash') vt_url = VT + 'files/' + encodeURIComponent(v);\n  if (vt_url) out.push({ json: { ioc_value: v, ioc_type: t, vt_url } });\n}\nreturn out;"
+      },
+      "id": "build-vt-requests",
+      "name": "Build VT Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.vt_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "enrich_virustotal",
+      "name": "enrich_virustotal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1360,
+        960
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "VirusTotal account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collapse the per-IOC VirusTotal responses into /normalize items. Align each\n// response to its request by index (n8n preserves item order through the HTTP node,\n// and continueRegularOutput yields one output item per input even on VT errors).\nconst reqs = $('Build VT Requests').all();\nconst resps = $input.all();\nconst items = resps.map((x, idx) => ({\n  ioc: (reqs[idx] && reqs[idx].json.ioc_value) || '',\n  provider: 'virustotal',\n  response: x.json,\n}));\nreturn [{ json: { items } }];"
+      },
+      "id": "build-deobf-normalize-body",
+      "name": "Build Deobf Normalize Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/normalize",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ items: $json.items }) }}",
+        "options": {}
+      },
+      "id": "deobf-normalize",
+      "name": "deobf normalize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1760,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble the /triage-verdict request. Reached from either the VT path (input\n// carries enrichment_results from /normalize) or the no-IOC path (none). verdict_inputs\n// always comes from /deobfuscate. Behavioral hits + fully_resolved + flags are the\n// deterministic fuser's inputs; ioc_verdicts are the VT-normalized verdicts.\nconst er = $json.enrichment_results || {};\nconst vi = $('deobfuscate').item.json.verdict_inputs || {};\nreturn [{ json: {\n  behavioral_hits: vi.behavioral_hits || [],\n  ioc_verdicts: er,\n  fully_resolved: (vi.fully_resolved !== undefined) ? vi.fully_resolved : true,\n  flags: vi.flags || [],\n} }];"
+      },
+      "id": "build-triage-body",
+      "name": "Build Triage Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/triage-verdict",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "triage-verdict",
+      "name": "triage-verdict",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2160,
+        1040
+      ]
+    },
+    {
+      "parameters": {
         "content": "## 🛡️ honeypot-triage\n**What it does:** It auto-triages alerts from an internet-exposed honeypot. When one alert comes in it gets enriched, grounded in MITRE, and triaged by Claude Opus 4.8, then credibility-gated by a verifier that double-checks Opus actually stuck to the evidence (it also sanity-checks whether the severity is supported by the evidence). If every MITRE technique it cites and every IOC verdict traces back to what the enrichment and the Qdrant retrieval returned, the triage is trusted and goes straight through as an auto-approved alert. Otherwise the whole thing gets routed so a human has to manually verify the MITRE techniques and IOCs. Either way an Iris alert is created and a Discord notification is sent; a clean alert if it passed or a flagged alert for human review if it didn't.\n\n**Two feeders, one pipeline:** Splunk saved-searches *and* the Falcon poller both POST to this webhook.\n\n**Why:** because this turns noisy honeypot detections into analyst-ready, *trustworthy* triage without a human reading every one.",
         "height": 232,
         "width": 1004,
@@ -550,7 +764,120 @@
       "main": [
         [
           {
+            "node": "Deobf Pre-gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deobf Pre-gate": {
+      "main": [
+        [
+          {
+            "node": "Is Encoded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Encoded?": {
+      "main": [
+        [
+          {
+            "node": "deobfuscate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Has IOC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deobfuscate": {
+      "main": [
+        [
+          {
+            "node": "Has Deobf IOCs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Deobf IOCs?": {
+      "main": [
+        [
+          {
+            "node": "Build VT Requests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Triage Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build VT Requests": {
+      "main": [
+        [
+          {
+            "node": "enrich_virustotal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enrich_virustotal": {
+      "main": [
+        [
+          {
+            "node": "Build Deobf Normalize Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Deobf Normalize Body": {
+      "main": [
+        [
+          {
+            "node": "deobf normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deobf normalize": {
+      "main": [
+        [
+          {
+            "node": "Build Triage Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Triage Body": {
+      "main": [
+        [
+          {
+            "node": "triage-verdict",
             "type": "main",
             "index": 0
           }
