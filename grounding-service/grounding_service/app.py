@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Callable
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from grounding_service import falcon as fal
 from grounding_service.config import Settings
@@ -48,7 +48,12 @@ class FalconContainGuardRequest(BaseModel):
 
 class DeobfuscateRequest(BaseModel):
     payload: str
-    max_bytes: int | None = None
+    # H-ITEM1: ge=1 rejects max_bytes<=0 at the pydantic layer (422) before the
+    # handler runs. None still means "no cap given, use the ceiling." Without
+    # this, max_bytes=0 used to be swallowed by `0 or ceiling` (0 is falsy) and
+    # silently process the FULL ceiling, and a negative value used to chop the
+    # payload from the wrong end while always marking it truncated.
+    max_bytes: int | None = Field(default=None, ge=1)
 
 
 class TriageVerdictRequest(BaseModel):
@@ -56,6 +61,20 @@ class TriageVerdictRequest(BaseModel):
     ioc_verdicts: dict[str, str] = {}
     fully_resolved: bool = True
     flags: list[str] = []
+
+
+def _scrub_surrogates(obj):
+    """Replace lone surrogate code points (unencodable as UTF-8) anywhere in the
+    outgoing response so Starlette's JSONResponse.render never 500s. Applied ONLY to
+    the response dict, AFTER the verdict/IOC/behavioral values were computed from the
+    true plaintext -- so this cannot move the verdict (verdict-safe by construction)."""
+    if isinstance(obj, str):
+        return obj.encode("utf-8", "replace").decode("utf-8")
+    if isinstance(obj, list):
+        return [_scrub_surrogates(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _scrub_surrogates(v) for k, v in obj.items()}
+    return obj
 
 
 def create_app(
@@ -111,7 +130,12 @@ def create_app(
         # can only LOWER the cap, never raise it above the config ceiling. Chopping
         # a tail is the D4 false-clean hazard, so signal truncation -> the verdict
         # floors to unknown, never a silent clean.
-        cap = min(req.max_bytes or cfg.max_payload_bytes, cfg.max_payload_bytes)
+        # H-ITEM1: max_bytes is now guaranteed by pydantic (ge=1) to be either
+        # None or >= 1, so this no longer needs to rely on `or` truthiness --
+        # spelled out explicitly so a reader doesn't have to reason about that
+        # coupling to know 0 can't sneak through.
+        cap = (min(req.max_bytes, cfg.max_payload_bytes)
+               if req.max_bytes is not None else cfg.max_payload_bytes)
         entry_truncated = len(req.payload) > cap
         payload = req.payload[:cap]
         client = None
@@ -125,7 +149,10 @@ def create_app(
             result.flags.append("truncated")
         result.iocs = extract_from_result(result)
         hits = behavioral_hits(result)
-        return {
+        # H-ITEM2: scrub AFTER verdict/IOC/behavioral values are already computed
+        # from the true (unscrubbed) plaintext, so this can't move the verdict --
+        # it only stops a raw lone surrogate from crashing the JSON response.
+        return _scrub_surrogates({
             "verified_layers": [
                 {"transform": l.transform, "params": l.params, "source": l.source,
                  "input_sha256": l.input_sha256, "output_sha256": l.output_sha256}
@@ -149,7 +176,7 @@ def create_app(
                 "fully_resolved": result.fully_resolved,
                 "flags": result.flags,
             },
-        }
+        })
 
     @app.post("/triage-verdict")
     def triage_verdict(req: TriageVerdictRequest) -> dict:
