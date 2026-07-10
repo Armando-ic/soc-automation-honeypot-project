@@ -14,7 +14,8 @@ def test_deobfuscate_builtin_no_client(seeded_retriever, tmp_path):
     r = c.post("/deobfuscate", json={"payload": "powershell -enc VwByAGkAdABlAC0ASABvAHMAdAAgAA=="})
     body = r.json()
     assert r.status_code == 200
-    assert body["final_plaintext"] == "Write-Host "
+    # Batch J: -enc decodes in place, so the "powershell " launcher is preserved.
+    assert body["final_plaintext"] == "powershell Write-Host "
     assert body["verdict_inputs"]["fully_resolved"] is True
 
 
@@ -23,7 +24,7 @@ def test_deobfuscate_survives_client_outage(seeded_retriever, tmp_path):
         raise RuntimeError("no key")
     c = _client(seeded_retriever, tmp_path, factory=boom)
     r = c.post("/deobfuscate", json={"payload": "powershell -enc VwByAGkAdABlAC0ASABvAHMAdAAgAA=="})
-    assert r.status_code == 200 and r.json()["final_plaintext"] == "Write-Host "
+    assert r.status_code == 200 and r.json()["final_plaintext"] == "powershell Write-Host "
 
 
 def test_deobfuscate_survives_midcall_outage(seeded_retriever, tmp_path):
