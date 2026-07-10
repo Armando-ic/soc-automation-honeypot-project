@@ -376,6 +376,84 @@ return [{ json: {
   flags: vi.flags || [],
 } }];"""
 
+JS_DEOBF_ALERT = r"""// SAFE structured summary -> Iris alert + Discord embed. The attacker-controlled
+// decoded payload text and the model's advisory notes are NOT inlined here (the full
+// hardened five-section report comes from report.py at the live run). IOC values are
+// escaped; only transform NAMES and behavioral rule_ids are shown. The deterministic
+// verdict is authoritative.
+const d = $('deobfuscate').first().json;   // .first() not .item: the upstream N-to-1 VT collapse breaks pairedItem lineage, so .item fails on the multi-IOC path
+const tv = $json;                 // { verdict, evidence, flags }
+const p = $('Parse Alert').first().json;   // .first() not .item: same pairedItem reason as d above
+
+const esc = (s) => String(s).replace(/[|`\r\n]/g, ' ').slice(0, 256);
+const verdict = String(tv.verdict || 'unknown');
+const flags = (tv.flags || []).join(', ') || 'none';
+const chain = (d.verified_layers || []).map(l => esc(l.transform)).join(' -> ') || '(none)';
+const iocVerdicts = (tv.evidence && tv.evidence.ioc_verdicts) || {};
+const iocLines = (d.iocs || []).map(i =>
+  `${esc(i.value)} [${esc(i.ioc_type)}] -> ${esc(iocVerdicts[i.value] || 'unknown')}`).join('\n') || 'none';
+const rules = ((d.verdict_inputs && d.verdict_inputs.behavioral_hits) || [])
+  .map(h => esc(h.rule_id)).join(', ') || 'none';
+
+// Structured Iris IOCs: ip / domain / file_hash only. URLs stay in the description
+// until the DFIR-IRIS url type id is confirmed against a live Iris (open item 1).
+const IRIS_IOC_TYPE_IDS = { ip: 79, domain: 20, md5: 90, sha1: 111, sha256: 113 };
+const TLP_AMBER = 2;
+function irisTypeId(t, v) {
+  if (t === 'ip') return IRIS_IOC_TYPE_IDS.ip;
+  if (t === 'domain') return IRIS_IOC_TYPE_IDS.domain;
+  if (t === 'file_hash') {
+    const s = String(v).trim().toLowerCase();
+    if (/^[0-9a-f]{32}$/.test(s)) return IRIS_IOC_TYPE_IDS.md5;
+    if (/^[0-9a-f]{40}$/.test(s)) return IRIS_IOC_TYPE_IDS.sha1;
+    if (/^[0-9a-f]{64}$/.test(s)) return IRIS_IOC_TYPE_IDS.sha256;
+  }
+  return null;
+}
+const alert_iocs = [];
+for (const i of (d.iocs || [])) {
+  const typeId = irisTypeId(i.ioc_type, i.value);
+  if (typeId === null) continue;
+  alert_iocs.push({
+    ioc_value: i.value,
+    ioc_description: `VT: ${iocVerdicts[i.value] || 'unknown'}`,
+    ioc_tlp_id: TLP_AMBER,
+    ioc_type_id: typeId,
+    ioc_tags: 'soc-automation,honeypot,phase3,deobf',
+  });
+}
+
+const sevId = { malicious: 5, suspicious: 1, unknown: 1, clean: 4 }[verdict] || 1;
+const iris_description =
+`**De-obfuscation triage (deterministic, authoritative)**
+
+**Verdict:** ${verdict}   **Flags:** ${flags}
+
+**Verified decode chain:** ${chain}
+
+**IOCs (value [type] -> VT verdict):**
+${iocLines}
+
+**Behavioral rules:** ${rules}
+
+_Full decode report (with the decoded payload + advisory intel) is produced offline by report.py; not inlined here._`;
+
+const color = { malicious: 15158332, suspicious: 16776960, unknown: 9807270, clean: 3066993 }[verdict] || 9807270;
+const discord_body = { embeds: [{
+  title: `DEOBF ${verdict.toUpperCase()}: ${esc(p.search_name || 'Honeypot encoded command')}`,
+  description: `Verdict **${verdict}** (flags: ${flags})\nChain: ${chain}\nIOCs:\n${iocLines}\nRules: ${rules}`,
+  color,
+} ] };
+
+return [{ json: {
+  alert_name: `[DEOBF] ${esc(p.search_name || 'Honeypot encoded command')}`,
+  severity_iris_id: sevId,
+  iris_description,
+  alert_iocs,
+  discord_body,
+  verdict,
+} }];"""
+
 TOOLCODE_JS = "return {\n  success: true,\n  message: \"Triage analysis received. Workflow will route to downstream consumers.\"\n};"
 
 NEEDS_DISCORD = ("={{ JSON.stringify({ embeds: [{ "
@@ -416,6 +494,9 @@ POS = {
     "deobf normalize": [1760, 960],
     "Build Triage Body": [1960, 1040],
     "triage-verdict": [2160, 1040],
+    "Build Deobf Alert": [2360, 1040],
+    "Add Deobf Alert": [2560, 960],
+    "Deobf Discord": [2560, 1120],
 }
 
 
@@ -569,6 +650,20 @@ nodes = [
           "sendBody": True, "specifyBody": "json",
           "jsonBody": "={{ JSON.stringify($json) }}", "options": {}},
          [2160, 1040]),
+    node("Build Deobf Alert", "n8n-nodes-base.code", 2,
+         {"jsCode": JS_DEOBF_ALERT}, [2360, 1040]),
+    node("Add Deobf Alert", "n8n-nodes-dfir-iris.dfirIris", 2,
+         {"resource": "alert", "operation": "create", "alert_customer_id": 1,
+          "alert_severity_id": "={{ $('Build Deobf Alert').item.json.severity_iris_id }}",
+          "alert_title": "={{ $('Build Deobf Alert').item.json.alert_name }}",
+          "additionalFields": {"__iocsCollectionJSON": "={{ $('Build Deobf Alert').item.json.alert_iocs }}",
+                               "alert_description": "={{ $('Build Deobf Alert').item.json.iris_description }}"},
+          "options": {}}, [2560, 960], creds=CRED_IRIS),
+    node("Deobf Discord", "n8n-nodes-base.httpRequest", 4.4,
+         {"method": "POST", "url": "https://discord.com/api/webhooks/REPLACE_ME",
+          "sendBody": True, "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($('Build Deobf Alert').item.json.discord_body) }}", "options": {}},
+         [2560, 1120]),
 ]
 
 # ---- presentation sticky notes (cosmetic; zero effect on execution) -----------
@@ -647,6 +742,11 @@ connections = {
     "Build Deobf Normalize Body": {"main": [[{"node": "deobf normalize", "type": "main", "index": 0}]]},
     "deobf normalize": {"main": [[{"node": "Build Triage Body", "type": "main", "index": 0}]]},
     "Build Triage Body": {"main": [[{"node": "triage-verdict", "type": "main", "index": 0}]]},
+    "triage-verdict": {"main": [[{"node": "Build Deobf Alert", "type": "main", "index": 0}]]},
+    "Build Deobf Alert": {"main": [[
+        {"node": "Add Deobf Alert", "type": "main", "index": 0},
+        {"node": "Deobf Discord", "type": "main", "index": 0},
+    ]]},
     "Has IOC": {"main": [
         [{"node": "enrich_abuseipdb", "type": "main", "index": 0}],     # true: has IOC -> enrich
         [{"node": "Build Normalize Body", "type": "main", "index": 0}], # false: skip enrichment

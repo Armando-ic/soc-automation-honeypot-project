@@ -58,3 +58,50 @@ def test_pregate_node_embeds_canonical_source():
 def test_parse_alert_surfaces_alert_command():
     js = NODES["Parse Alert"]["parameters"]["jsCode"]
     assert "alert_command" in js
+
+
+def test_terminal_nodes_present_and_wired():
+    for name in ["Build Deobf Alert", "Add Deobf Alert", "Deobf Discord"]:
+        assert name in NODES, f"missing node: {name}"
+    assert _targets("triage-verdict") == {"Build Deobf Alert"}
+    assert _targets("Build Deobf Alert") == {"Add Deobf Alert", "Deobf Discord"}
+
+
+def test_deobf_branch_never_reaches_verify_or_gate():
+    # The deterministic verdict is authoritative: no de-obf node may route into
+    # the Opus credibility path (verify/Gate). Regression guard for the invariant.
+    deobf_nodes = ["Deobf Pre-gate", "Is Encoded?", "deobfuscate", "Has Deobf IOCs?",
+                   "Build VT Requests", "enrich_virustotal", "Build Deobf Normalize Body",
+                   "deobf normalize", "Build Triage Body", "triage-verdict", "Build Deobf Alert"]
+    for n in deobf_nodes:
+        for i in (0, 1):
+            assert "verify" not in _targets(n, i) and "Gate" not in _targets(n, i), \
+                f"{n} routes into the Opus credibility path"
+
+
+def test_terminal_does_not_inline_raw_payload():
+    # Ground-truth invariant at the presentation layer: the notification must NOT
+    # inline attacker-controlled decoded bytes or model advisory text.
+    js = NODES["Build Deobf Alert"]["parameters"]["jsCode"]
+    assert "final_plaintext" not in js
+    assert "advisory_intent" not in js
+
+
+def test_workflow_json_round_trips():
+    assert json.loads(json.dumps(workflow, ensure_ascii=False)) == workflow
+
+
+def test_no_live_secret_only_placeholders():
+    s = json.dumps(workflow, ensure_ascii=False)
+    # No Anthropic key material anywhere.
+    assert "sk-ant-" not in s
+    # Every credential id is the REPLACE_ME placeholder.
+    for n in workflow["nodes"]:
+        for cred in (n.get("credentials") or {}).values():
+            assert cred.get("id") == "REPLACE_ME", f"non-placeholder cred in {n['name']}"
+    # Discord webhooks are placeholders only (no real webhook path).
+    assert "discord.com/api/webhooks/REPLACE_ME" in s
+    assert "discord.com/api/webhooks/" in s
+    import re as _re
+    real_hooks = [m for m in _re.findall(r"discord\.com/api/webhooks/([^\"'\\ ]+)", s) if m != "REPLACE_ME"]
+    assert real_hooks == [], f"non-placeholder Discord webhook(s): {real_hooks}"

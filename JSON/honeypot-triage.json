@@ -637,6 +637,65 @@
     },
     {
       "parameters": {
+        "jsCode": "// SAFE structured summary -> Iris alert + Discord embed. The attacker-controlled\n// decoded payload text and the model's advisory notes are NOT inlined here (the full\n// hardened five-section report comes from report.py at the live run). IOC values are\n// escaped; only transform NAMES and behavioral rule_ids are shown. The deterministic\n// verdict is authoritative.\nconst d = $('deobfuscate').first().json;   // .first() not .item: the upstream N-to-1 VT collapse breaks pairedItem lineage, so .item fails on the multi-IOC path\nconst tv = $json;                 // { verdict, evidence, flags }\nconst p = $('Parse Alert').first().json;   // .first() not .item: same pairedItem reason as d above\n\nconst esc = (s) => String(s).replace(/[|`\\r\\n]/g, ' ').slice(0, 256);\nconst verdict = String(tv.verdict || 'unknown');\nconst flags = (tv.flags || []).join(', ') || 'none';\nconst chain = (d.verified_layers || []).map(l => esc(l.transform)).join(' -> ') || '(none)';\nconst iocVerdicts = (tv.evidence && tv.evidence.ioc_verdicts) || {};\nconst iocLines = (d.iocs || []).map(i =>\n  `${esc(i.value)} [${esc(i.ioc_type)}] -> ${esc(iocVerdicts[i.value] || 'unknown')}`).join('\\n') || 'none';\nconst rules = ((d.verdict_inputs && d.verdict_inputs.behavioral_hits) || [])\n  .map(h => esc(h.rule_id)).join(', ') || 'none';\n\n// Structured Iris IOCs: ip / domain / file_hash only. URLs stay in the description\n// until the DFIR-IRIS url type id is confirmed against a live Iris (open item 1).\nconst IRIS_IOC_TYPE_IDS = { ip: 79, domain: 20, md5: 90, sha1: 111, sha256: 113 };\nconst TLP_AMBER = 2;\nfunction irisTypeId(t, v) {\n  if (t === 'ip') return IRIS_IOC_TYPE_IDS.ip;\n  if (t === 'domain') return IRIS_IOC_TYPE_IDS.domain;\n  if (t === 'file_hash') {\n    const s = String(v).trim().toLowerCase();\n    if (/^[0-9a-f]{32}$/.test(s)) return IRIS_IOC_TYPE_IDS.md5;\n    if (/^[0-9a-f]{40}$/.test(s)) return IRIS_IOC_TYPE_IDS.sha1;\n    if (/^[0-9a-f]{64}$/.test(s)) return IRIS_IOC_TYPE_IDS.sha256;\n  }\n  return null;\n}\nconst alert_iocs = [];\nfor (const i of (d.iocs || [])) {\n  const typeId = irisTypeId(i.ioc_type, i.value);\n  if (typeId === null) continue;\n  alert_iocs.push({\n    ioc_value: i.value,\n    ioc_description: `VT: ${iocVerdicts[i.value] || 'unknown'}`,\n    ioc_tlp_id: TLP_AMBER,\n    ioc_type_id: typeId,\n    ioc_tags: 'soc-automation,honeypot,phase3,deobf',\n  });\n}\n\nconst sevId = { malicious: 5, suspicious: 1, unknown: 1, clean: 4 }[verdict] || 1;\nconst iris_description =\n`**De-obfuscation triage (deterministic, authoritative)**\n\n**Verdict:** ${verdict}   **Flags:** ${flags}\n\n**Verified decode chain:** ${chain}\n\n**IOCs (value [type] -> VT verdict):**\n${iocLines}\n\n**Behavioral rules:** ${rules}\n\n_Full decode report (with the decoded payload + advisory intel) is produced offline by report.py; not inlined here._`;\n\nconst color = { malicious: 15158332, suspicious: 16776960, unknown: 9807270, clean: 3066993 }[verdict] || 9807270;\nconst discord_body = { embeds: [{\n  title: `DEOBF ${verdict.toUpperCase()}: ${esc(p.search_name || 'Honeypot encoded command')}`,\n  description: `Verdict **${verdict}** (flags: ${flags})\\nChain: ${chain}\\nIOCs:\\n${iocLines}\\nRules: ${rules}`,\n  color,\n} ] };\n\nreturn [{ json: {\n  alert_name: `[DEOBF] ${esc(p.search_name || 'Honeypot encoded command')}`,\n  severity_iris_id: sevId,\n  iris_description,\n  alert_iocs,\n  discord_body,\n  verdict,\n} }];"
+      },
+      "id": "build-deobf-alert",
+      "name": "Build Deobf Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2360,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "alert",
+        "operation": "create",
+        "alert_customer_id": 1,
+        "alert_severity_id": "={{ $('Build Deobf Alert').item.json.severity_iris_id }}",
+        "alert_title": "={{ $('Build Deobf Alert').item.json.alert_name }}",
+        "additionalFields": {
+          "__iocsCollectionJSON": "={{ $('Build Deobf Alert').item.json.alert_iocs }}",
+          "alert_description": "={{ $('Build Deobf Alert').item.json.iris_description }}"
+        },
+        "options": {}
+      },
+      "id": "add-deobf-alert",
+      "name": "Add Deobf Alert",
+      "type": "n8n-nodes-dfir-iris.dfirIris",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        960
+      ],
+      "credentials": {
+        "dfirIrisApi": {
+          "id": "REPLACE_ME",
+          "name": "DFIR IRIS account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REPLACE_ME",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build Deobf Alert').item.json.discord_body) }}",
+        "options": {}
+      },
+      "id": "deobf-discord",
+      "name": "Deobf Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2560,
+        1120
+      ]
+    },
+    {
+      "parameters": {
         "content": "## 🛡️ honeypot-triage\n**What it does:** It auto-triages alerts from an internet-exposed honeypot. When one alert comes in it gets enriched, grounded in MITRE, and triaged by Claude Opus 4.8, then credibility-gated by a verifier that double-checks Opus actually stuck to the evidence (it also sanity-checks whether the severity is supported by the evidence). If every MITRE technique it cites and every IOC verdict traces back to what the enrichment and the Qdrant retrieval returned, the triage is trusted and goes straight through as an auto-approved alert. Otherwise the whole thing gets routed so a human has to manually verify the MITRE techniques and IOCs. Either way an Iris alert is created and a Discord notification is sent; a clean alert if it passed or a flagged alert for human review if it didn't.\n\n**Two feeders, one pipeline:** Splunk saved-searches *and* the Falcon poller both POST to this webhook.\n\n**Why:** because this turns noisy honeypot detections into analyst-ready, *trustworthy* triage without a human reading every one.",
         "height": 232,
         "width": 1004,
@@ -878,6 +937,33 @@
         [
           {
             "node": "triage-verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "triage-verdict": {
+      "main": [
+        [
+          {
+            "node": "Build Deobf Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Deobf Alert": {
+      "main": [
+        [
+          {
+            "node": "Add Deobf Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Deobf Discord",
             "type": "main",
             "index": 0
           }
