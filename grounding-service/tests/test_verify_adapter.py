@@ -112,6 +112,45 @@ def _sentinel_leaky():
     }
 
 
+def test_scope_evidence_grounds_scope_findings(tmp_path):
+    # Phase 4 Task 12: a scope_findings entry that field-for-field matches a
+    # claim in scope_evidence must ground -> scope_findings_grounded passed,
+    # and (since every other check on GOOD already passes) the overall report
+    # verification_passed stays True.
+    result = dict(GOOD, scope_findings=[
+        {"type": "auth_outcome", "ip": "203.0.113.10", "success_count": 3},
+    ])
+    scope_evidence = {
+        "claims": [{"type": "auth_outcome", "ip": "203.0.113.10", "success_count": 3}],
+        "queries_run": [],
+    }
+    rep = build_report(result, retrieved=["T1110"],
+                       enrichment_results={"203.0.113.10": "malicious"}, run_meta=META,
+                       settings=_settings(tmp_path), scope_evidence=scope_evidence)
+    names = {c["name"]: c["status"] for c in rep["check_results"]}
+    assert names["scope_findings_grounded"] == "passed"
+    assert rep["verification_passed"] is True
+
+
+def test_scope_evidence_mismatch_fails(tmp_path):
+    # Same scope_findings, but scope_evidence's claim disagrees on
+    # success_count -> not field-for-field equal -> ungrounded -> overall
+    # report must gate to Needs-Human (verification_passed False).
+    result = dict(GOOD, scope_findings=[
+        {"type": "auth_outcome", "ip": "203.0.113.10", "success_count": 3},
+    ])
+    scope_evidence = {
+        "claims": [{"type": "auth_outcome", "ip": "203.0.113.10", "success_count": 999}],
+        "queries_run": [],
+    }
+    rep = build_report(result, retrieved=["T1110"],
+                       enrichment_results={"203.0.113.10": "malicious"}, run_meta=META,
+                       settings=_settings(tmp_path), scope_evidence=scope_evidence)
+    names = {c["name"]: c["status"] for c in rep["check_results"]}
+    assert names["scope_findings_grounded"] == "failed"
+    assert rep["verification_passed"] is False
+
+
 def test_prompt_path_is_actually_consulted(tmp_path):
     # DISCRIMINATING: proves settings.prompt_path drives the verifier's leak
     # signature. A broken plumbing (wrong field / unconditional None) would fall

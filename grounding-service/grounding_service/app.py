@@ -27,6 +27,7 @@ class VerifyRequest(BaseModel):
     retrieved: list[str] | None = None
     enrichment_results: dict[str, str] | None = None
     run_meta: dict = {}
+    scope_evidence: dict | None = None
 
 
 class FalconPlanRequest(BaseModel):
@@ -137,6 +138,7 @@ def create_app(
             run_meta=req.run_meta,
             settings=settings,
             client=client,
+            scope_evidence=req.scope_evidence,
         )
 
     @app.post("/deobfuscate")

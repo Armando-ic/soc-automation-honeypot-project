@@ -17,6 +17,7 @@ def build_report(
     run_meta: dict,
     settings: Settings,
     client: object | None = None,
+    scope_evidence: dict | None = None,
 ) -> dict:
     judge = ClaudeJudge(client, model=settings.model) if client is not None else StubJudge()
     try:
@@ -25,7 +26,8 @@ def build_report(
             prompt_path=settings.prompt_path,
         )
         report = verifier.verify(
-            result, retrieved=retrieved, enrichment_results=enrichment_results
+            result, retrieved=retrieved, enrichment_results=enrichment_results,
+            scope_evidence=scope_evidence,
         )
     except Exception as exc:  # never drop an event: log + gate false, never surface a 500
         report = TriageVerificationReport(
