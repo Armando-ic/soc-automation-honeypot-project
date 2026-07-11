@@ -1,0 +1,20 @@
+[project]
+name = "splunk-investigator"
+version = "0.1.0"
+description = "Bounded, guardrailed Splunk investigation agent for the honeypot (Phase 4)"
+requires-python = ">=3.12"
+dependencies = ["anthropic>=0.40", "splunk-sdk>=1.7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "black>=24.0", "isort>=5.13", "mypy>=1.8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["splunk_investigator*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
