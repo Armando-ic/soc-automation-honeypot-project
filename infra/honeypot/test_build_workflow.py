@@ -102,6 +102,38 @@ def test_workflow_json_round_trips():
     assert json.loads(json.dumps(workflow, ensure_ascii=False)) == workflow
 
 
+def test_investigate_node_present_and_wired():
+    names = {n["name"] for n in workflow["nodes"]}
+    assert "investigate" in names
+    inv = next(n for n in workflow["nodes"] if n["name"] == "investigate")
+    assert inv["onError"] == "continueRegularOutput"
+    conns = workflow["connections"]
+    assert conns["retrieve"]["main"][0][0]["node"] == "investigate"
+    assert conns["investigate"]["main"][0][0]["node"] == "Build Opus Input"
+
+
+def test_verify_body_includes_scope_evidence():
+    extract = next(n for n in workflow["nodes"] if n["name"] == "Extract Result")
+    assert "scope_evidence" in extract["parameters"]["jsCode"]
+
+
+def test_scope_findings_in_tool_schema():
+    tool = next(n for n in workflow["nodes"] if n["name"] == "submit_triage_result")
+    assert "scope_findings" in json.dumps(tool)
+
+
+def test_parse_alert_emits_event_time_and_investigate_body_references_it():
+    # Load-bearing (spec section 3 / red-team F-scope-time): a windowed Splunk
+    # query anchored on wall-clock "now" instead of the alert's real event time
+    # would silently return 0 rows and manufacture a false "no activity" scope.
+    # Parse Alert must expose a single normalized event_time, and the
+    # investigate node's outbound body must reference it.
+    parse_js = NODES["Parse Alert"]["parameters"]["jsCode"]
+    assert "event_time" in parse_js
+    inv = next(n for n in workflow["nodes"] if n["name"] == "investigate")
+    assert "event_time" in json.dumps(inv["parameters"])
+
+
 def test_no_live_secret_only_placeholders():
     s = json.dumps(workflow, ensure_ascii=False)
     # No Anthropic key material anywhere.
