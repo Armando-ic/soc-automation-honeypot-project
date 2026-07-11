@@ -16,7 +16,7 @@ point of the project. Do not add a "looks benign" shortcut here.
 from __future__ import annotations
 
 import ipaddress
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .config import Config
 
@@ -27,6 +27,7 @@ _NON_PUBLIC_ATTRS = (
     "is_link_local",
     "is_reserved",
     "is_unspecified",
+    "is_multicast",
 )
 
 # Treated as the origin for bucketing naive event_time strings. Using a fixed
@@ -58,11 +59,14 @@ def _dedup_key(alert: dict, cfg: Config) -> str:
     if event_time:
         try:
             event_dt = datetime.fromisoformat(event_time)
-        except ValueError:
+        except (ValueError, TypeError):
             event_dt = None
         if event_dt is not None:
             if event_dt.tzinfo is not None:
-                event_dt = event_dt.replace(tzinfo=None)
+                # Offset arithmetic only (not wall-clock): normalize to UTC
+                # deterministically so two logically-simultaneous timestamps
+                # expressed with different offsets land in the same bucket.
+                event_dt = event_dt.astimezone(timezone.utc).replace(tzinfo=None)
             bucket = int((event_dt - _EPOCH).total_seconds()) // cfg.per_source_window_s
             return f"{src_ip}|{bucket}"
     return f"{src_ip}|no-event-time"
