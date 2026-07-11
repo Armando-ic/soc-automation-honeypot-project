@@ -1,0 +1,10 @@
+{
+  "preview": false,
+  "messages": [],
+  "fields": [
+    {"name": "count"}
+  ],
+  "results": [
+    {"count": "2"}
+  ]
+}

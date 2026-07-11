@@ -1,0 +1,15 @@
+{
+  "preview": false,
+  "messages": [],
+  "fields": [
+    {"name": "host"},
+    {"name": "user"},
+    {"name": "image"},
+    {"name": "count"}
+  ],
+  "results": [
+    {"host": "vm-honeypot-win", "user": "Administrator", "image": "C:\\Windows\\System32\\cmd.exe", "count": "6"},
+    {"host": "vm-honeypot-win", "user": "Administrator", "image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "count": "3"},
+    {"host": "vm-honeypot-win", "user": "Administrator", "image": "C:\\Windows\\System32\\whoami.exe", "count": "1"}
+  ]
+}

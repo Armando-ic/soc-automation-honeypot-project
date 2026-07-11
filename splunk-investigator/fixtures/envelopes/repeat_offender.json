@@ -1,0 +1,20 @@
+{
+  "preview": false,
+  "messages": [],
+  "fields": [
+    {"name": "first_seen"},
+    {"name": "last_seen"},
+    {"name": "info_min_time"},
+    {"name": "days_active"},
+    {"name": "floored"}
+  ],
+  "results": [
+    {
+      "first_seen": "1751500800.000000",
+      "last_seen": "1752192180.000000",
+      "info_min_time": "1751500700.000000",
+      "days_active": "8.0",
+      "floored": "false"
+    }
+  ]
+}

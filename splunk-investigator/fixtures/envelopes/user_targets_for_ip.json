@@ -1,0 +1,10 @@
+{
+  "preview": false,
+  "messages": [],
+  "fields": [
+    {"name": "distinct_user_count"}
+  ],
+  "results": [
+    {"distinct_user_count": "5"}
+  ]
+}
