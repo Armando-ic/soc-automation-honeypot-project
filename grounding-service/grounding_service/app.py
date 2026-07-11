@@ -63,6 +63,26 @@ class TriageVerdictRequest(BaseModel):
     flags: list[str] = []
 
 
+class InvestigateRequest(BaseModel):
+    # Free-form: carries src_ip/host/user/event_time/alert_text/
+    # enrichment_verdicts/candidate_techniques. Kept as a plain dict (not a
+    # fully typed model) since splunk_investigator's pregate/agent already
+    # tolerate missing keys via alert.get(...) -- typing it here would just
+    # duplicate that contract and risk drifting from it.
+    alert: dict
+
+
+def _empty_investigation(flags: list[str] | None = None) -> dict:
+    """The well-typed empty result (spec section 2.1): a fresh dict every call
+    so no caller can mutate a shared literal across requests."""
+    return {
+        "investigated": False,
+        "scope_evidence": {"claims": [], "queries_run": []},
+        "flags": list(flags) if flags is not None else [],
+        "advisory_reasoning": "",
+    }
+
+
 def _scrub_surrogates(obj):
     """Replace lone surrogate code points (unencodable as UTF-8) anywhere in the
     outgoing response so Starlette's JSONResponse.render never 500s. Applied ONLY to
@@ -83,6 +103,8 @@ def create_app(
     *,
     judge_client_factory: Callable[[], object] | None = None,
     deobf_client_factory: Callable[[], object] | None = None,
+    investigation_client_factory: Callable[[], object] | None = None,
+    splunk_service_factory: Callable[[], object] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="grounding-service", version="0.1.0")
 
@@ -192,6 +214,58 @@ def create_app(
                 for h in req.behavioral_hits]
         v = fuse(result, req.ioc_verdicts, hits)
         return {"verdict": v.verdict, "evidence": v.evidence, "flags": v.flags}
+
+    @app.post("/investigate")
+    def investigate_endpoint(req: InvestigateRequest) -> dict:
+        # Phase 4 Task 11 / spec 2.1: this handler must NEVER 500. The
+        # WHOLE body below is wrapped in a catch-all -- stronger than
+        # /deobfuscate above, which only guards the client factory call.
+        # Any failure anywhere (a bad import, a pregate bug, a malformed
+        # alert, an engine exception) degrades to the well-typed empty
+        # result, never propagates.
+        try:
+            from splunk_investigator.agent import investigate as run_investigation
+            from splunk_investigator.config import load_config
+            from splunk_investigator.pregate import should_investigate
+
+            cfg = load_config()
+            ok, reason = should_investigate(req.alert, cfg)
+            if not ok:
+                # investigated stays False; carry the pregate's reason
+                # (no_pivot / deduped / budget_exhausted / kill_switch) as
+                # the ONLY flag so callers can tell why nothing ran.
+                return _empty_investigation([reason])
+
+            if investigation_client_factory is None:
+                return _empty_investigation(["claude_not_configured"])
+            try:
+                client = investigation_client_factory()
+            except Exception:          # a Claude outage must never block triage
+                return _empty_investigation(["claude_outage"])
+
+            if splunk_service_factory is None:
+                return _empty_investigation(["splunk_not_configured"])
+            try:
+                service = splunk_service_factory()
+            except Exception:          # a Splunk outage must never block triage
+                return _empty_investigation(["splunk_outage"])
+
+            result = run_investigation(req.alert, client=client, splunk_service=service, cfg=cfg)
+            return {
+                "investigated": result.investigated,
+                "scope_evidence": {
+                    # LOAD-BEARING: FLAT, type + fields merged into one dict
+                    # (not nested under a "fields" key) -- Task 10's
+                    # verifier does field-for-field equality against this
+                    # exact shape.
+                    "claims": [{"type": c.type, **c.fields} for c in result.scope_evidence.claims],
+                    "queries_run": [dict(q) for q in result.scope_evidence.queries_run],
+                },
+                "flags": list(result.flags),
+                "advisory_reasoning": result.advisory_reasoning,
+            }
+        except Exception:
+            return _empty_investigation()
 
     @app.get("/falcon/state")
     def falcon_state() -> dict:
