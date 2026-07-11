@@ -28,8 +28,14 @@ def _judge_client_factory() -> object:
 def build_default_app():
     settings = load_settings()
     retriever = _build_retriever(settings)
+    # Same Anthropic client builder feeds BOTH the judge (verify path) and the deobf
+    # proposal (/deobfuscate). Without wiring deobf_client_factory the deployed endpoint
+    # runs decode_and_verify(client=None) and the model-in-the-loop decode is silently
+    # dead. Gated on the key so a keyless deploy degrades to builtins and never blocks.
     factory = _judge_client_factory if os.getenv("ANTHROPIC_API_KEY") else None
-    return create_app(retriever, settings, judge_client_factory=factory)
+    return create_app(retriever, settings,
+                      judge_client_factory=factory,
+                      deobf_client_factory=factory)
 
 
 app = build_default_app()

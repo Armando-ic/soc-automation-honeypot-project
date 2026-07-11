@@ -475,7 +475,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ payload: $('Parse Alert').item.json.alert_command }) }}",
-        "options": {}
+        "options": {
+          "timeout": 120000
+        }
       },
       "id": "deobfuscate",
       "name": "deobfuscate",
@@ -486,6 +488,7 @@
         1040
       ],
       "retryOnFail": true,
+      "maxTries": 2,
       "waitBetweenTries": 5000
     },
     {

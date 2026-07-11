@@ -67,6 +67,17 @@ def test_terminal_nodes_present_and_wired():
     assert _targets("Build Deobf Alert") == {"Add Deobf Alert", "Deobf Discord"}
 
 
+def test_deobfuscate_node_bounds_paid_retries():
+    # Task 15 finding-2: /deobfuscate can make MULTIPLE paid Claude calls per request (one
+    # per undecoded layer). An unbounded retryOnFail (n8n default maxTries=3) with no request
+    # timeout could re-charge every call on a transient slow-call failure. Bound the retries
+    # and set an explicit request timeout so a retry storm cannot multiply the paid cost.
+    d = NODES["deobfuscate"]
+    assert d.get("retryOnFail") is True
+    assert d.get("maxTries") == 2                          # bounded (n8n default is 3)
+    assert d["parameters"]["options"].get("timeout")       # explicit request timeout (ms)
+
+
 def test_deobf_branch_never_reaches_verify_or_gate():
     # The deterministic verdict is authoritative: no de-obf node may route into
     # the Opus credibility path (verify/Gate). Regression guard for the invariant.

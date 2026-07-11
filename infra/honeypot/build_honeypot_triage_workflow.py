@@ -620,7 +620,11 @@ nodes = [
          {"method": "POST", "url": "http://grounding-service:8000/deobfuscate",
           "sendBody": True, "specifyBody": "json",
           "jsonBody": "={{ JSON.stringify({ payload: $('Parse Alert').item.json.alert_command }) }}",
-          "options": {}}, [760, 1040], extra={"retryOnFail": True, "waitBetweenTries": 5000}),
+          # /deobfuscate can make MULTIPLE paid Claude calls per request (one per undecoded
+          # layer), so bound the retries (maxTries 2, not n8n's default 3) and set an explicit
+          # request timeout so a transient slow-call failure can't re-charge every call.
+          "options": {"timeout": 120000}}, [760, 1040],
+         extra={"retryOnFail": True, "maxTries": 2, "waitBetweenTries": 5000}),
     node("Has Deobf IOCs?", "n8n-nodes-base.if", 2.2,
          {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
                          "conditions": [{"id": "hasdeobfioc", "leftValue": "={{ ($json.iocs || []).length }}",
