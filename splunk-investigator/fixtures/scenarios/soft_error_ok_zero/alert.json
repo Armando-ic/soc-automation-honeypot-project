@@ -1,0 +1,7 @@
+{
+  "src_ip": "45.61.53.13",
+  "host": "vm-honeypot-win",
+  "user": "Administrator",
+  "event_time": "2026-07-11T14:03:00",
+  "alert_text": "Logon activity from 45.61.53.13; the auth lookup runs clean this time with zero rows."
+}

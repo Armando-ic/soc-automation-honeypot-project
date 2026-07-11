@@ -1,0 +1,8 @@
+{
+  "preview": false,
+  "messages": [
+    {"type": "FATAL", "text": "Error in 'stats' command: The field 'success_count' cannot be found."}
+  ],
+  "fields": [],
+  "results": []
+}

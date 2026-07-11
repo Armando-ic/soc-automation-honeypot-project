@@ -1,0 +1,11 @@
+{
+  "preview": false,
+  "messages": [],
+  "fields": [
+    {"name": "success_count"},
+    {"name": "fail_count"}
+  ],
+  "results": [
+    {"success_count": "1", "fail_count": "5"}
+  ]
+}

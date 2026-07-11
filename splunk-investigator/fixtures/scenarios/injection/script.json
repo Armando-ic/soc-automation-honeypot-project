@@ -1,0 +1,6 @@
+[
+  {"tool": "logon_outcomes_for_ip", "input": {"ip": "8.8.8.8", "window": "-24h"}},
+  {"tool": "processes_by_user", "input": {"host": "vm-honeypot-win", "user": "; | delete", "window": "-24h"}},
+  {"tool": "logon_outcomes_for_ip", "input": {"ip": "45.61.53.10", "window": "-24h"}},
+  {"tool": "conclude_investigation", "input": {"summary": "Off-scope ip and malicious user param were rejected; legit in-scope logon data reviewed."}}
+]

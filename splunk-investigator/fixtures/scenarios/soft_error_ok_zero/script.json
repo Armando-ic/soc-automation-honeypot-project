@@ -1,0 +1,4 @@
+[
+  {"tool": "logon_outcomes_for_ip", "input": {"ip": "45.61.53.13", "window": "-24h"}},
+  {"tool": "conclude_investigation", "input": {"summary": "Auth lookup ran clean, zero rows returned for this window."}}
+]

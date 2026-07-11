@@ -1,0 +1,4 @@
+[
+  {"tool": "logon_outcomes_for_ip", "input": {"ip": "45.61.53.11", "window": "-24h"}},
+  {"tool": "conclude_investigation", "input": {"summary": "Brute-force only; no successful logons observed."}}
+]

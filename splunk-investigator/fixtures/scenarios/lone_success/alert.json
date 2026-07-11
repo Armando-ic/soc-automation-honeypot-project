@@ -1,0 +1,7 @@
+{
+  "src_ip": "45.61.53.12",
+  "host": "vm-honeypot-win",
+  "user": "Administrator",
+  "event_time": "2026-07-11T14:03:00",
+  "alert_text": "A single successful logon from 45.61.53.12, no further activity observed yet."
+}

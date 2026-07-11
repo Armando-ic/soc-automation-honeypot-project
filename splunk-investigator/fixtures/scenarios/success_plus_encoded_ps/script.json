@@ -1,0 +1,5 @@
+[
+  {"tool": "logon_outcomes_for_ip", "input": {"ip": "45.61.53.10", "window": "-24h"}},
+  {"tool": "encoded_powershell_on_host", "input": {"host": "vm-honeypot-win", "window": "-24h"}},
+  {"tool": "conclude_investigation", "input": {"summary": "Successful logon from 45.61.53.10 followed by encoded PowerShell on vm-honeypot-win."}}
+]
