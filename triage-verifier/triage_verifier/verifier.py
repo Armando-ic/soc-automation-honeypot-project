@@ -35,6 +35,44 @@ def _is_domain(value: str) -> bool:
 _BUCKET_FOR_TYPE = {"ip": "ips", "domain": "domains", "file_hash": "file_hashes"}
 _SHAPE_FOR_TYPE = {"ip": _is_ip, "domain": _is_domain, "file_hash": _is_hash}
 
+
+def _canon(value: object) -> object:
+    """Canonicalize an IP-shaped string so differently-formatted-but-equal
+    addresses compare equal; anything else (including non-IP strings, ints,
+    None) passes through unchanged."""
+    if isinstance(value, str):
+        try:
+            return str(ipaddress.ip_address(value))
+        except ValueError:
+            return value
+    return value
+
+
+def _findings_equal(a: dict, b: dict) -> bool:
+    """Field-for-field equality of two flat scope_finding/claim dicts, after
+    canonicalizing IP-valued fields. Key sets must match exactly (so a
+    finding can't drop or add fields to dodge comparison); None == None."""
+    if set(a.keys()) != set(b.keys()):
+        return False
+    return all(_canon(a[k]) == _canon(b[k]) for k in a)
+
+
+# Scope-outcome assertions a triage's investigation_notes might make. Each is
+# matched per-sentence and skipped if a negation cue appears in the same
+# sentence (e.g. "no successful logon observed yet" must NOT be treated as
+# a positive claim of a successful logon).
+_SCOPE_ASSERTION_RES = {
+    "auth_outcome": re.compile(r"successful (logon|auth)", re.IGNORECASE),
+    "lateral_movement": re.compile(r"lateral movement", re.IGNORECASE),
+    "exfil": re.compile(r"exfil", re.IGNORECASE),
+    "post_exploit": re.compile(r"post-exploit", re.IGNORECASE),
+}
+_NEGATION_RE = re.compile(
+    r"\b(no|not|never|without|didn't|did not|hasn't|has not|isn't|wasn't|absent|lacks?|none)\b",
+    re.IGNORECASE,
+)
+_SENTENCE_SPLIT_RE = re.compile(r"[.;!?\n]+")
+
 from triage_verifier.attack_reference import AttackReference
 from triage_verifier.constants import BAD_VERDICTS, HIGH_SEVERITY_TACTICS
 from triage_verifier.models import CheckResult, CheckStatus, TriageVerificationReport
@@ -115,7 +153,8 @@ class TriageVerifier:
             leak_prompt = _resolve_deployed_prompt()
         return cls(schema, AttackReference.load(attack_ref_path), judge, leak_prompt=leak_prompt)
 
-    def verify(self, result: dict, *, retrieved=None, enrichment_results=None) -> TriageVerificationReport:
+    def verify(self, result: dict, *, retrieved=None, enrichment_results=None,
+               scope_evidence=None) -> TriageVerificationReport:
         norm, repair_events = normalize_triage_result(result)
         results: list[CheckResult] = [
             self._check_schema_valid(norm),
@@ -124,9 +163,11 @@ class TriageVerifier:
             self._check_mitre_id_exists(norm),
             self._check_mitre_name_match(norm),
             self._check_mitre_tactic_valid(norm),
-            self._check_severity_supported(norm),
+            self._check_severity_supported(norm, scope_evidence),
             self._check_verdict_sourced(norm),
             self._check_notes_no_config_leak(norm),
+            self._check_scope_findings_grounded(norm, scope_evidence),
+            self._check_scope_notes_honesty(norm, scope_evidence),
         ]
         if self._judge is not None:
             results.append(self._judge.assess(norm, self._ref))
@@ -211,7 +252,7 @@ class TriageVerifier:
         return CheckResult("mitre_tactic_valid", CheckStatus.PASSED)
 
     # --- check 7 -------------------------------------------------------------
-    def _check_severity_supported(self, norm: dict) -> CheckResult:
+    def _check_severity_supported(self, norm: dict, scope_evidence=None) -> CheckResult:
         severity = norm.get("severity")
         if severity not in ("high", "critical"):
             return CheckResult("severity_supported", CheckStatus.PASSED)
@@ -220,11 +261,51 @@ class TriageVerifier:
             set(self._ref.tactics_for(t.get("id", ""))) & HIGH_SEVERITY_TACTICS
             for t in norm["mitre_techniques"]
         )
-        if has_bad_ioc or has_hot_tactic:
+        valid_scope_backing = self._valid_scope_backing(norm, severity, scope_evidence)
+        if has_bad_ioc or has_hot_tactic or valid_scope_backing:
             return CheckResult("severity_supported", CheckStatus.PASSED)
         return CheckResult("severity_supported", CheckStatus.FAILED,
-                           "high/critical without malicious IOC or high-severity tactic",
+                           "high/critical without malicious IOC, high-severity tactic, "
+                           "or grounded scope backing",
                            (f"severity:{severity}",))
+
+    def _valid_scope_backing(self, norm: dict, severity: str, scope_evidence) -> bool:
+        """Whether scope_evidence (the GROUND TRUTH, out of model control -- never
+        norm['scope_findings']) backs a high/critical severity for THIS alert's
+        own src_ip/host. Returns False (never raises) on any missing field, which
+        also makes this reduce to exactly the pre-Task-10 behavior when
+        scope_evidence is None (the backward-compat requirement)."""
+        if not scope_evidence:
+            return False
+        claims = scope_evidence.get("claims") or []
+        src_ip = norm.get("src_ip")
+        if not src_ip:
+            return False
+        canon_src_ip = _canon(src_ip)
+
+        def _positive_int(value: object) -> bool:
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+        auth_ok = any(
+            c.get("type") == "auth_outcome"
+            and _canon(c.get("ip")) == canon_src_ip
+            and _positive_int(c.get("success_count"))
+            for c in claims
+        )
+        if severity == "high":
+            return auth_ok
+        if severity == "critical":
+            host = norm.get("host")
+            if not host:
+                return False
+            process_ok = any(
+                c.get("type") in ("encoded_powershell", "process_exec_by_user_in_window")
+                and c.get("host") == host
+                and _positive_int(c.get("count"))
+                for c in claims
+            )
+            return auth_ok and process_ok
+        return False
 
     # --- check 8 -------------------------------------------------------------
     def _check_verdict_sourced(self, norm: dict) -> CheckResult:
@@ -252,6 +333,72 @@ class TriageVerifier:
             return CheckResult("notes_no_config_leak", CheckStatus.FAILED,
                                "distinctive schema field names disclosed in investigation_notes", hits)
         return CheckResult("notes_no_config_leak", CheckStatus.PASSED)
+
+    # --- check: scope_findings_grounded (Phase 4 Task 10) --------------------
+    def _grounded_scope_findings(self, norm: dict, scope_evidence) -> list[dict]:
+        """The subset of norm['scope_findings'] that field-for-field equal a
+        claim in scope_evidence. Empty (never raises) when scope_evidence is
+        absent/empty -- callers must fail closed on that case themselves."""
+        findings = norm.get("scope_findings") or []
+        if not findings or not scope_evidence:
+            return []
+        claims = scope_evidence.get("claims") or []
+        return [f for f in findings if any(_findings_equal(f, c) for c in claims)]
+
+    def _check_scope_findings_grounded(self, norm: dict, scope_evidence) -> CheckResult:
+        findings = norm.get("scope_findings") or []
+        if not findings:
+            return CheckResult("scope_findings_grounded", CheckStatus.PASSED)
+        claims = (scope_evidence or {}).get("claims") if scope_evidence else None
+        if not claims:
+            # Fail CLOSED: a non-empty scope_findings with no scope_evidence to
+            # check it against is never trustworthy, so this is never NOT_APPLICABLE.
+            return CheckResult("scope_findings_grounded", CheckStatus.FAILED,
+                               "scope_findings present but no scope_evidence supplied to ground them",
+                               tuple(str(f) for f in findings))
+        offending = tuple(str(f) for f in findings
+                          if not any(_findings_equal(f, c) for c in claims))
+        if offending:
+            return CheckResult("scope_findings_grounded", CheckStatus.FAILED,
+                               "scope_finding not field-for-field grounded in scope_evidence claims",
+                               offending)
+        return CheckResult("scope_findings_grounded", CheckStatus.PASSED)
+
+    # --- check: scope_notes_honesty (Phase 4 Task 10) -------------------------
+    def _check_scope_notes_honesty(self, norm: dict, scope_evidence) -> CheckResult:
+        notes = norm.get("investigation_notes")
+        if not isinstance(notes, str) or not notes.strip():
+            return CheckResult("scope_notes_honesty", CheckStatus.PASSED)
+        grounded = self._grounded_scope_findings(norm, scope_evidence)
+        offending: list[str] = []
+        for sentence in _SENTENCE_SPLIT_RE.split(notes):
+            if not sentence.strip() or _NEGATION_RE.search(sentence):
+                continue
+            for kind, pattern in _SCOPE_ASSERTION_RES.items():
+                if pattern.search(sentence) and not self._scope_assertion_backed(kind, grounded):
+                    offending.append(sentence.strip()[:80])
+        if offending:
+            return CheckResult("scope_notes_honesty", CheckStatus.FAILED,
+                               "investigation_notes asserts a scope outcome with no grounded backing",
+                               tuple(offending))
+        return CheckResult("scope_notes_honesty", CheckStatus.PASSED)
+
+    @staticmethod
+    def _scope_assertion_backed(kind: str, grounded_findings: list[dict]) -> bool:
+        if kind == "auth_outcome":
+            return any(
+                f.get("type") == "auth_outcome"
+                and isinstance(f.get("success_count"), (int, float))
+                and not isinstance(f.get("success_count"), bool)
+                and f.get("success_count") > 0
+                for f in grounded_findings
+            )
+        # lateral_movement / exfil / post_exploit: no claim type in the v1 Splunk
+        # catalog can ever ground these (see splunk_investigator/claims.py), so a
+        # grounded finding of a matching type is checked defensively for
+        # forward-compat, but in practice this always evaluates to False today --
+        # which is exactly the intended honesty gate on an ungroundable claim.
+        return any(f.get("type") == kind for f in grounded_findings)
 
     # --- provenance ----------------------------------------------------------
     def _build_provenance(self, norm: dict) -> tuple[dict, ...]:
