@@ -170,8 +170,10 @@ def test_success_plus_encoded_ps_escalates_with_grounded_conjunction(verifier, m
     result = investigate(alert, client=client, splunk_service=_FakeSvc(), cfg=_cfg())
     scope_ev = _flat_scope_evidence(result)
 
-    auth_claim = next(c for c in scope_ev["claims"] if c["type"] == "auth_outcome")
-    ps_claim = next(c for c in scope_ev["claims"] if c["type"] == "encoded_powershell")
+    auth_claim = next((c for c in scope_ev["claims"] if c["type"] == "auth_outcome"), None)
+    ps_claim = next((c for c in scope_ev["claims"] if c["type"] == "encoded_powershell"), None)
+    assert auth_claim is not None, "auth_outcome claim missing"
+    assert ps_claim is not None, "encoded_powershell claim missing"
     assert auth_claim["success_count"] > 0
     assert ps_claim["count"] > 0
 
@@ -279,16 +281,61 @@ def test_soft_error_query_is_not_read_as_absence(verifier, monkeypatch):
     assert zero_scope["claims"][0]["success_count"] == 0
     assert len(zero_scope["queries_run"]) == 1
 
-    # (c) an UNBACKED POSITIVE assertion after a soft-errored query must
-    # still be caught -- the errored query left no grounded backing, so a
-    # "Confirmed successful logon" note can't be laundered through.
-    triage = _triage_result(
+    # (c) an UNBACKED POSITIVE conclusion after a soft-errored query must be
+    # caught -- and the catch must be CONTINGENT on the errored (empty-claims)
+    # scope_evidence, not true-by-construction. So we hand the triage a
+    # fabricated scope_finding that WOULD ground field-for-field against a
+    # real success claim (exact key-SET {type, ip, user, success_count,
+    # fail_count} matching the flat auth_outcome shape) plus the same
+    # "Confirmed successful logon" note. Against the fatal run's EMPTY claims
+    # the finding grounds nothing, so both gates fail closed; against a
+    # constructed success scope whose claim exactly equals that finding, both
+    # gates pass. The delta between the two proves the failures are caused by
+    # the query having errored, not by the test never populating
+    # scope_findings.
+    fabricated_finding = {
+        "type": "auth_outcome",
+        "ip": fatal_alert["src_ip"],
+        "user": None,
+        "success_count": 1,
+        "fail_count": 0,
+    }
+    note = f"Confirmed successful logon from {fatal_alert['src_ip']}."
+
+    # against the errored scope (empty claims): fabricated finding grounds
+    # nothing -> both gates fail closed.
+    errored_triage = _triage_result(
         severity="low",
         src_ip=fatal_alert["src_ip"],
-        investigation_notes=f"Confirmed successful logon from {fatal_alert['src_ip']}.",
+        investigation_notes=note,
+        scope_findings=[fabricated_finding],
     )
-    report = verifier.verify(triage, scope_evidence=fatal_scope)
-    assert _status(report, "scope_notes_honesty") == "failed"
+    errored_report = verifier.verify(errored_triage, scope_evidence=fatal_scope)
+    assert _status(errored_report, "scope_findings_grounded") == "failed"
+    assert _status(errored_report, "scope_notes_honesty") == "failed"
+
+    # contrast: a constructed success scope whose auth_outcome claim EXACTLY
+    # equals the fabricated finding -> the finding grounds, the positive note
+    # is backed -> both gates pass. Same triage inputs, only the scope_evidence
+    # differs, so this isolates the errored-query cause above.
+    success_scope = {
+        "claims": [dict(fabricated_finding)],
+        "queries_run": [{
+            "query": "logon_outcomes_for_ip",
+            "params": {"ip": fatal_alert["src_ip"], "window": "-24h"},
+            "outcome": "ok",
+            "row_count": 1,
+        }],
+    }
+    success_triage = _triage_result(
+        severity="low",
+        src_ip=fatal_alert["src_ip"],
+        investigation_notes=note,
+        scope_findings=[dict(fabricated_finding)],
+    )
+    success_report = verifier.verify(success_triage, scope_evidence=success_scope)
+    assert _status(success_report, "scope_findings_grounded") == "passed"
+    assert _status(success_report, "scope_notes_honesty") == "passed"
 
 
 # ==============================================================================
