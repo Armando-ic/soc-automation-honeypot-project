@@ -105,6 +105,24 @@ def test_scope_finding_with_none_user_matches_grounded_claim_with_none_user(veri
     assert _status(rep, "scope_findings_grounded") == "passed"
 
 
+def test_non_dict_scope_finding_fails_closed_without_raising(verifier):
+    # scope_findings is model-controlled and NOT schema-validated -- a non-dict
+    # entry (adversarial or malformed model output) must fail closed, not crash.
+    r = _result(scope_findings=["not-a-dict"])
+    rep = verifier.verify(r, scope_evidence=SCOPE_EV)
+    assert _status(rep, "scope_findings_grounded") == "failed"
+
+
+def test_non_dict_claim_in_scope_evidence_fails_closed_without_raising(verifier):
+    # scope_evidence["claims"] is out-of-model-control ground truth, but guard
+    # both sides defensively: a non-dict claim must not crash the comparison.
+    ev = {"claims": ["not-a-dict-claim"], "queries_run": []}
+    r = _result(scope_findings=[{"type": "auth_outcome", "ip": "45.61.53.10",
+                                 "user": "Administrator", "success_count": 1, "fail_count": 40}])
+    rep = verifier.verify(r, scope_evidence=ev)
+    assert _status(rep, "scope_findings_grounded") == "failed"
+
+
 # --- severity_supported (scope-only backing) ---------------------------------
 
 def test_scope_only_high_needs_attacker_ip_success(verifier):

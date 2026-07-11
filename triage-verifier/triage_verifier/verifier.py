@@ -51,7 +51,14 @@ def _canon(value: object) -> object:
 def _findings_equal(a: dict, b: dict) -> bool:
     """Field-for-field equality of two flat scope_finding/claim dicts, after
     canonicalizing IP-valued fields. Key sets must match exactly (so a
-    finding can't drop or add fields to dodge comparison); None == None."""
+    finding can't drop or add fields to dodge comparison); None == None.
+
+    scope_findings is fully model-controlled and NOT schema-validated, so a
+    non-dict entry (e.g. a bare string/int in the list) can reach here. A
+    non-dict on either side simply never matches (fail CLOSED downstream in
+    scope_findings_grounded -> FAILED, never a crash)."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
     if set(a.keys()) != set(b.keys()):
         return False
     return all(_canon(a[k]) == _canon(b[k]) for k in a)
