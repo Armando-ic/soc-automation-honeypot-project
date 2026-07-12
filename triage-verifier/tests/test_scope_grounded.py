@@ -185,6 +185,65 @@ def test_scope_only_critical_rejected_with_only_bare_process_claim_no_auth(verif
     assert _status(rep, "severity_supported") == "failed"
 
 
+# --- LB-2: the PRODUCTION verify_body.result shape --------------------------
+# Extract Result now threads the ground-truth entities into the result OUT OF
+# MODEL CONTROL: result = { ...r, src_ip: ctx.src_ip, host: ctx.pivot_host }.
+# The 65-suite above uses _result(), which injects src_ip -- a shape the wire
+# never produced before the LB-2 fix. These lock the real end-to-end contract on
+# the exact shape the builder now emits, so the masking can't recur.
+
+_MODEL_OUTPUT = {   # what submit_triage_result returns: NO src_ip/host of its own
+    "schema_version": "v1",
+    "alert_summary": "brute force with a successful logon and encoded PowerShell",
+    "severity": "critical",
+    "severity_rationale": "confirmed compromise",
+    "mitre_techniques": [],
+    "iocs": {"ips": [], "domains": [], "file_hashes": [], "users": [], "hosts": []},
+    "iocs_enriched": [],
+    "recommended_actions": [],
+    "investigation_notes": "",
+    "scope_findings": [],
+}
+
+_CRIT_EV = {"claims": [
+    {"type": "auth_outcome", "ip": "45.61.53.10", "user": "Administrator",
+     "success_count": 1, "fail_count": 40},
+    {"type": "encoded_powershell", "host": "vm-honeypot-win", "count": 2},
+], "queries_run": []}
+
+
+def test_lb2_production_wire_shape_backs_grounded_critical(verifier):
+    # result = { ...model_output, src_ip: ctx.src_ip, host: ctx.host } -- the
+    # post-fix shape. Grounded CRITICAL fires (auth success + process on host).
+    result = {**_MODEL_OUTPUT, "src_ip": "45.61.53.10", "host": "vm-honeypot-win"}
+    rep = verifier.verify(result, scope_evidence=_CRIT_EV)
+    assert _status(rep, "severity_supported") == "passed"
+
+
+def test_lb2_without_threaded_entity_grounded_severity_is_inert(verifier):
+    # The PRE-fix shape: model output alone, no src_ip/host on the result. Even
+    # with fully-backing scope_evidence, grounded severity must NOT fire because
+    # norm.get('src_ip') is None -- this is the exact LB-2 bug signature, locked
+    # so a regression that drops the JS_EXTRACT threading is caught end-to-end.
+    result = dict(_MODEL_OUTPUT)   # no src_ip/host threaded in
+    rep = verifier.verify(result, scope_evidence=_CRIT_EV)
+    assert _status(rep, "severity_supported") == "failed"
+
+
+def test_lb2_nohost_live_shape_grounded_critical_fails_closed_honestly(verifier):
+    # The LIVE honeypot saved search ends in `| stats ... by src_ip`, dropping
+    # ComputerName -> pivot_host='' -> verify_body.result.host=''. Even if the
+    # engine DISCOVERED a host from the 4625 rows and emitted a process claim on
+    # it, grounded CRITICAL must fail CLOSED here (norm.host='' -> the critical
+    # branch returns False before matching) rather than pass on the sentinel.
+    # This documents the honest dormant behavior + guards against threading a
+    # truthy sentinel that could false-match. (Grounded HIGH, being src_ip-only,
+    # still works -- see test_scope_only_high_needs_attacker_ip_success.)
+    result = {**_MODEL_OUTPUT, "src_ip": "45.61.53.10", "host": ""}
+    rep = verifier.verify(result, scope_evidence=_CRIT_EV)   # has auth success + process-on-host claim
+    assert _status(rep, "severity_supported") == "failed"
+
+
 # --- scope_notes_honesty ------------------------------------------------------
 
 def test_notes_honesty_flags_ungrounded_successful_logon_claim(verifier):

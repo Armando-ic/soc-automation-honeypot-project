@@ -164,6 +164,45 @@ def test_deployed_json_is_byte_identical_to_builder_output():
     )
 
 
+def test_lb2_verify_body_result_threads_ground_truth_entities():
+    # LB-2: the verifier reads src_ip/host from the triage RESULT dict
+    # (verify_body.result). The generated Extract Result must thread
+    # ctx.src_ip/ctx.host into that result OUT OF MODEL CONTROL (ctx wins over
+    # any model-emitted key), else the scope-grounded HIGH/CRITICAL severity
+    # path is permanently inert in production (final-review LB-2).
+    js = NODES["Extract Result"]["parameters"]["jsCode"]
+    # Thread the RAW pivot host (ctx.pivot_host, ''-when-absent), NOT the display
+    # sentinel ctx.host ('unknown-host'): the verifier's critical-severity path
+    # matches this against the engine-scoped host, so the sentinel must never be
+    # the reference entity. A no-host alert -> '' -> honest fail-closed.
+    assert "result: { ...r, src_ip: ctx.src_ip, host: ctx.pivot_host }" in js, \
+        "verify_body.result must thread ctx.src_ip/ctx.pivot_host, not bare `result: r` or the display sentinel"
+
+
+def test_lb3_investigate_receives_raw_pivot_entities_not_display_sentinel():
+    # LB-3: the /investigate path must get the RAW host/user ('' when the alert
+    # has none) so the engine pregate's no_pivot short-circuit is reachable and
+    # no display sentinel ('unknown-host'/'unknown-user') leaks into the entity
+    # scope. Parse Alert exposes pivot_host/pivot_user; investigate sends them.
+    parse_js = NODES["Parse Alert"]["parameters"]["jsCode"]
+    assert "const pivot_host = r.ComputerName || r.dest || r.host || '';" in parse_js
+    assert "const pivot_user = r.user || r.Account_Name || '';" in parse_js
+    inv = next(n for n in workflow["nodes"] if n["name"] == "investigate")
+    inv_params = json.dumps(inv["parameters"])
+    assert "pivot_host" in inv_params and "pivot_user" in inv_params, \
+        "investigate must send the raw pivot_host/pivot_user, not the display host/user"
+
+
+def test_lb1_event_time_falls_back_to_stats_surviving_fields():
+    # LB-1: the live saved search ends in `stats ... earliest(_time) as earliest,
+    # latest(_time) as latest by src_ip`, which DROPS _time. Parse Alert must
+    # fall back to the stats-surviving epoch fields (the engine normalizes
+    # epoch->ISO) instead of emitting '' -> render_error -> no claim.
+    parse_js = NODES["Parse Alert"]["parameters"]["jsCode"]
+    assert "r.latest" in parse_js and "r.earliest" in parse_js, \
+        "splunk-path event_time must fall back to the stats-surviving latest/earliest"
+
+
 def test_no_live_secret_only_placeholders():
     s = json.dumps(workflow, ensure_ascii=False)
     # No Anthropic key material anywhere.

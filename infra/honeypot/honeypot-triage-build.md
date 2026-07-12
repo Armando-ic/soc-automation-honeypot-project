@@ -382,6 +382,27 @@ action posts only the **first** result row (no per-result fan-out without a cust
 expects exactly one `result`/`src_ip` — head-1 makes that explicit. The short trailing window keeps the "top"
 rotating instead of getting stuck on yesterday's #1.
 
+> ⏱️ **event_time anchoring for the Phase-4 `/investigate` step (LB-1).** The `stats ... earliest(_time) as
+> earliest, latest(_time) as latest by src_ip` line DROPS the raw `_time`, so the webhook `result` row carries
+> **no ISO `_time`** — only epoch-seconds `earliest`/`latest`. Parse Alert (C.1) now falls back to those
+> stats-surviving fields (`r.event_time || r._time || r.latest || r.earliest`), and the engine's
+> `normalize_event_time()` converts an epoch value into a timezone-**aware** UTC anchor, so **the current live
+> search needs NO change** for the investigation's time windows to work.
+>
+> **Timezone correctness (do NOT skip):** `catalog.render_spl` renders an aware anchor as **absolute epoch**
+> `earliest`/`latest`, which Splunk reads tz-independently — so the epoch-fallback path is correct **regardless of
+> the search-head timezone** (an earlier version rendered a bare `strftime` string that Splunk would have read in
+> search-head-local time and, on a non-UTC head with a sub-offset window, shifted the window off the real event and
+> produced a false "no activity" scope — that hazard is now closed for the epoch path). If you instead adopt the
+> optional `| eval event_time=strftime(latest, "%Y-%m-%dT%H:%M:%S")` in the SPL, that emits a **naive** local ISO,
+> which the engine renders as naive Splunk-local bounds — also self-consistent, but only because both sides are
+> search-head-local.
+>
+> **Confirm at Task 16 (read-only capture) — the ONE thing still unverified:** that the webhook `result` actually
+> delivers `earliest`/`latest` as **epoch seconds** (vs a pre-formatted time string). If Splunk renders them as a
+> formatted string the engine can't parse, `event_time` falls back to `''` → no claim (fail-safe, but inert) — so
+> capture the real payload before the paid live run and, if needed, add the `strftime` eval above.
+
 ### Alert config (Save As → Alert)
 - **Title:** `Honeypot - RDP/SMB brute force (external)`
 - **Alert type:** Scheduled · **Cron:** `*/15 * * * *` · **Time range:** **Last 30 minutes**

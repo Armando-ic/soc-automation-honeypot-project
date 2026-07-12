@@ -124,8 +124,15 @@ const canonDomain = (v) =>
 const canonHash = (v) => String(v || '').trim().toLowerCase();
 
 const src_ip = canonIp(r.src_ip);
-const host = r.ComputerName || r.dest || r.host || 'unknown-host';
-const user = r.user || r.Account_Name || 'unknown-user';
+// LB-3: RAW pivot entities for the /investigate path -- '' when the alert has
+// no real host/user, so the engine pregate's no_pivot short-circuit is
+// reachable and no display sentinel ('unknown-host') ever leaks into the
+// entity scope. The `host`/`user` below keep the sentinel default for DISPLAY
+// (Iris/Discord) only.
+const pivot_host = r.ComputerName || r.dest || r.host || '';
+const pivot_user = r.user || r.Account_Name || '';
+const host = pivot_host || 'unknown-host';
+const user = pivot_user || 'unknown-user';
 const count = r.count || 'multiple';
 const alert_command = String(
   r.CommandLine || r.Process_Command_Line || r.process || body.alert_command || ''
@@ -147,9 +154,18 @@ const alert_text = (source === 'falcon' && body.alert_text)
 // event and manufacture a false "no activity" scope. Empty-safe: '' when neither
 // source field is present, so downstream time-bounded queries fail-safe to
 // query_error/unknown, never a false clean.
+// LB-1: the live saved search ends in `| stats ... earliest(_time) as earliest,
+// latest(_time) as latest by src_ip`, which DROPS the raw _time field and emits
+// epoch-seconds `earliest`/`latest`. Fall back to those stats-surviving fields
+// (prefer an explicit `event_time` if the search is later updated to emit one)
+// so a real Splunk alert carries a usable anchor. A bare epoch value is fine:
+// the engine's normalize_event_time() converts it to a tz-aware ISO before
+// anchoring. The exact webhook field name/format is UNCONFIRMED until the
+// Task-16 read-only capture; if none of these fields is present this is '' and
+// the time-bounded queries fail safe to no-claim (inert, never a false clean).
 const event_time = (source === 'falcon')
   ? String(body.created_timestamp || r.created_timestamp || '')
-  : String(r._time || body._time || '');
+  : String(r.event_time || r._time || r.latest || r.earliest || body._time || '');
 
 return [{ json: {
   run_id: String($execution.id),
@@ -160,6 +176,7 @@ return [{ json: {
   results_link: body.results_link || '',
   console_link: body.console_link || '',
   src_ip, host, user, count,
+  pivot_host, pivot_user,
   alert_command,
   enrich_ips,
   observed_iocs: { ips: enrich_ips, domains: [], file_hashes: [], users: [user], hosts: [host] },
@@ -333,7 +350,17 @@ ${r.investigation_notes || '_none_'}
 ${link_label}: ${detail_link}`;
 
 const verify_body = {
-  result: r,
+  // LB-2: thread the ground-truth entities into the verified RESULT out of
+  // model control (ctx from Build Opus Input wins over any model-emitted key),
+  // so the verifier's scope-grounded severity backing reads THIS alert's own
+  // src_ip/host. Without this, norm.get('src_ip') is None in production and the
+  // grounded HIGH/CRITICAL path can never fire (the 65-suite masked it by
+  // injecting src_ip into the test result).
+  // Use ctx.pivot_host (raw, ''-when-absent), NOT ctx.host (the display sentinel
+  // 'unknown-host'): the verifier matches this host against the engine-scoped
+  // host, so a no-host alert must reduce to '' -> honest fail-closed, never a
+  // sentinel that can never match a real claim. src_ip is already raw.
+  result: { ...r, src_ip: ctx.src_ip, host: ctx.pivot_host },
   retrieved: ctx.retrieved_ids || [],
   enrichment_results: ctx.enrichment_results || {},
   // Read from ctx (Build Opus Input's output), NOT from r (the model's tool
@@ -611,10 +638,14 @@ nodes = [
           # investigation's whole time-anchor comes from this field, sourced from
           # Parse Alert (never wall-clock). A grounding-service outage here must
           # never break triage -- mirror enrich_abuseipdb's onError below.
+          # LB-3: send the RAW pivot host/user (''-when-absent), NOT the display
+          # sentinel host/user, so pregate.should_investigate can reach its
+          # no_pivot short-circuit and the entity scope never binds
+          # 'unknown-host'.
           "jsonBody": "={{ JSON.stringify({ alert: { "
                       "src_ip: $('Parse Alert').item.json.src_ip, "
-                      "host: $('Parse Alert').item.json.host, "
-                      "user: $('Parse Alert').item.json.user, "
+                      "host: $('Parse Alert').item.json.pivot_host, "
+                      "user: $('Parse Alert').item.json.pivot_user, "
                       "event_time: $('Parse Alert').item.json.event_time, "
                       "alert_text: $('Parse Alert').item.json.alert_text, "
                       "enrichment_verdicts: $('normalize').item.json.enrichment_results, "
