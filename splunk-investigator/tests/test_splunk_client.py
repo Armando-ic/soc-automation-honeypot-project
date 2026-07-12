@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from splunk_investigator.splunk_client import parse_envelope
+from splunk_investigator.splunk_client import parse_envelope, run_catalog_query
 
 _FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "envelopes"
 
@@ -120,3 +120,79 @@ def test_fixture_envelopes_round_trip_ok_with_all_string_rows(fixture_path):
     for row in qr.rows:
         for value in row.values():
             assert isinstance(value, str)
+
+
+# --- LB-4: run_catalog_query must fetch result_cap+1 rows so parse_envelope's
+# `len(results) > result_cap` overflow guard can actually fire. With count=cap,
+# Splunk returns AT MOST cap rows, so a genuine overflow is invisible and a
+# capped result silently reads as a complete "ok" (under-reporting breadth). ---
+
+class _FakeResults:
+    def __init__(self, raw: bytes):
+        self._raw = raw
+
+    def read(self) -> bytes:
+        return self._raw
+
+
+class _FakeJob:
+    """Emulates a Splunk search job that HONORS the `count` arg like the real
+    server (returns at most `count` rows of the server-side result set)."""
+    def __init__(self, server_rows: list, rec: dict):
+        self._server_rows = server_rows
+        self._rec = rec
+
+    def results(self, **kwargs):
+        self._rec.update(kwargs)
+        count = kwargs.get("count")
+        rows = self._server_rows if count is None else self._server_rows[:count]
+        return _FakeResults(_env(rows))
+
+
+class _FakeJobs:
+    def __init__(self, server_rows: list, rec: dict):
+        self._server_rows = server_rows
+        self._rec = rec
+
+    def create(self, spl, **kwargs):
+        self._rec["create_kwargs"] = kwargs
+        return _FakeJob(self._server_rows, self._rec)
+
+
+class _FakeService:
+    def __init__(self, server_rows: list, rec: dict):
+        self.jobs = _FakeJobs(server_rows, rec)
+
+
+def test_run_catalog_query_detects_overflow_by_fetching_one_over_cap():
+    rec: dict = {}
+    cap = 5
+    # The server actually holds MORE than cap matching rows -> a real overflow.
+    server_rows = [{"x": str(i)} for i in range(cap + 3)]
+    svc = _FakeService(server_rows, rec)
+
+    qr = run_catalog_query(svc, "search index=honeypot ...", "processes_by_user", {}, cap, 30.0)
+
+    # The fetch requested cap+1 (not cap) -- that extra row is what makes an
+    # over-cap result distinguishable from a complete one.
+    assert rec.get("count") == cap + 1
+    # And because the server had > cap rows, the outcome is capped_incomplete
+    # (with count=cap this WOULD have read as a silent, complete "ok").
+    assert qr.outcome == "capped_incomplete"
+    assert qr.row_count == cap
+    assert qr.row_count == len(qr.rows)
+
+
+def test_run_catalog_query_exactly_cap_rows_is_ok_not_capped():
+    # Boundary: a genuinely complete result of exactly `cap` rows must stay "ok"
+    # -- fetching cap+1 must NOT turn a complete result into a false capped one.
+    rec: dict = {}
+    cap = 5
+    server_rows = [{"x": str(i)} for i in range(cap)]   # exactly cap available
+    svc = _FakeService(server_rows, rec)
+
+    qr = run_catalog_query(svc, "search index=honeypot ...", "processes_by_user", {}, cap, 30.0)
+
+    assert rec.get("count") == cap + 1
+    assert qr.outcome == "ok"
+    assert qr.row_count == cap

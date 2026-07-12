@@ -98,7 +98,12 @@ def run_catalog_query(service, spl: str, query_name: str, params: dict, result_c
         # maxTime is a real Splunk search-job control param: finalize the
         # search after N seconds instead of blocking forever.
         job = service.jobs.create(spl, exec_mode="blocking", maxTime=int(timeout_s))
-        raw = job.results(output_mode="json", count=result_cap).read()
+        # LB-4: fetch ONE more than the cap so parse_envelope's
+        # `len(results) > result_cap` overflow guard can actually fire. With
+        # count=result_cap the server returns at most result_cap rows, so a
+        # genuine overflow is invisible and a capped result silently reads as a
+        # complete "ok". parse_envelope already slices back down to result_cap.
+        raw = job.results(output_mode="json", count=result_cap + 1).read()
         return parse_envelope(raw, query_name, params, result_cap)
     except Exception:
         return QueryResult(query_name=query_name, params=params, outcome="error", rows=(), row_count=0)
