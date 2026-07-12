@@ -24,6 +24,8 @@ import dataclasses
 import importlib
 import types
 
+import pytest
+
 from splunk_investigator.catalog import CATALOG
 from splunk_investigator.config import load_config
 from splunk_investigator.models import QueryResult
@@ -103,6 +105,31 @@ def test_main_injected_path_never_builds_a_live_client_even_with_no_api_key(monk
         service_factory=lambda: object(),
     )
     assert isinstance(rc, int)
+
+
+def test_main_partial_factory_client_only_raises_before_live_branch(monkeypatch):
+    # Passing exactly ONE factory is a caller bug -- it must fail loudly with
+    # AssertionError, and it must fail BEFORE reaching the live branch that
+    # would otherwise build a real anthropic.Anthropic() client. Prove the
+    # latter by making that construction raise a distinguishable exception
+    # (RuntimeError, not AssertionError) if it's ever reached.
+    def _boom(*a, **k):
+        raise RuntimeError("must not reach the live branch")
+
+    monkeypatch.setattr("anthropic.Anthropic", _boom, raising=False)
+
+    with pytest.raises(AssertionError, match="pass both factories or neither"):
+        eval_selection.main(["--repetitions", "0"], client_factory=lambda: object(), service_factory=None)
+
+
+def test_main_partial_factory_service_only_raises_before_live_branch(monkeypatch):
+    def _boom(*a, **k):
+        raise RuntimeError("must not reach the live branch")
+
+    monkeypatch.setattr("anthropic.Anthropic", _boom, raising=False)
+
+    with pytest.raises(AssertionError, match="pass both factories or neither"):
+        eval_selection.main(["--repetitions", "0"], client_factory=None, service_factory=lambda: object())
 
 
 # --- optional (controller notes SS4d): exercise the scoring core fully

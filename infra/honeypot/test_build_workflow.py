@@ -1,6 +1,7 @@
 """Structural + secret-scan tests for the generated honeypot-triage workflow.
 Imports the in-memory workflow dict directly (no file I/O); the builder imports
 only stdlib, so importing it is side-effect-free apart from building the dict."""
+import io
 import json
 import os
 import sys
@@ -132,6 +133,35 @@ def test_parse_alert_emits_event_time_and_investigate_body_references_it():
     assert "event_time" in parse_js
     inv = next(n for n in workflow["nodes"] if n["name"] == "investigate")
     assert "event_time" in json.dumps(inv["parameters"])
+
+
+def test_deployed_json_is_byte_identical_to_builder_output():
+    # Invariant: JSON/honeypot-triage.json (what n8n actually imports) must be
+    # byte-identical to what running build_honeypot_triage_workflow.py produces.
+    # Replicate the builder's __main__ block EXACTLY: json.dump(workflow, fh,
+    # indent=2, ensure_ascii=False) with fh opened the same way -- text mode,
+    # encoding="utf-8", default (universal) newline handling -- so any
+    # platform newline translation the builder applied when it wrote the
+    # checked-in file is reproduced here too, without touching disk.
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    deployed_path = os.path.join(repo_root, "JSON", "honeypot-triage.json")
+
+    with open(deployed_path, "rb") as fh:
+        deployed_bytes = fh.read()
+
+    buf = io.BytesIO()
+    wrapper = io.TextIOWrapper(buf, encoding="utf-8", newline=None)
+    json.dump(workflow, wrapper, indent=2, ensure_ascii=False)
+    wrapper.flush()
+    wrapper.detach()  # release buf without closing it
+    expected_bytes = buf.getvalue()
+
+    assert deployed_bytes == expected_bytes, (
+        "JSON/honeypot-triage.json is out of sync with "
+        "build_honeypot_triage_workflow.py's output -- regenerate it "
+        "(python infra/honeypot/build_honeypot_triage_workflow.py) and "
+        "commit the result"
+    )
 
 
 def test_no_live_secret_only_placeholders():

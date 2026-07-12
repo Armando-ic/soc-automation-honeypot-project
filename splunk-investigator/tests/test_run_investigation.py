@@ -7,6 +7,8 @@ service, both supplied via factories, with run_catalog_query monkeypatched
 so no real Splunk connection is ever attempted."""
 import types
 
+import pytest
+
 from scripts import run_investigation
 from splunk_investigator.models import QueryResult
 from splunk_investigator.report import GROUNDED_HEADER
@@ -79,6 +81,31 @@ def test_main_offline_path_never_builds_a_real_client_or_service(monkeypatch, ca
         service_factory=lambda: _StubService(),
     )
     assert rc == 0
+
+
+def test_main_partial_factory_client_only_raises_before_live_branch(monkeypatch):
+    # Passing exactly ONE factory is a caller bug -- it must fail loudly with
+    # AssertionError, and it must fail BEFORE reaching the live branch that
+    # would otherwise build a real anthropic.Anthropic() client. Prove the
+    # latter by making that construction raise a distinguishable exception
+    # (RuntimeError, not AssertionError) if it's ever reached.
+    def _boom(*a, **k):
+        raise RuntimeError("must not reach the live branch")
+
+    monkeypatch.setattr("anthropic.Anthropic", _boom, raising=False)
+
+    with pytest.raises(AssertionError, match="pass both factories or neither"):
+        run_investigation.main([], client_factory=lambda: _StubClient(_script()), service_factory=None)
+
+
+def test_main_partial_factory_service_only_raises_before_live_branch(monkeypatch):
+    def _boom(*a, **k):
+        raise RuntimeError("must not reach the live branch")
+
+    monkeypatch.setattr("anthropic.Anthropic", _boom, raising=False)
+
+    with pytest.raises(AssertionError, match="pass both factories or neither"):
+        run_investigation.main([], client_factory=None, service_factory=lambda: _StubService())
 
 
 def test_run_investigation_core_renders_full_report():

@@ -233,6 +233,7 @@ def main(argv=None, *, client_factory=None, service_factory=None) -> int:
 
     cfg = load_config()
 
+    assert (client_factory is None) == (service_factory is None), "pass both factories or neither"
     if client_factory is not None and service_factory is not None:
         client = client_factory()
         splunk_service = service_factory()
