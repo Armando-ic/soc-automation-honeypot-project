@@ -49,14 +49,31 @@ def test_multicast_ip_only_is_no_pivot():
     ok, reason = should_investigate({"src_ip": "239.255.255.250", "host": ""}, CFG)
     assert ok is False and reason == "no_pivot"
 
-def test_non_string_event_time_does_not_crash_dedup():
-    # seen must be non-None so should_investigate actually calls _dedup_key
-    # (it's short-circuited by `seen is not None and ...`), otherwise this
-    # test wouldn't exercise the crash path Fix 2 addresses.
+def test_non_string_epoch_event_time_now_buckets_after_normalization():
+    # LB-1 consistency: _dedup_key now normalizes event_time (epoch->ISO) the
+    # same way agent.investigate does, so a numeric/epoch event_time produces a
+    # REAL time bucket instead of degrading to the coarse src_ip-only
+    # 'no-event-time' key (which would over-dedup a returning scanner once dedup
+    # is wired). seen must be non-None so should_investigate calls _dedup_key.
     alert = {"src_ip": "45.61.53.10", "host": "vm-honeypot-win", "event_time": 1751500800}
     ok, reason = should_investigate(alert, CFG, seen=set())
     assert ok is True and reason == ""
-    assert _dedup_key(alert, CFG) == "45.61.53.10|no-event-time"
+    key = _dedup_key(alert, CFG)
+    assert key != "45.61.53.10|no-event-time"
+    assert key.startswith("45.61.53.10|")
+
+
+def test_epoch_and_equivalent_iso_event_time_share_dedup_key():
+    # The two event_time shapes the live pipeline can carry -- epoch seconds
+    # (from `stats latest/earliest`) or an ISO string -- must land in the SAME
+    # bucket so the two event_time CONSUMERS (pregate + agent) agree and a
+    # returning scanner isn't split across buckets.
+    from splunk_investigator.event_time import normalize_event_time
+    epoch = 1751500800
+    iso = normalize_event_time(epoch)
+    a = {"src_ip": "45.61.53.10", "event_time": epoch}
+    b = {"src_ip": "45.61.53.10", "event_time": iso}
+    assert _dedup_key(a, CFG) == _dedup_key(b, CFG)
 
 def test_tz_aware_event_times_same_instant_share_dedup_key():
     alert_utc = {"src_ip": "45.61.53.10", "host": "vm-honeypot-win", "event_time": "2026-07-11T14:03:00+00:00"}

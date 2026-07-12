@@ -19,6 +19,7 @@ import ipaddress
 from datetime import datetime, timezone
 
 from .config import Config
+from .event_time import normalize_event_time
 
 # Every attribute here must be False for an address to count as "public".
 _NON_PUBLIC_ATTRS = (
@@ -55,7 +56,11 @@ def _dedup_key(alert: dict, cfg: Config) -> str:
     missing/unparseable (still deterministic, just coarser).
     """
     src_ip = alert.get("src_ip") or ""
-    event_time = alert.get("event_time")
+    # LB-1 consistency: normalize the SAME way agent.investigate does (epoch->ISO,
+    # ISO passthrough, else '') so both event_time consumers agree on the live
+    # shape. Without this a raw epoch event_time would fail fromisoformat here and
+    # coarsen every alert to the src_ip-only bucket.
+    event_time = normalize_event_time(alert.get("event_time"))
     if event_time:
         try:
             event_dt = datetime.fromisoformat(event_time)

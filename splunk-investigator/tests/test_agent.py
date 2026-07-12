@@ -139,3 +139,39 @@ def test_build_tools_includes_every_catalog_query_plus_conclude():
     assert names == set(CATALOG) | {"conclude_investigation"}
     conclude = next(t for t in tools if t["name"] == "conclude_investigation")
     assert conclude["input_schema"]["required"] == ["summary"]
+
+
+# --- LB-1: epoch event_time (the live saved-search shape) must still anchor
+# time-bounded queries. Without the normalizer the agent hands render_spl a
+# bare epoch string -> fromisoformat raises -> render_error -> NO claim, which
+# is exactly the "grounding inert in production" blocker. ---
+
+def test_epoch_event_time_still_anchors_time_bounded_query(monkeypatch):
+    captured = {}
+
+    def _fake_run(service, spl, name, inp, cap, timeout):
+        captured["spl"] = spl
+        return _mk_ok_auth()
+
+    monkeypatch.setattr("splunk_investigator.agent.run_catalog_query", _fake_run)
+    # epoch seconds, NOT ISO -- what `earliest(_time)`/`latest(_time)` emit.
+    alert = dict(ALERT, event_time="1751500800")
+    script = [_tooluse("logon_outcomes_for_ip", {"ip": "45.61.53.10", "window": "-24h"}),
+              _tooluse("conclude_investigation", {"summary": "done"})]
+    r = investigate(alert, client=_StubClient(script), splunk_service=_FakeSvc(), cfg=CFG)
+    # A claim was produced -> render_spl SUCCEEDED on the epoch event_time.
+    assert any(c.type == "auth_outcome" for c in r.scope_evidence.claims)
+    # ...and the rendered SPL carries real anchored bounds (not now, not empty).
+    assert "earliest=" in captured["spl"] and "latest=" in captured["spl"]
+
+
+def test_unparseable_event_time_still_fails_closed_no_claim(monkeypatch):
+    # Fail-safe must survive the normalizer: genuinely-unparseable event_time
+    # -> '' -> render_error on time-bounded queries -> no claim, no crash.
+    monkeypatch.setattr("splunk_investigator.agent.run_catalog_query", lambda *a, **k: _mk_ok_auth())
+    alert = dict(ALERT, event_time="not-a-timestamp")
+    script = [_tooluse("logon_outcomes_for_ip", {"ip": "45.61.53.10", "window": "-24h"}),
+              _tooluse("conclude_investigation", {"summary": "done"})]
+    r = investigate(alert, client=_StubClient(script), splunk_service=_FakeSvc(), cfg=CFG)
+    assert r.investigated is True
+    assert not any(c.type == "auth_outcome" for c in r.scope_evidence.claims)

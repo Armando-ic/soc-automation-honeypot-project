@@ -42,6 +42,7 @@ import json
 from .catalog import CATALOG, render_spl
 from .claims import derive_claims
 from .config import Config
+from .event_time import normalize_event_time
 from .models import InvestigationResult, QueryResult, ScopeEvidence
 from .params import EntityScope, ParamError, WINDOW_ENUM
 from .splunk_client import run_catalog_query
@@ -176,7 +177,11 @@ def _error_result(tool_id: str, message: str) -> dict:
 
 def investigate(alert: dict, *, client, splunk_service, cfg: Config) -> InvestigationResult:
     scope = _build_scope(alert)
-    event_time = alert.get("event_time")
+    # LB-1: canonicalize event_time (ISO passthrough, epoch-seconds -> ISO,
+    # else '') so the live saved-search shape -- epoch `earliest`/`latest` with
+    # no ISO `_time` -- still anchors every time-bounded query. '' preserves the
+    # existing render_error -> no-claim fail-safe; never a wall clock.
+    event_time = normalize_event_time(alert.get("event_time"))
     tools = build_tools()
     messages: list[dict] = [{"role": "user", "content": _build_user_message(alert)}]
 

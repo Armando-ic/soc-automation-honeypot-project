@@ -84,3 +84,34 @@ def test_latest_is_strictly_after_earliest():
     earliest_dt = datetime.strptime(earliest_str, "%m/%d/%Y:%H:%M:%S")
     latest_dt = datetime.strptime(latest_str, "%m/%d/%Y:%H:%M:%S")
     assert latest_dt > earliest_dt
+
+
+# --- LB-1 TZ hardening: a timezone-AWARE anchor (the epoch-normalized live
+# shape, or falcon's Z-suffixed created_timestamp) must render earliest/latest
+# as ABSOLUTE epoch seconds. A bare strftime timestamp is read by Splunk in the
+# search head's LOCAL tz; on a non-UTC search head that shifts the window off a
+# UTC anchor and manufactures a false 'no activity' scope. Epoch is tz-independent.
+# A NAIVE anchor (genuinely-unknown tz) keeps the strftime bounds (above). ---
+
+def test_aware_event_time_renders_absolute_epoch_bounds():
+    from datetime import timezone
+    aware = "2026-07-11T14:03:00+00:00"
+    spl = render_spl(CATALOG["logon_outcomes_for_ip"],
+                     {"ip": "45.61.53.10", "window": "-24h"}, aware, SCOPE, CFG)
+    earliest_val = re.search(r"earliest=(\S+)", spl).group(1)
+    latest_val = re.search(r"latest=(\S+)", spl).group(1)
+    # absolute epoch seconds (all digits), NOT a strftime m/d/Y:H:M:S date
+    assert earliest_val.isdigit() and latest_val.isdigit()
+    event_epoch = int(datetime(2026, 7, 11, 14, 3, 0, tzinfo=timezone.utc).timestamp())
+    assert int(earliest_val) == event_epoch - 24 * 3600
+    assert int(latest_val) == event_epoch + CFG.lookahead_s
+
+
+def test_naive_event_time_keeps_local_strftime_bounds():
+    # Regression guard: a naive anchor (tz unknown) must still render the
+    # Splunk-local strftime format, unchanged by the aware-branch addition.
+    spl = render_spl(CATALOG["logon_outcomes_for_ip"],
+                     {"ip": "45.61.53.10", "window": "-24h"}, EVENT_TIME, SCOPE, CFG)
+    earliest_val = re.search(r"earliest=(\S+)", spl).group(1)
+    assert not earliest_val.isdigit()                      # strftime, not epoch
+    datetime.strptime(earliest_val, "%m/%d/%Y:%H:%M:%S")   # parses in the local format

@@ -129,8 +129,25 @@ def render_spl(spec: QuerySpec, params: dict, event_time: str, scope: EntityScop
         event_dt = datetime.fromisoformat(event_time)
         earliest_dt = event_dt - _WINDOW_DELTAS[window]
         latest_dt = event_dt + timedelta(seconds=cfg.lookahead_s)
-        earliest = earliest_dt.strftime(_SPLUNK_TS_FMT)
-        latest = latest_dt.strftime(_SPLUNK_TS_FMT)
+        if event_dt.tzinfo is not None:
+            # LB-1 TZ hardening: a timezone-AWARE anchor (the epoch-normalized
+            # live shape, or falcon's Z-suffixed created_timestamp) is an
+            # ABSOLUTE instant. Emit earliest/latest as epoch seconds so Splunk
+            # reads them tz-independently -- a bare strftime timestamp is
+            # interpreted in the search head's LOCAL tz, which on a non-UTC head
+            # would shift the window off a UTC anchor and manufacture a false
+            # "no activity" scope. int(aware_dt.timestamp()) is deterministic
+            # regardless of the machine's tz (unlike a naive dt), so this stays
+            # within the module's no-wall-clock rule.
+            earliest = str(int(earliest_dt.timestamp()))
+            latest = str(int(latest_dt.timestamp()))
+        else:
+            # NAIVE anchor -- the tz is genuinely unknown (never derivable here
+            # without reading a wall clock), so keep the Splunk-local strftime
+            # bounds. This is self-consistent with a saved search that emits a
+            # naive-local event_time via `| eval event_time=strftime(...)`.
+            earliest = earliest_dt.strftime(_SPLUNK_TS_FMT)
+            latest = latest_dt.strftime(_SPLUNK_TS_FMT)
     else:
         earliest = latest = None
 
