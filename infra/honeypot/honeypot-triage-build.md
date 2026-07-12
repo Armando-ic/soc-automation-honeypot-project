@@ -474,6 +474,7 @@ root, so use `sudo`):
 ```bash
 sudo tee /root/soc-src/grounding-service/.env >/dev/null <<'EOF'
 ANTHROPIC_API_KEY=sk-ant-...
+SPLUNK_PASSWORD=...
 EOF
 sudo chmod 600 /root/soc-src/grounding-service/.env
 ```
@@ -481,13 +482,25 @@ sudo chmod 600 /root/soc-src/grounding-service/.env
 > **Location matters.** Compose interpolates `${ANTHROPIC_API_KEY}` (see `docker-compose.yml`) from a `.env`
 > in the **compose file's directory** (`grounding-service/`), NOT the directory you run `docker compose` from.
 > A repo-root `.env` is silently ignored → the judge stays `StubJudge`. Verified 2026-06-28.
+>
+> **`SPLUNK_PASSWORD` is required for the Phase-4 `/investigate` live run** (the read-only `phase4_investigator`
+> role password from `SOC-Automation-Project.md`). Compose interpolates `${SPLUNK_PASSWORD}` from this same
+> `.env`; the non-secret `SPLUNK_*` values are literals in `docker-compose.yml`. `main.py` gates the Splunk
+> factory on this password, so omitting it keeps `/investigate` cheaply inert (`splunk_not_configured`,
+> fail-safe) while the judge/deobf paths still work.
 
-Then recreate so the container picks up the key:
+Then **rebuild + recreate** so the container picks up the key AND the current code:
 
 ```bash
 cd /root/soc-src
-docker compose -f grounding-service/docker-compose.yml up -d --force-recreate
+docker compose -f grounding-service/docker-compose.yml up -d --build --force-recreate
 ```
+
+> **`--build` is load-bearing.** A plain `--force-recreate` recreates the container from the *existing* cached
+> image; it does NOT rebuild. After any Dockerfile/dependency change (e.g. the Phase 3/4 change that bakes in
+> `malware-triage` + `splunk-investigator`), a no-`--build` redeploy runs the stale image and `/deobfuscate` +
+> `/investigate` keep ImportError-ing at request time and silently return empty results. Always `--build` after
+> pulling code that touched the Dockerfile.
 
 `main.py` auto-switches `StubJudge → ClaudeJudge` when the key is present. Verify it's live (a real model note,
 not the stub string):

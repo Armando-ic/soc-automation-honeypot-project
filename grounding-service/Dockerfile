@@ -9,12 +9,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 curl \
 
 WORKDIR /app
 
-# Both packages, sibling layout preserved (triage-verifier is an editable-path dep of the service).
+# All sibling packages the service lazy-imports at request time, layout preserved.
+# triage-verifier is an editable-path dep of the service; malware-triage backs
+# /deobfuscate + /triage-verdict; splunk-investigator backs /investigate. Omitting
+# malware-triage or splunk-investigator makes those endpoints ImportError at request
+# time and silently return an empty result (see tests/test_deploy_wiring.py).
 COPY triage-verifier/ ./triage-verifier/
+COPY malware-triage/ ./malware-triage/
+COPY splunk-investigator/ ./splunk-investigator/
 COPY grounding-service/ ./grounding-service/
 
-# Verifier dep first, then the service.
+# Verifier dep first, then the lazy-imported engines, then the service. splunk-investigator
+# pulls in splunk-sdk (splunklib) via its own pyproject; no separate SDK install needed.
 RUN pip install --no-cache-dir ./triage-verifier \
+    && pip install --no-cache-dir ./malware-triage \
+    && pip install --no-cache-dir ./splunk-investigator \
     && pip install --no-cache-dir ./grounding-service
 
 # Bake the embedding model so the first /retrieve is fast and needs no network.

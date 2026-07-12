@@ -32,6 +32,19 @@ services:
       # file's directory, NOT the dir you invoke it from — a repo-root .env is silently ignored.
       # Unset/empty => StubJudge. The value never lives in this committed file.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Phase 4 /investigate: the read-only Splunk connection + the investigation loop. The
+      # non-secret values are literals (private VNet mgmt endpoint, the read-only role user);
+      # SPLUNK_PASSWORD is interpolated from the SAME gitignored grounding-service/.env as
+      # ANTHROPIC_API_KEY and never lives in this committed file. main.py gates the splunk
+      # service factory on SPLUNK_HOST, so unsetting it => /investigate returns
+      # splunk_not_configured (fail-safe), never a crash.
+      SPLUNK_HOST: 10.0.0.5
+      SPLUNK_PORT: "8089"
+      SPLUNK_SCHEME: https
+      SPLUNK_USERNAME: phase4_investigator
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD:-}
+      INVESTIGATE_ENABLED: "1"
+      INVESTIGATE_LIVE_INDEXES: honeypot
     volumes:
       - grounding_runs:/data
     depends_on: [qdrant]

@@ -430,6 +430,15 @@ These are the environment variables the `grounding-service` container (on `vm-so
 `/investigate` can reach Splunk with the read-only role. Record the final values in Results; do NOT put the password
 here.
 
+> **Env alone is not enough - the deploy-wiring code fixes must land first (Session 34, done).** The Jul-1 Dockerfile
+> never installed `splunk-investigator`, and `main.py` never wired the investigation/splunk factories, so the deployed
+> `/investigate` returned an empty result (silently inert) regardless of env. Both are now fixed (the image installs
+> `splunk-investigator` + `malware-triage`; `build_default_app` wires both factories, gated on `ANTHROPIC_API_KEY` +
+> `SPLUNK_PASSWORD`). Setting the env below only activates `/investigate` on a container **rebuilt** from that code
+> (`docker compose ... up -d --build`, NOT a plain `--force-recreate`). The non-secret `SPLUNK_*`/`INVESTIGATE_*`
+> values are already literals in `docker-compose.yml`; only `SPLUNK_PASSWORD` (+ `ANTHROPIC_API_KEY`) go in the
+> gitignored `grounding-service/.env`.
+
 | var | value | notes |
 |---|---|---|
 | `SPLUNK_HOST` | `10.0.0.5` | Splunk mgmt, reached from the n8n box over the VNet |
@@ -460,11 +469,12 @@ Be honest about what the live honeypot data can and can't demonstrate:
   the live data doesn't contain. If no real post-exploitation incident materializes, the "investigation changed
   scope/severity" criterion is honestly marked **NOT MET** in Task 17 and the artifact is labeled a synthetic/fixture
   demonstration. **Never inject synthetic events into live Splunk to fake a real incident.**
-- **The `scope_findings` prompt-populate gap (T13-1) is still open.** The deployed prompt never tells the model to
-  echo scope claims into `scope_findings`, so the *headline* grounding is not fully demonstrable until a prompt-tuning
-  step with the live model (that is a Task-17-adjacent tweak, tracked separately). The grounded severity-*backing*
-  path (LB-2, `ctx.src_ip`/`ctx.pivot_host` + `scope_evidence` threaded into `/verify` out of model control) IS wired
-  and live.
+- **The `scope_findings` prompt-populate gap (T13-1) is now CLOSED in code (Session 34).** The deployed prompt now
+  instructs the model to copy the untrusted scope-evidence claims into `scope_findings` verbatim, and the verifier's
+  `scope_findings_grounded` check consumes them (fail-closed on any edited/invented finding). What remains for Task 17
+  is *empirical* validation that the live model actually populates them on a real triage (and that a hallucinated
+  finding fails closed as designed). The grounded severity-*backing* path (LB-2, `ctx.src_ip`/`ctx.pivot_host` +
+  `scope_evidence` threaded into `/verify` out of model control) was already wired and is independent of this.
 
 ---
 

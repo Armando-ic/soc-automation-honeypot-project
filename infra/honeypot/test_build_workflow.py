@@ -123,6 +123,21 @@ def test_scope_findings_in_tool_schema():
     assert "scope_findings" in json.dumps(tool)
 
 
+def test_prompt_instructs_verbatim_scope_findings_population():
+    # T13-1: scope_findings is in the tool SCHEMA but the deployed system prompt never
+    # told the model to fill it, so it stayed empty and the verifier's
+    # _check_scope_findings_grounded short-circuited to PASSED on empty findings -- the
+    # headline grounding was vacuously-passing, never demonstrated. The prompt must
+    # instruct the model to copy the untrusted scope-evidence claims into scope_findings
+    # VERBATIM (identical keys+values); the verifier fails closed on any edited/invented
+    # finding, so a faithful copy grounds and a hallucination is caught.
+    opus = next(n for n in workflow["nodes"] if n["name"] == "Opus triage")
+    system = opus["parameters"]["options"]["system"]
+    assert "scope_findings" in system, "prompt must name the scope_findings field"
+    assert "verbatim" in system.lower(), \
+        "prompt must instruct a VERBATIM copy of the scope-evidence claims into scope_findings"
+
+
 def test_parse_alert_emits_event_time_and_investigate_body_references_it():
     # Load-bearing (spec section 3 / red-team F-scope-time): a windowed Splunk
     # query anchored on wall-clock "now" instead of the alert's real event time
