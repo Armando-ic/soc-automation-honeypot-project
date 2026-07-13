@@ -111,6 +111,32 @@ def test_transcript_shows_the_skip_when_model_declines_followup(monkeypatch):
     assert "processes_by_user" not in tools_run
 
 
+def test_transcript_result_is_rows_free_for_publication(monkeypatch):
+    # The transcript is surfaced verbatim in the /investigate HTTP response and
+    # is a capture-for-publication surface (Task 17 deliverable #3). Each query
+    # turn's `result` must carry the decision trace (outcome + row_count) but NOT
+    # the raw Splunk rows: rows can include attacker-influenced free-text (a
+    # Sysmon image/user) that the claims path sanitizes, plus fields the grounded
+    # claims drop. row_count conveys "N rows"; the grounded claims carry the
+    # values. The full rows stay IN-LOOP as the model's tool_result (the model
+    # needs them) but must never reach this published surface.
+    import json
+    monkeypatch.setattr("splunk_investigator.agent.run_catalog_query", lambda *a, **k: _mk_zero_auth())
+    script = [_tooluse("logon_outcomes_for_ip", {"ip": "45.61.53.10", "window": "-24h"}),
+              _tooluse("conclude_investigation", {"summary": "brute force only"})]
+    r = investigate(ALERT, client=_StubClient(script), splunk_service=_FakeSvc(), cfg=CFG)
+    query_turns = [t for t in r.transcript if t["tool"] == "logon_outcomes_for_ip"]
+    assert query_turns, "expected the query turn in the transcript"
+    for t in query_turns:
+        parsed = json.loads(t["result"])
+        assert set(parsed.keys()) == {"outcome", "row_count"}   # no "rows" key
+        assert parsed == {"outcome": "ok", "row_count": 1}
+    # belt-and-suspenders: the raw row value ("fail_count"/"12") must not appear
+    # anywhere in any transcript entry's result string.
+    joined = "".join(str(t.get("result", "")) for t in r.transcript)
+    assert "fail_count" not in joined and '"rows"' not in joined
+
+
 # --- coverage added beyond the brief: MAX_QUERIES is the paid-cost bound this
 # whole task exists to prove; verify the FORCE is real (inspect what create()
 # actually received on the NEXT call), not just that the loop happens to

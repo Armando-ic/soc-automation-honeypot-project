@@ -167,6 +167,18 @@ def _summarize(qr: QueryResult) -> str:
     return json.dumps({"outcome": qr.outcome, "row_count": qr.row_count, "rows": list(qr.rows)})
 
 
+def _summarize_no_rows(qr: QueryResult) -> str:
+    """Rows-FREE summary for the transcript (outcome + row_count only). The
+    transcript is surfaced verbatim in the /investigate HTTP response, a
+    capture-for-publication surface, so it must not carry raw Splunk rows --
+    those can include attacker-influenced free-text (a Sysmon image/user) that
+    the claims path sanitizes, plus fields the grounded claims drop. The full
+    `_summarize` (with rows) stays in-loop as the model's tool_result (the model
+    needs the rows); here row_count conveys size and the grounded claims carry
+    the values."""
+    return json.dumps({"outcome": qr.outcome, "row_count": qr.row_count})
+
+
 def _extract_text(content) -> str:
     return " ".join(getattr(b, "text", "") for b in content if getattr(b, "type", None) == "text")
 
@@ -263,7 +275,7 @@ def investigate(alert: dict, *, client, splunk_service, cfg: Config) -> Investig
                     })
                     transcript.append({
                         "turn": turns, "tool": name, "params": inp,
-                        "result": "cached: " + _summarize(qr),
+                        "result": "cached: " + _summarize_no_rows(qr),
                     })
                     continue
 
@@ -289,7 +301,7 @@ def investigate(alert: dict, *, client, splunk_service, cfg: Config) -> Investig
                     "type": "tool_result", "tool_use_id": tool_id,
                     "content": _summarize(qr), "is_error": qr.outcome == "error",
                 })
-                transcript.append({"turn": turns, "tool": name, "params": inp, "result": _summarize(qr)})
+                transcript.append({"turn": turns, "tool": name, "params": inp, "result": _summarize_no_rows(qr)})
 
                 if qr.outcome == "ok":
                     distinct_successful += 1

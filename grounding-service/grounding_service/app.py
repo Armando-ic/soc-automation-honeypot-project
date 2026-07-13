@@ -79,6 +79,7 @@ def _empty_investigation(flags: list[str] | None = None) -> dict:
     return {
         "investigated": False,
         "scope_evidence": {"claims": [], "queries_run": []},
+        "transcript": [],
         "flags": list(flags) if flags is not None else [],
         "advisory_reasoning": "",
     }
@@ -263,6 +264,17 @@ def create_app(
                     "claims": [{"type": c.type, **c.fields} for c in result.scope_evidence.claims],
                     "queries_run": [dict(q) for q in result.scope_evidence.queries_run],
                 },
+                # Task 17 deliverable #3: the agent's turn-by-turn decision
+                # trace (each {turn, tool, params, result}), copied verbatim so
+                # the single paid run captures which entity-bound query it chose,
+                # in what order, and when it concluded -- the queries_run list
+                # above is only the success-only subset. Each turn's `result` is
+                # a rows-FREE summary ({outcome, row_count}, via _summarize_no_rows
+                # in agent.py); the raw Splunk rows stay in-loop as the model's
+                # tool_result and NEVER reach this published surface, so the
+                # transcript carries no row data (or attacker-influenced Sysmon
+                # free-text) the sanitized claims/queries_run don't already cover.
+                "transcript": [dict(t) for t in result.transcript],
                 "flags": list(result.flags),
                 "advisory_reasoning": result.advisory_reasoning,
             }

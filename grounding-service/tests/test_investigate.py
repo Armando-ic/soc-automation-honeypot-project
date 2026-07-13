@@ -154,6 +154,71 @@ def test_pivotable_alert_runs_investigation_and_serializes_claims_flat(seeded_re
     assert body["advisory_reasoning"] == "brute force only, no successful logons"
 
 
+def test_pivotable_alert_surfaces_turn_by_turn_transcript(seeded_retriever, tmp_path, monkeypatch):
+    # Task 17 portfolio artifact (deliverable #3): the agent's turn-by-turn
+    # transcript -- which entity-bound query it chose, in what order, and when
+    # it concluded -- is built in agent.py but was DROPPED at the /investigate
+    # HTTP boundary. The response must now carry it verbatim so the single paid
+    # run captures the full decision trace (reasoning + errors + conclusion),
+    # not just the success-only queries_run subset. This is the capture source
+    # the runbook points at, so the shape is a cross-doc contract.
+    from splunk_investigator.models import QueryResult
+
+    def _fake_run_catalog_query(*a, **k):
+        return QueryResult(
+            query_name="logon_outcomes_for_ip",
+            params={"ip": "45.61.53.10", "window": "-24h"},
+            outcome="ok",
+            rows=({"success_count": "0", "fail_count": "12"},),
+            row_count=1,
+        )
+
+    monkeypatch.setattr("splunk_investigator.agent.run_catalog_query", _fake_run_catalog_query)
+
+    script = [
+        _tooluse("logon_outcomes_for_ip", {"ip": "45.61.53.10", "window": "-24h"}),
+        _tooluse("conclude_investigation", {"summary": "brute force only, no successful logons"}),
+    ]
+    c = _client(
+        seeded_retriever, tmp_path,
+        investigation_factory=lambda: _StubClient(script),
+        splunk_factory=lambda: _StubService(),
+    )
+    resp = c.post("/investigate", json={
+        "alert": {"src_ip": "45.61.53.10", "host": "vm-honeypot-win",
+                  "event_time": "2026-07-11T14:03:00", "alert_text": "brute force"},
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    # The transcript is an ordered list of turn records: the query turn, then
+    # the conclude turn. Each record keeps the shape agent.py emits.
+    transcript = body["transcript"]
+    assert isinstance(transcript, list) and len(transcript) == 2
+    assert transcript[0]["turn"] == 1
+    assert transcript[0]["tool"] == "logon_outcomes_for_ip"
+    assert transcript[0]["params"] == {"ip": "45.61.53.10", "window": "-24h"}
+    # The query-turn result is a rows-FREE summary string (outcome + row_count,
+    # never the raw Splunk rows -- this is a published surface). Assert it is a
+    # non-empty str that carries NO row data rather than couple to exact wording.
+    assert isinstance(transcript[0]["result"], str) and transcript[0]["result"]
+    assert '"rows"' not in transcript[0]["result"]
+    assert "fail_count" not in transcript[0]["result"]
+    assert transcript[1]["turn"] == 2
+    assert transcript[1]["tool"] == "conclude_investigation"
+    assert transcript[1]["result"] == "concluded"
+
+
+def test_transcript_is_empty_list_on_degraded_paths(seeded_retriever, tmp_path):
+    # The degraded/empty result must expose transcript as an empty list (not a
+    # missing key), so a caller can always read response["transcript"] without a
+    # KeyError -- mirrors scope_evidence/flags always being present.
+    c = _client(seeded_retriever, tmp_path)
+    resp = c.post("/investigate", json={"alert": {"src_ip": "", "host": ""}})
+    body = resp.json()
+    assert body["investigated"] is False
+    assert body["transcript"] == []
+
+
 def test_malformed_alert_does_not_500(seeded_retriever, tmp_path):
     # A structurally-odd alert (missing every key the pregate/agent expect)
     # must still 200 -> empty, not 500. Proves the catch-all around the
