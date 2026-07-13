@@ -2,3 +2,6 @@
 __pycache__/
 *.egg-info/
 .pytest_cache/
+# raw live-run captures (real attacker IPs, live Splunk results) -- never publish;
+# only a scrubbed vault page leaves this repo (Phase 4 Task 17 deliverable #3)
+reports/
