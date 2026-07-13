@@ -156,6 +156,33 @@ sudo -i        # root login shell, cwd becomes /root; every command below then j
 > shell - the `cd /root/soc-src` gets dropped, the git commands then run in `/root`, and you get
 > `fatal: not a git repository`. If that happens, you are already root; just re-run 1.1 from the root prompt.
 
+### 1.0 Confirm the box is a real git checkout (first-run gotcha - found Session 36)
+
+Older provisioning `scp`'d the source off Windows instead of cloning it, so `/root/soc-src` can be a **stale file copy
+with no `.git`** - Windows-owned uids (`197609:197121`), a June timestamp, and (critically) missing the
+`splunk-investigator` + `malware-triage` dirs the current Dockerfile pip-installs. In that state 1.1's `git pull` dies
+with `fatal: not a git repository` and a `--build` would ImportError-to-empty. Check first:
+
+```bash
+git -C /root/soc-src rev-parse --is-inside-work-tree 2>/dev/null && echo "git ok" || echo "NOT a git repo"
+```
+
+If it prints `NOT a git repo`, replace it with a clean clone. Your qdrant + `runs.jsonl` live in Docker **named
+volumes**, not this dir, and cloning into the **same** `/root/soc-src` path keeps the compose project + volumes stable,
+so nothing is lost:
+
+```bash
+git ls-remote https://github.com/Armando-ic/soc-automation-honeypot-project.git ai-upgrade   # preflight: expect 7a9d4d0..., NO username prompt
+cd /root
+mv /root/soc-src /root/soc-src.stale-$(date +%Y%m%d)     # preserve, don't delete
+git clone https://github.com/Armando-ic/soc-automation-honeypot-project.git /root/soc-src
+cd /root/soc-src && git checkout ai-upgrade && git log --oneline -1
+ls -d grounding-service splunk-investigator malware-triage triage-verifier infra   # all five MUST exist
+```
+
+`git log` must show `7a9d4d0`. If the clone prompts for a GitHub username, STOP - the repo isn't anonymously reachable
+and you need a token; do not type credentials at the prompt. Then **skip 1.1** (you already have HEAD) and go to 1.2.
+
 ### 1.1 Pull the pushed code onto the box
 
 Once you are at the `root@...#` prompt, run this (a single `&&` chain, so `cd` and git stay in the same shell - paste-safe):
@@ -164,9 +191,9 @@ Once you are at the `root@...#` prompt, run this (a single `&&` chain, so `cd` a
 cd /root/soc-src && git fetch origin && git checkout ai-upgrade && git pull --ff-only origin ai-upgrade && git log --oneline -1
 ```
 
-**Verify:** `git log --oneline -1` shows the same HEAD short-hash you pushed in 0.3 (`7a9d4d0`). If `pull` reports
-anything other than a fast-forward, stop and reconcile - a divergent box checkout means the rebuild ships the wrong
-code.
+**Verify:** `git log --oneline -1` shows the same HEAD short-hash you pushed in 0.3 (`7a9d4d0`). If `pull` errors with
+`fatal: not a git repository`, the box is a stale copy - do **1.0** (clone fresh) instead. If `pull` reports anything
+other than a fast-forward, stop and reconcile - a divergent box checkout means the rebuild ships the wrong code.
 
 ### 1.2 Put ONLY the Anthropic key in the compose-dir `.env` (Splunk password comes later, in 2.5)
 
