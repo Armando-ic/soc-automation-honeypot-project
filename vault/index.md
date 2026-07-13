@@ -30,6 +30,7 @@ Catalog of every page in this vault, organized by category. Updated whenever a n
 - [[subprojects/2026-04-28-iris-escalation-gate/README]] — A2: Iris Escalation Gate (complete)
 - [[subprojects/2026-04-30-detection-foundations/README]] — D1: Detection Foundations (complete)
 - [[subprojects/2026-05-12-enrichment-expansion/README]] — A3: Enrichment expansion (stub, awaiting brainstorm)
+- [[subprojects/2026-07-13-splunk-investigation-agent/README]] - Phase 4: Splunk Investigation Agent (complete; grounded entity-scoped triage, live-run + deploy-bug fix)
 
 ## Detections
 
