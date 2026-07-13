@@ -143,18 +143,30 @@ first, or every capture below returns nothing and looks like a code bug when it 
 ssh -i C:/Users/Owner/.ssh/vm-soc-v2-linux-key.pem azureuser@<n8n-public-ip>
 ```
 
-### 1.1 Pull the pushed code onto the box
+SSH lands you as `azureuser`, but the repo lives at `/root/soc-src` (root's home, mode `700`), so `azureuser` cannot
+`cd` there (`Permission denied`) and `sudo cd` cannot work either (`cd` is a shell builtin, not a program). **Become
+root once and run all of Part 1-2 from that root shell:**
 
 ```bash
-cd /root/soc-src
-sudo git fetch origin
-sudo git checkout ai-upgrade
-sudo git pull --ff-only origin ai-upgrade
-git log --oneline -1
+sudo -i        # root login shell, cwd becomes /root; every command below then just works, no per-command sudo
 ```
 
-**Verify:** `git log --oneline -1` shows the same HEAD short-hash you pushed in 0.3. If `pull` reports anything other
-than a fast-forward, stop and reconcile - a divergent box checkout means the rebuild ships the wrong code.
+> **Run `sudo -i` BY ITSELF and wait for the prompt to change to `root@...#` before continuing.** Do NOT paste it in
+> the same block as the 1.1 commands: `sudo -i` starts a new shell, and a combined paste splits between the old and new
+> shell - the `cd /root/soc-src` gets dropped, the git commands then run in `/root`, and you get
+> `fatal: not a git repository`. If that happens, you are already root; just re-run 1.1 from the root prompt.
+
+### 1.1 Pull the pushed code onto the box
+
+Once you are at the `root@...#` prompt, run this (a single `&&` chain, so `cd` and git stay in the same shell - paste-safe):
+
+```bash
+cd /root/soc-src && git fetch origin && git checkout ai-upgrade && git pull --ff-only origin ai-upgrade && git log --oneline -1
+```
+
+**Verify:** `git log --oneline -1` shows the same HEAD short-hash you pushed in 0.3 (`7a9d4d0`). If `pull` reports
+anything other than a fast-forward, stop and reconcile - a divergent box checkout means the rebuild ships the wrong
+code.
 
 ### 1.2 Put ONLY the Anthropic key in the compose-dir `.env` (Splunk password comes later, in 2.5)
 
@@ -170,12 +182,12 @@ Fill the file by editing it (never on a command line, so no secret lands in shel
 blank for now:
 
 ```bash
-sudo tee /root/soc-src/grounding-service/.env >/dev/null <<'EOF'
+tee /root/soc-src/grounding-service/.env >/dev/null <<'EOF'
 ANTHROPIC_API_KEY=
 SPLUNK_PASSWORD=
 EOF
-sudo nano /root/soc-src/grounding-service/.env    # paste ONLY the ANTHROPIC_API_KEY value; leave SPLUNK_PASSWORD= blank
-sudo chmod 600 /root/soc-src/grounding-service/.env
+nano /root/soc-src/grounding-service/.env    # paste ONLY the ANTHROPIC_API_KEY value; leave SPLUNK_PASSWORD= blank
+chmod 600 /root/soc-src/grounding-service/.env
 ```
 
 - `ANTHROPIC_API_KEY` = the `sk-ant-Lds...` key (NOT the revoked `7MV` key), from `SOC-Automation-Project.md`.
@@ -184,8 +196,8 @@ sudo chmod 600 /root/soc-src/grounding-service/.env
 **Verify (no secret echoed):**
 
 ```bash
-sudo grep -c '^ANTHROPIC_API_KEY=sk-ant-' /root/soc-src/grounding-service/.env   # expect 1
-sudo grep -c '^SPLUNK_PASSWORD=..*'        /root/soc-src/grounding-service/.env   # expect 0 (still blank)
+grep -c '^ANTHROPIC_API_KEY=sk-ant-' /root/soc-src/grounding-service/.env   # expect 1
+grep -c '^SPLUNK_PASSWORD=..*'        /root/soc-src/grounding-service/.env   # expect 0 (still blank)
 ```
 
 Expect `1` then `0` (Anthropic key set, Splunk password still blank).
@@ -291,11 +303,11 @@ Other outcomes and what each means:
 Now, and only now, add the Splunk password and reload the container's env. This does NOT spend anything by itself - it
 just wires the Splunk factory so the Part 4 pipeline run can investigate.
 
-**Where:** the SSH session on the n8n box.
+**Where:** the SSH session on the n8n box (still the `sudo -i` root shell from 1.1).
 
 ```bash
-sudo nano /root/soc-src/grounding-service/.env    # fill SPLUNK_PASSWORD= (phase4_investigator pw from SOC-Automation-Project.md)
-sudo grep -c '^SPLUNK_PASSWORD=..*' /root/soc-src/grounding-service/.env   # expect 1 now
+nano /root/soc-src/grounding-service/.env    # fill SPLUNK_PASSWORD= (phase4_investigator pw from SOC-Automation-Project.md)
+grep -c '^SPLUNK_PASSWORD=..*' /root/soc-src/grounding-service/.env   # expect 1 now
 cd /root/soc-src
 docker compose -f grounding-service/docker-compose.yml up -d --force-recreate    # env reload (no --build needed)
 ```
