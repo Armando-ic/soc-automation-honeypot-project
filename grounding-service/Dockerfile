@@ -19,6 +19,12 @@ COPY malware-triage/ ./malware-triage/
 COPY splunk-investigator/ ./splunk-investigator/
 COPY grounding-service/ ./grounding-service/
 
+# The verifier loads the deployed triage prompt from config.prompt_path
+# (-> /app/JSON/honeypot-triage.json) EAGERLY at /verify time (verify_adapter.py ->
+# TriageVerifier.from_paths). Without this file every /verify raises FileNotFoundError and
+# fail-closes to verifier_error (shipped on the Task-17 first live run, runs 395/396/400).
+COPY JSON/honeypot-triage.json ./JSON/honeypot-triage.json
+
 # Verifier dep first, then the lazy-imported engines, then the service. splunk-investigator
 # pulls in splunk-sdk (splunklib) via its own pyproject; no separate SDK install needed.
 RUN pip install --no-cache-dir ./triage-verifier \

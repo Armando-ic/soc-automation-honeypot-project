@@ -34,3 +34,24 @@ def test_compose_injects_investigate_env():
     for key in ("SPLUNK_HOST", "SPLUNK_PORT", "SPLUNK_SCHEME", "SPLUNK_USERNAME",
                 "SPLUNK_PASSWORD", "INVESTIGATE_ENABLED", "INVESTIGATE_LIVE_INDEXES"):
         assert key in text, f"{key} missing from the grounding-service compose environment block"
+
+
+def test_dockerfile_copies_verifier_prompt_json():
+    # config.prompt_path defaults to <repo>/JSON/honeypot-triage.json and is passed EAGERLY into
+    # TriageVerifier.from_paths (verify_adapter.py). In the container that resolves to
+    # /app/JSON/honeypot-triage.json, but the Dockerfile copies only the four package dirs, not JSON/.
+    # Result: EVERY /verify raises "No such file or directory: '/app/JSON/honeypot-triage.json'" and
+    # fail-closes to verifier_error -- which shipped on the Task-17 first live run (runs 395/396/400).
+    text = _DOCKERFILE.read_text(encoding="utf-8")
+    assert "COPY JSON/" in text, (
+        "the verifier's prompt_path needs JSON/honeypot-triage.json baked into the image; "
+        "add a COPY for it or /verify fail-closes with verifier_error in the container"
+    )
+
+
+def test_verifier_prompt_json_present_in_source_tree():
+    # The COPY only helps if the file exists in the build context. Guard the source side too:
+    # config.prompt_path must resolve to a real file (locally _REPO_ROOT is the repo root).
+    from grounding_service.config import load_settings
+    p = Path(load_settings().prompt_path)
+    assert p.is_file(), f"verifier prompt_path source missing: {p}"
