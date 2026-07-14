@@ -6,6 +6,7 @@ from typing import Callable
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from grounding_service import brake as brk
 from grounding_service import falcon as fal
 from grounding_service.config import Settings
 from grounding_service.enrichment import build_enrichment_results
@@ -55,6 +56,11 @@ class DeobfuscateRequest(BaseModel):
     # silently process the FULL ceiling, and a negative value used to chop the
     # payload from the wrong end while always marking it truncated.
     max_bytes: int | None = Field(default=None, ge=1)
+
+
+class BrakeEvaluateRequest(BaseModel):
+    events: list[dict] = []
+    source: str = ""
 
 
 class TriageVerdictRequest(BaseModel):
@@ -313,5 +319,16 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         return {"aid": aid}
+
+    @app.post("/brake/evaluate")
+    def brake_evaluate(req: BrakeEvaluateRequest) -> dict:
+        out = brk.evaluate_egress(
+            req.events,
+            splunk_host_ip=settings.splunk_host_ip,
+            distinct_dst_max=settings.brake_distinct_dst_max,
+            conn_rate_max=settings.brake_conn_rate_max,
+        )
+        out["source"] = req.source
+        return out
 
     return app
