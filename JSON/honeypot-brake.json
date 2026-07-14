@@ -1,0 +1,364 @@
+{
+  "name": "honeypot-brake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "honeypot-brake",
+        "options": {}
+      },
+      "id": "brake-webhook",
+      "name": "Brake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "honeypot-brake"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map the feeder payload into the /brake/evaluate request shape. The two\n// feeders (Splunk high-fan-out-egress + Splunk non-9997-egress saved searches)\n// POST a webhook body carrying `events` (the raw result rows) and a `source`\n// tag identifying which feeder fired; pass events through untouched and\n// default source to 'unknown' if the feeder omitted it.\nconst body = $input.first().json.body || $input.first().json || {};\nconst events = Array.isArray(body.events) ? body.events : [];\nconst source = body.source || 'unknown';\nreturn [{ json: { events, source } }];"
+      },
+      "id": "normalize-events",
+      "name": "Normalize Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/brake/evaluate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ events: $json.events, source: $json.source }) }}",
+        "options": {}
+      },
+      "id": "evaluate",
+      "name": "evaluate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "trip",
+              "leftValue": "={{ $json.trip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "trip?",
+      "name": "Trip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "no-op-end",
+      "name": "No-op end",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/brake/nsg-deny",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {}
+      },
+      "id": "nsg_deny",
+      "name": "nsg_deny",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.us-2.crowdstrike.com/devices/queries/devices/v1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "crowdStrikeOAuth2Api",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "hostname:'vm-honeypot-win'"
+            }
+          ]
+        }
+      },
+      "id": "resolve_host",
+      "name": "resolve_host",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        0
+      ],
+      "credentials": {
+        "crowdStrikeOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Crowdstrike Falcon Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://grounding-service:8000/falcon/contain-guard",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ resolved_ids: $('resolve_host').item.json.resources || [] }) }}",
+        "options": {}
+      },
+      "id": "contain_guard",
+      "name": "contain_guard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1320,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REPLACE_ME",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ embeds: [{ title: '⛔ Brake contain REFUSED - vm-honeypot-win', description: 'contain-guard returned 409: the hostname did not resolve to exactly one device whose AID == the pinned honeypot AID. No contain was attempted (the NSG egress-deny may still be in effect).', color: 15158332 }] }) }}",
+        "options": {}
+      },
+      "id": "discord-refused",
+      "name": "Discord REFUSED",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1320,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.us-2.crowdstrike.com/devices/entities/devices-actions/v2?action_name=contain",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "crowdStrikeOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ids: [$('contain_guard').item.json.aid] }) }}"
+      },
+      "id": "contain",
+      "name": "contain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1540,
+        0
+      ],
+      "credentials": {
+        "crowdStrikeOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Crowdstrike Falcon Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble the Discord BRAKE FIRED embed from the evaluate/nsg_deny/contain reads.\nconst ev = $('evaluate').first().json || {};\nconst nsg = $('nsg_deny').first().json || {};\nconst containedStatus = ((($json.resources) || [])[0] || {}).status || 'unknown';\nconst desc = 'reason: **' + (ev.reason || 'unknown') + '**\\n'\n  + 'distinct_dst: ' + (ev.distinct_dst ?? 'n/a') + ', conn_count: ' + (ev.conn_count ?? 'n/a')\n  + ', source: ' + (ev.source || 'unknown') + '\\n\\n'\n  + 'NSG access: **' + (nsg.access || 'unknown') + '** (' + (nsg.provisioning_state || 'unknown') + ')\\n'\n  + 'Falcon contain status: **' + containedStatus + '**';\nconst discord_body = { embeds: [{ title: '🛑 AUTO-BRAKE FIRED - ' + 'vm-honeypot-win',\n  description: desc, color: 15548997 }] };\nreturn [{ json: { discord_body } }];"
+      },
+      "id": "build-brake-alert",
+      "name": "Build Brake Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REPLACE_ME",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord_body) }}",
+        "options": {}
+      },
+      "id": "discord-brake-fired",
+      "name": "Discord BRAKE FIRED",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1980,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Brake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Events": {
+      "main": [
+        [
+          {
+            "node": "evaluate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "evaluate": {
+      "main": [
+        [
+          {
+            "node": "Trip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trip?": {
+      "main": [
+        [
+          {
+            "node": "nsg_deny",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No-op end",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "nsg_deny": {
+      "main": [
+        [
+          {
+            "node": "resolve_host",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "resolve_host": {
+      "main": [
+        [
+          {
+            "node": "contain_guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "contain_guard": {
+      "main": [
+        [
+          {
+            "node": "contain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Discord REFUSED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "contain": {
+      "main": [
+        [
+          {
+            "node": "Build Brake Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Brake Alert": {
+      "main": [
+        [
+          {
+            "node": "Discord BRAKE FIRED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -4,7 +4,9 @@ only stdlib, so importing it is side-effect-free apart from building the dict.""
 import io
 import json
 import os
+import subprocess
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))  # so build_honeypot_triage_workflow imports
 
@@ -12,6 +14,9 @@ from build_honeypot_triage_workflow import N8N_PREGATE_SOURCE, workflow  # noqa:
 
 NODES = {n["name"]: n for n in workflow["nodes"]}
 CONNS = workflow["connections"]
+
+_HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent.parent
 
 
 def _targets(node_name, output_index=0):
@@ -232,3 +237,37 @@ def test_no_live_secret_only_placeholders():
     import re as _re
     real_hooks = [m for m in _re.findall(r"discord\.com/api/webhooks/([^\"'\\ ]+)", s) if m != "REPLACE_ME"]
     assert real_hooks == [], f"non-placeholder Discord webhook(s): {real_hooks}"
+
+
+# ---- Task A7: honeypot-brake generator (out-of-process, generates JSON/honeypot-brake.json) ----
+
+def _gen_brake():
+    subprocess.run([sys.executable, str(_HERE / "build_honeypot_brake_workflow.py")],
+                   check=True, cwd=_ROOT)
+    return json.loads((_ROOT / "JSON" / "honeypot-brake.json").read_text(encoding="utf-8"))
+
+
+def test_brake_workflow_has_core_nodes():
+    wf = _gen_brake()
+    names = {n["name"] for n in wf["nodes"]}
+    assert {"Brake Webhook", "Normalize Events", "evaluate", "Trip?",
+            "nsg_deny", "Discord BRAKE FIRED"} <= names
+
+
+def test_brake_workflow_calls_evaluate_and_nsg_deny_endpoints():
+    wf = _gen_brake()
+    urls = [n.get("parameters", {}).get("url", "") for n in wf["nodes"]]
+    assert any(u.endswith("/brake/evaluate") for u in urls)
+    assert any(u.endswith("/brake/nsg-deny") for u in urls)
+
+
+def test_brake_workflow_reuses_aid_pinned_contain_guard():
+    wf = _gen_brake()
+    urls = [n.get("parameters", {}).get("url", "") for n in wf["nodes"]]
+    assert any(u.endswith("/falcon/contain-guard") for u in urls)
+
+
+def test_brake_workflow_secrets_are_placeholders():
+    raw = (_ROOT / "JSON" / "honeypot-brake.json").read_text(encoding="utf-8")
+    assert "REPLACE_ME" in raw
+    assert "discord.com/api/webhooks/REPLACE_ME" in raw
