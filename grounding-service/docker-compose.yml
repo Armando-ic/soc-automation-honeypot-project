@@ -45,6 +45,23 @@ services:
       SPLUNK_PASSWORD: ${SPLUNK_PASSWORD:-}
       INVESTIGATE_ENABLED: "1"
       INVESTIGATE_LIVE_INDEXES: honeypot
+      # Honeypot-opening auto-brake (Part A): inert by default (BRAKE_ENABLED unset =>
+      # brake_factory is None in main.py, so /brake/nsg-deny and /brake/nsg-status stay
+      # dead-but-safe). AZURE_CLIENT_SECRET is interpolated from the SAME gitignored
+      # grounding-service/.env as ANTHROPIC_API_KEY/SPLUNK_PASSWORD and never lives in
+      # this committed file. The SP is scoped to ONLY the honeypot NSG (spec section 3.6).
+      BRAKE_ENABLED: ${BRAKE_ENABLED:-false}
+      SPLUNK_HOST_IP: ${SPLUNK_HOST_IP:-}
+      BRAKE_DISTINCT_DST_MAX: ${BRAKE_DISTINCT_DST_MAX:-25}
+      BRAKE_CONN_RATE_MAX: ${BRAKE_CONN_RATE_MAX:-200}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      HONEYPOT_SUBSCRIPTION_ID: ${HONEYPOT_SUBSCRIPTION_ID:-}
+      HONEYPOT_NSG_RG: ${HONEYPOT_NSG_RG:-}
+      HONEYPOT_NSG_NAME: ${HONEYPOT_NSG_NAME:-}
+      HONEYPOT_NSG_DENY_RULE: ${HONEYPOT_NSG_DENY_RULE:-honeypot-brake-egress-deny}
+      HONEYPOT_NSG_DENY_PRIORITY: ${HONEYPOT_NSG_DENY_PRIORITY:-100}
     volumes:
       - grounding_runs:/data
     depends_on: [qdrant]

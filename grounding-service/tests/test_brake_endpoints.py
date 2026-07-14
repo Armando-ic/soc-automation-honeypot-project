@@ -92,3 +92,30 @@ def test_nsg_deny_never_raises_on_azure_error():
     c = _client_with_factory(lambda: _BoomSession(), **_CREDS)
     body = c.post("/brake/nsg-deny", json={}).json()
     assert body["fired"] is False and body["reason"] == "brake_error"
+
+
+def test_nsg_status_configured_false_when_disabled():
+    c = _client_with_factory(lambda: _FakeSession())  # brake_enabled defaults False
+    r = c.get("/brake/nsg-status")
+    assert r.json() == {"configured": False, "access": "", "provisioning_state": ""}
+
+
+def test_nsg_status_configured_false_when_creds_missing():
+    c = _client_with_factory(lambda: _FakeSession(), brake_enabled=True)  # no creds
+    r = c.get("/brake/nsg-status")
+    assert r.json() == {"configured": False, "access": "", "provisioning_state": ""}
+
+
+def test_nsg_status_reports_when_enabled_and_configured():
+    c = _client_with_factory(lambda: _FakeSession(), **_CREDS)
+    body = c.get("/brake/nsg-status").json()
+    assert body == {"configured": True, "access": "Deny", "provisioning_state": "Succeeded"}
+
+
+def test_nsg_status_never_raises_on_azure_error():
+    class _BoomSession(_FakeSession):
+        def get(self, url, headers=None, timeout=None):
+            return _FakeResp(status_code=500)
+    c = _client_with_factory(lambda: _BoomSession(), **_CREDS)
+    body = c.get("/brake/nsg-status").json()
+    assert body == {"configured": True, "access": "unknown", "provisioning_state": "error"}

@@ -55,3 +55,20 @@ def test_verifier_prompt_json_present_in_source_tree():
     from grounding_service.config import load_settings
     p = Path(load_settings().prompt_path)
     assert p.is_file(), f"verifier prompt_path source missing: {p}"
+
+
+def test_main_wires_brake_factory():
+    # The auto-brake (Task A5) is only reachable in production if main.py builds and
+    # passes the session factory -- otherwise /brake/nsg-deny and /brake/nsg-status are
+    # silently inert in every deploy, the exact class of gap this file guards against.
+    src = (_GS / "grounding_service" / "main.py").read_text(encoding="utf-8")
+    assert "azure_brake_session_factory" in src
+    assert "BRAKE_ENABLED" in src
+
+
+def test_compose_injects_brake_env():
+    # Without these keys in compose's environment block, main.py's gating always reads
+    # them as unset and the brake factory is never built, no matter the .env contents.
+    compose = (_GS / "docker-compose.yml").read_text(encoding="utf-8")
+    for key in ("BRAKE_ENABLED", "AZURE_CLIENT_SECRET", "HONEYPOT_NSG_NAME", "SPLUNK_HOST_IP"):
+        assert key in compose, f"{key} not injected in compose"

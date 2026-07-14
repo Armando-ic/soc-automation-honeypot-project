@@ -44,6 +44,15 @@ def _splunk_service_factory() -> object:
     )
 
 
+def _azure_brake_session_factory() -> object:
+    """A plain httpx.Client for the NSG-flip calls. Only built when the brake is
+    enabled AND the SP creds are present (see build_default_app), so a normal deploy
+    never touches Azure. The SP is scoped to ONLY the honeypot NSG (spec section 3.6)."""
+    import httpx
+
+    return httpx.Client(timeout=30.0)
+
+
 def build_default_app():
     settings = load_settings()
     retriever = _build_retriever(settings)
@@ -65,11 +74,20 @@ def build_default_app():
         if (os.getenv("SPLUNK_HOST") and os.getenv("SPLUNK_PASSWORD"))
         else None
     )
+    # The auto-brake is inert unless BRAKE_ENABLED and the SP creds are all present,
+    # so a normal (non-open) deploy ships the endpoints dead-but-safe.
+    brake_factory = (
+        _azure_brake_session_factory
+        if (os.getenv("BRAKE_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
+            and os.getenv("AZURE_CLIENT_SECRET") and os.getenv("HONEYPOT_NSG_NAME"))
+        else None
+    )
     return create_app(retriever, settings,
                       judge_client_factory=factory,
                       deobf_client_factory=factory,
                       investigation_client_factory=factory,
-                      splunk_service_factory=splunk_factory)
+                      splunk_service_factory=splunk_factory,
+                      azure_brake_session_factory=brake_factory)
 
 
 app = build_default_app()
