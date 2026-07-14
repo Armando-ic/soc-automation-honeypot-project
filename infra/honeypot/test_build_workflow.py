@@ -295,3 +295,13 @@ def test_brake_workflow_no_live_secret():
     import re as _re
     real_hooks = [m for m in _re.findall(r"discord\.com/api/webhooks/([^\"'\\ ]+)", s) if m != "REPLACE_ME"]
     assert real_hooks == [], f"non-placeholder Discord webhook(s): {real_hooks}"
+
+
+# ---- Task A8: honeypot-brake-triggers.md (SPL + KQL + the successful-logon alert) ----
+
+def test_brake_triggers_doc_has_all_three_queries():
+    doc = (_HERE / "honeypot-brake-triggers.md").read_text(encoding="utf-8")
+    assert "EventCode=3" in doc or "Sysmon" in doc          # host trigger (EID 3)
+    assert "AzureNetworkAnalytics_CL" in doc                # network trigger (NSG flow logs)
+    assert "4624" in doc and "Logon_Type=10" in doc.replace(" ", "").replace("logon_type", "Logon_Type")
+    assert "/honeypot-brake" in doc                         # feeders POST to the brake webhook
