@@ -52,3 +52,52 @@ def evaluate_egress(events, *, splunk_host_ip, distinct_dst_max, conn_rate_max,
         return {"trip": True, "reason": "egress_rate", "distinct_dst": len(web_dsts),
                 "conn_count": web_conns}
     return {"trip": False, "reason": "", "distinct_dst": len(web_dsts), "conn_count": web_conns}
+
+
+_MGMT = "https://management.azure.com"
+_LOGIN = "https://login.microsoftonline.com"
+
+
+def fetch_token(session, *, tenant, client_id, client_secret, timeout=30) -> str:
+    url = f"{_LOGIN}/{tenant}/oauth2/v2.0/token"
+    resp = session.post(url, data={
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "scope": f"{_MGMT}/.default",
+    }, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
+def _rule_url(subscription, resource_group, nsg, rule_name, api_version):
+    return (f"{_MGMT}/subscriptions/{subscription}/resourceGroups/{resource_group}"
+            f"/providers/Microsoft.Network/networkSecurityGroups/{nsg}"
+            f"/securityRules/{rule_name}?api-version={api_version}")
+
+
+def nsg_deny_egress(session, token, *, subscription, resource_group, nsg, rule_name,
+                    priority, api_version="2023-09-01", timeout=30) -> dict:
+    """PUT a deny-all Outbound rule at a high-precedence priority, then read it back."""
+    url = _rule_url(subscription, resource_group, nsg, rule_name, api_version)
+    body = {"properties": {
+        "protocol": "*", "access": "Deny", "direction": "Outbound", "priority": int(priority),
+        "sourceAddressPrefix": "*", "sourcePortRange": "*",
+        "destinationAddressPrefix": "*", "destinationPortRange": "*",
+        "description": "honeypot-opening auto-brake egress deny",
+    }}
+    resp = session.put(url, json=body, headers={"Authorization": f"Bearer {token}"}, timeout=timeout)
+    resp.raise_for_status()
+    props = (resp.json() or {}).get("properties", {})
+    return {"status_code": resp.status_code,
+            "provisioning_state": props.get("provisioningState", ""),
+            "access": props.get("access", "")}
+
+
+def nsg_rule_status(session, token, *, subscription, resource_group, nsg, rule_name,
+                    api_version="2023-09-01", timeout=30) -> dict:
+    url = _rule_url(subscription, resource_group, nsg, rule_name, api_version)
+    resp = session.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=timeout)
+    resp.raise_for_status()
+    props = (resp.json() or {}).get("properties", {})
+    return {"access": props.get("access", ""), "provisioning_state": props.get("provisioningState", "")}
