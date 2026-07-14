@@ -261,6 +261,16 @@ def test_brake_workflow_calls_evaluate_and_nsg_deny_endpoints():
     assert any(u.endswith("/brake/nsg-deny") for u in urls)
 
 
+def test_brake_workflow_evaluate_fails_closed_to_nsg_deny_on_error():
+    wf = _gen_brake()
+    ev = next(n for n in wf["nodes"] if n["name"] == "evaluate")
+    assert ev.get("onError") == "continueErrorOutput"     # exposes an error output instead of halting
+    conns = wf["connections"]["evaluate"]["main"]
+    assert len(conns) == 2                                 # [0]=success, [1]=error
+    assert conns[0][0]["node"] == "Trip?"                  # success -> normal trip check
+    assert any(c["node"] == "nsg_deny" for c in conns[1])  # error -> fire the brake (fail closed)
+
+
 def test_brake_workflow_reuses_aid_pinned_contain_guard():
     wf = _gen_brake()
     urls = [n.get("parameters", {}).get("url", "") for n in wf["nodes"]]

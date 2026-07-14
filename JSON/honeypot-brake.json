@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Map the feeder payload into the /brake/evaluate request shape. The two\n// feeders (Splunk high-fan-out-egress + Splunk non-9997-egress saved searches)\n// POST a webhook body carrying `events` (the raw result rows) and a `source`\n// tag identifying which feeder fired; pass events through untouched and\n// default source to 'unknown' if the feeder omitted it.\nconst body = $input.first().json.body || $input.first().json || {};\nconst events = Array.isArray(body.events) ? body.events : [];\nconst source = body.source || 'unknown';\nreturn [{ json: { events, source } }];"
+        "jsCode": "// Two feeders converge here: the Splunk Sysmon-EID-3 host trigger and the\n// Azure NSG-flow-log network trigger, each POSTing {events:[{dst_ip,dst_port}], source}.\n// Losing either still leaves a working brake. Pass events through untouched and\n// default source to 'unknown' if the feeder omitted it.\nconst body = $input.first().json.body || $input.first().json || {};\nconst events = Array.isArray(body.events) ? body.events : [];\nconst source = body.source || 'unknown';\nreturn [{ json: { events, source } }];"
       },
       "id": "normalize-events",
       "name": "Normalize Events",
@@ -46,7 +46,8 @@
       "position": [
         440,
         0
-      ]
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -266,6 +267,13 @@
         [
           {
             "node": "Trip?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "nsg_deny",
             "type": "main",
             "index": 0
           }

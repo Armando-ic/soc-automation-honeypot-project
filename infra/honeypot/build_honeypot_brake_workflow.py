@@ -71,10 +71,9 @@ POS = {
     "Discord BRAKE FIRED": [1980, 0],
 }
 
-JS_NORMALIZE = r"""// Map the feeder payload into the /brake/evaluate request shape. The two
-// feeders (Splunk high-fan-out-egress + Splunk non-9997-egress saved searches)
-// POST a webhook body carrying `events` (the raw result rows) and a `source`
-// tag identifying which feeder fired; pass events through untouched and
+JS_NORMALIZE = r"""// Two feeders converge here: the Splunk Sysmon-EID-3 host trigger and the
+// Azure NSG-flow-log network trigger, each POSTing {events:[{dst_ip,dst_port}], source}.
+// Losing either still leaves a working brake. Pass events through untouched and
 // default source to 'unknown' if the feeder omitted it.
 const body = $input.first().json.body || $input.first().json || {};
 const events = Array.isArray(body.events) ? body.events : [];
@@ -112,7 +111,7 @@ nodes = [
     node("evaluate", "n8n-nodes-base.httpRequest", 4.4,
          {"method": "POST", "url": f"{GS}/brake/evaluate", "sendBody": True, "specifyBody": "json",
           "jsonBody": "={{ JSON.stringify({ events: $json.events, source: $json.source }) }}",
-          "options": {}}, POS["evaluate"]),
+          "options": {}}, POS["evaluate"], extra={"onError": "continueErrorOutput"}),
 
     node("Trip?", "n8n-nodes-base.if", 2.2,
          {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
@@ -149,7 +148,10 @@ nodes = [
 connections = {
     "Brake Webhook": {"main": [[{"node": "Normalize Events", "type": "main", "index": 0}]]},
     "Normalize Events": {"main": [[{"node": "evaluate", "type": "main", "index": 0}]]},
-    "evaluate": {"main": [[{"node": "Trip?", "type": "main", "index": 0}]]},
+    "evaluate": {"main": [
+        [{"node": "Trip?", "type": "main", "index": 0}],       # output 0: success -> normal trip check
+        [{"node": "nsg_deny", "type": "main", "index": 0}],    # output 1: evaluate errored -> FAIL CLOSED, fire the brake
+    ]},
     "Trip?": {"main": [
         [{"node": "nsg_deny", "type": "main", "index": 0}],       # output 0: true -> fire the brake
         [{"node": "No-op end", "type": "main", "index": 0}],      # output 1: false -> no trip, stop
