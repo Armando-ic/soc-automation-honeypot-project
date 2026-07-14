@@ -113,6 +113,7 @@ def create_app(
     deobf_client_factory: Callable[[], object] | None = None,
     investigation_client_factory: Callable[[], object] | None = None,
     splunk_service_factory: Callable[[], object] | None = None,
+    azure_brake_session_factory: Callable[[], object] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="grounding-service", version="0.1.0")
 
@@ -330,5 +331,52 @@ def create_app(
         )
         out["source"] = req.source
         return out
+
+    def _brake_configured() -> bool:
+        return bool(
+            settings.brake_enabled and settings.azure_tenant_id and settings.azure_client_id
+            and settings.azure_client_secret and settings.honeypot_subscription_id
+            and settings.honeypot_nsg_rg and settings.honeypot_nsg_name
+            and azure_brake_session_factory is not None
+        )
+
+    @app.post("/brake/nsg-deny")
+    def brake_nsg_deny() -> dict:
+        empty = {"fired": False, "access": "", "provisioning_state": ""}
+        if not _brake_configured():
+            return {**empty, "reason": "brake_not_configured"}
+        try:
+            session = azure_brake_session_factory()
+            token = brk.fetch_token(session, tenant=settings.azure_tenant_id,
+                                    client_id=settings.azure_client_id,
+                                    client_secret=settings.azure_client_secret)
+            res = brk.nsg_deny_egress(session, token,
+                                      subscription=settings.honeypot_subscription_id,
+                                      resource_group=settings.honeypot_nsg_rg,
+                                      nsg=settings.honeypot_nsg_name,
+                                      rule_name=settings.honeypot_nsg_deny_rule,
+                                      priority=settings.honeypot_nsg_deny_priority)
+            return {"fired": True, "reason": "", "access": res["access"],
+                    "provisioning_state": res["provisioning_state"]}
+        except Exception:
+            return {**empty, "reason": "brake_error"}
+
+    @app.get("/brake/nsg-status")
+    def brake_nsg_status() -> dict:
+        if not _brake_configured():
+            return {"configured": False, "access": "", "provisioning_state": ""}
+        try:
+            session = azure_brake_session_factory()
+            token = brk.fetch_token(session, tenant=settings.azure_tenant_id,
+                                    client_id=settings.azure_client_id,
+                                    client_secret=settings.azure_client_secret)
+            st = brk.nsg_rule_status(session, token,
+                                     subscription=settings.honeypot_subscription_id,
+                                     resource_group=settings.honeypot_nsg_rg,
+                                     nsg=settings.honeypot_nsg_name,
+                                     rule_name=settings.honeypot_nsg_deny_rule)
+            return {"configured": True, **st}
+        except Exception:
+            return {"configured": True, "access": "unknown", "provisioning_state": "error"}
 
     return app
