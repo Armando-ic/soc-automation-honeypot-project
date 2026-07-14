@@ -271,3 +271,27 @@ def test_brake_workflow_secrets_are_placeholders():
     raw = (_ROOT / "JSON" / "honeypot-brake.json").read_text(encoding="utf-8")
     assert "REPLACE_ME" in raw
     assert "discord.com/api/webhooks/REPLACE_ME" in raw
+
+
+def test_brake_workflow_contain_is_aid_pinned_not_hostname():
+    wf = _gen_brake()
+    contain = next(n for n in wf["nodes"] if n["name"] == "contain")
+    body = contain["parameters"]["jsonBody"]
+    assert "$('contain_guard').item.json.aid" in body     # fires off the guard-resolved AID
+    assert "vm-honeypot-win" not in body                  # never the raw hostname
+
+
+def test_brake_workflow_no_live_secret():
+    wf = _gen_brake()
+    s = json.dumps(wf, ensure_ascii=False)
+    # No Anthropic key material anywhere.
+    assert "sk-ant-" not in s
+    # Every credential id is the REPLACE_ME placeholder.
+    for n in wf["nodes"]:
+        for cred in (n.get("credentials") or {}).values():
+            assert cred.get("id") == "REPLACE_ME", f"non-placeholder cred in {n['name']}"
+    # Discord webhooks are placeholders only (no real webhook path).
+    assert "discord.com/api/webhooks/REPLACE_ME" in s
+    import re as _re
+    real_hooks = [m for m in _re.findall(r"discord\.com/api/webhooks/([^\"'\\ ]+)", s) if m != "REPLACE_ME"]
+    assert real_hooks == [], f"non-placeholder Discord webhook(s): {real_hooks}"

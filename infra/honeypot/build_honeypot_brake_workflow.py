@@ -91,12 +91,12 @@ REFUSED_BODY = ("={{ JSON.stringify({ embeds: [{ "
 JS_BUILD_FIRED = r"""// Assemble the Discord BRAKE FIRED embed from the evaluate/nsg_deny/contain reads.
 const ev = $('evaluate').first().json || {};
 const nsg = $('nsg_deny').first().json || {};
-const containedStatus = ((($json.resources) || [])[0] || {}).status || 'unknown';
 const desc = 'reason: **' + (ev.reason || 'unknown') + '**\n'
   + 'distinct_dst: ' + (ev.distinct_dst ?? 'n/a') + ', conn_count: ' + (ev.conn_count ?? 'n/a')
   + ', source: ' + (ev.source || 'unknown') + '\n\n'
   + 'NSG access: **' + (nsg.access || 'unknown') + '** (' + (nsg.provisioning_state || 'unknown') + ')\n'
-  + 'Falcon contain status: **' + containedStatus + '**';
+  + 'Falcon contain: **action submitted** (AID-pinned; confirm in the Falcon console or via the '
+  + 'falcon-contain workflow). NSG egress-deny above is the authoritative brake.';
 const discord_body = { embeds: [{ title: '🛑 AUTO-BRAKE FIRED - ' + '""" + HOST + r"""',
   description: desc, color: 15548997 }] };
 return [{ json: { discord_body } }];"""
