@@ -58,8 +58,76 @@ class DeobfuscateRequest(BaseModel):
     max_bytes: int | None = Field(default=None, ge=1)
 
 
+_HOST_FEED_CAP = 5000
+_HOST_FEED_TIMEOUT_S = 30.0
+
+
+def host_feed_spl(splunk_host_ip: str) -> str:
+    """The host feeder's search. Four details are load-bearing, not decoration.
+
+    * `sourcetype=XmlWinEventLog`, NOT `sourcetype=*Sysmon*`. splunk-inputs.conf sets
+      renderXml=1, so Sysmon lands under XmlWinEventLog -- a string with no "Sysmon" in it.
+      The wildcard the A8 doc has carried since d39a1c4 matches ZERO events, forever, silently.
+      Live receipt (2026-07-15, 24h): XmlWinEventLog EventCode=3 -> 15,935; *Sysmon* -> 0.
+    * The leading `search` is REQUIRED. splunklib's jobs.create rejects a bare `index=...`
+      (every catalog.py template carries it for the same reason). Drop it and the search errors,
+      run_catalog_query swallows that into outcome="error", and the feed is red forever.
+    * SCOPED TO THE ROWS evaluate_egress CAN ACT ON, so the result cap is reachable only by a
+      genuine fan-out. Unscoped, this ships every (ip,port) pair the box touches -- including
+      NSG-DENIED connect ATTEMPTS, which Sysmon logs anyway (it hooks the guest network stack;
+      the NSG drops the packet out in the Azure fabric). An attacker port-scanning would emit
+      thousands of rows that never leave the box, parse_envelope keeps results[:cap] ordered by
+      DestinationIp, and the real 443 fan-out rows could be truncated straight out of the feed.
+      Scoped, 5000 rows implies >2500 watched destinations, which trips fan-out on its own --
+      which is what makes riding through capped_incomplete sound rather than merely assumed.
+      The Splunk host is an explicit OR because splunk_nonuf trips on port != 9997, so it needs
+      Splunk rows on ANY port, which a watch-ports filter could never admit.
+    * `| table dst_ip, dst_port` drops stats' `count`: the brake contract never reads it. This
+      pre-aggregation to one row per distinct (dst_ip, dst_port) is also precisely why
+      BRAKE_CONN_RATE_MAX cannot fire -- see test_egress_rate_is_dead_against_both_real_feeders.
+
+    KNOWN, bounded, not filtered: EID3 is machine-wide, not outbound-only, so an INBOUND
+    connection on a watched port arrives with dst_ip = the honeypot's own address and counts as
+    one distinct destination. Every inbound row shares that address, so the overstatement is
+    capped at +1. `Initiated=true` would remove it but adds a filter whose failure mode is a
+    silently empty feed, which is a worse trade than being off by one.
+
+    splunk_host_ip is operator-set from the gitignored .env, never attacker-controlled.
+    """
+    watched = "DestinationPort IN (80,443)"
+    if splunk_host_ip:
+        watched += f' OR DestinationIp="{splunk_host_ip}"'
+    return (
+        f"search index=honeypot sourcetype=XmlWinEventLog EventCode=3 earliest=-5m ({watched})"
+        " | stats count by DestinationIp, DestinationPort"
+        " | rename DestinationIp as dst_ip, DestinationPort as dst_port"
+        " | table dst_ip, dst_port"
+    )
+
+
 class BrakeEvaluateRequest(BaseModel):
-    events: list[dict] = []
+    # Strict on the container, lenient on the elements.
+    #
+    # REQUIRED (no default): a body with no `events` key is a body we do not understand, and
+    # defaulting it to [] read that as "all quiet" -- which is how the Splunk built-in webhook
+    # envelope scored 200/trip:false against this app.
+    # BE HONEST ABOUT ITS REACH: this is defence-in-depth for a DIRECT post to /brake/evaluate,
+    # and it is INERT through the brake webhook, which is the only path production uses. One hop
+    # upstream, honeypot-brake's Normalize Events does
+    #     const events = Array.isArray(body.events) ? body.events : [];
+    # so an unintelligible body becomes events:[] before Pydantic ever sees it, and the result is
+    # 200/trip:false, NOT a 422. The real fix for the Splunk-envelope green-and-dead failure is
+    # the PULL feeder (/brake/host-feed), not this validator. Making Normalize Events fail closed
+    # instead was considered and REJECTED: this webhook is unauthenticated, so "unintelligible
+    # body -> trip" hands anyone who can reach it a one-request remote box-killer. On this brake,
+    # "fail closed" and "safe" are not synonyms -- closed means the capture dies.
+    #
+    # BARE `list` (not list[dict]): per-element validation 422s the whole call over one junk row,
+    # and through the webhook that 422 IS live-reachable (Normalize Events passes elements through
+    # untouched, so a list with junk in it reaches Pydantic intact) -> evaluate's error output ->
+    # nsg_deny -> all egress denied. evaluate_egress already skips non-dict rows by design, so
+    # row-level junk is its call to make, not the validator's.
+    events: list
     source: str = ""
 
 
@@ -320,6 +388,55 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         return {"aid": aid}
+
+    @app.get("/brake/host-feed")
+    def brake_host_feed() -> dict:
+        """Pull the honeypot's recent Sysmon EID3 connections for the brake to judge.
+
+        This is the FAST feeder's read side. Splunk's built-in webhook alert action cannot
+        deliver the {events, source} contract (fixed envelope, first result row only), so the
+        feeder pulls: n8n Schedule Trigger -> GET here -> POST the contract to the brake.
+
+        FAILS LOUD, NEVER EMPTY -- and note this is the exact opposite of /investigate, which
+        degrades a Splunk outage to a well-typed empty result because a dead Splunk must not
+        block triage. Here an empty feed reads to evaluate_egress as "all quiet" and is
+        byte-identical to a healthy idle box, so a silent degrade would leave the fast feeder
+        inert while every n8n execution stayed green. Any uncertainty surfaces as a 503: the
+        execution goes red, nothing is POSTed, a human sees it. Do NOT "improve" this into a
+        well-typed empty response.
+        """
+        if splunk_service_factory is None:
+            raise HTTPException(status_code=503, detail="splunk_not_configured")
+        try:
+            from splunk_investigator.splunk_client import run_catalog_query
+            service = splunk_service_factory()
+        except Exception:
+            raise HTTPException(status_code=503, detail="splunk_outage")
+
+        res = run_catalog_query(service, host_feed_spl(settings.splunk_host_ip),
+                                "brake_host_feed", {}, _HOST_FEED_CAP, _HOST_FEED_TIMEOUT_S)
+        # run_catalog_query never raises: bad SPL, a dead indexer, an expired
+        # phase4_investigator password and a role regression ALL arrive here as outcome="error"
+        # with rows=(). That is the one shape that must never become a 200.
+        if res.outcome == "error":
+            raise HTTPException(status_code=503, detail="splunk_error")
+
+        # capped_incomplete does NOT imply rows >= cap: parse_envelope's truncation limb is
+        # `any(_is_truncation_message(m) ...) or len(results) > result_cap`, and the MESSAGE limb
+        # fires independently of row count on any WARN containing "truncat"/"incomplete". So a
+        # degraded Splunk can answer capped_incomplete with ZERO rows -- an admission that we do
+        # not know, which must never render as "the box is quiet".
+        if res.outcome == "capped_incomplete" and res.row_count == 0:
+            raise HTTPException(status_code=503, detail="splunk_error")
+
+        # capped_incomplete WITH rows rides through on purpose, and 503-ing it outright would be
+        # a fail-OPEN: the SPL is scoped to watched rows, so a genuine overflow means >2500
+        # watched destinations -- the massive fan-out this brake exists to catch. Refusing to
+        # POST then would mean the brake never fires during the exact event.
+        events = [{"dst_ip": r.get("dst_ip", ""), "dst_port": r.get("dst_port", "")}
+                  for r in res.rows]
+        return {"events": events, "source": "splunk",
+                "outcome": res.outcome, "row_count": res.row_count}
 
     @app.post("/brake/evaluate")
     def brake_evaluate(req: BrakeEvaluateRequest) -> dict:
