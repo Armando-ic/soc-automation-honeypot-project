@@ -50,6 +50,18 @@ class Settings:
     honeypot_nsg_deny_rule: str = os.getenv("HONEYPOT_NSG_DENY_RULE", "honeypot-brake-egress-deny")
     honeypot_nsg_deny_priority: int = int(os.getenv("HONEYPOT_NSG_DENY_PRIORITY", "100"))
 
+    # --- feeder liveness watermark (session 40) ---
+    # The brake cannot tell a quiet box from a dead feeder; both are trip:false/distinct_dst:0.
+    # This records that a feeder POSTED at all, which is the only thing that separates them.
+    brake_feed_state_path: str = os.getenv(
+        "BRAKE_FEED_STATE_PATH", str(Path.cwd() / "brake-feed-state.json")
+    )
+    # The host feeder posts every 60s. Five missed ticks is not a blip, it is a dead feeder.
+    # NOTE: this also goes stale forever after a legitimate trip, because the trip severs the
+    # honeypot's 9997 forwarding (deny @100 beats allow-splunk-telemetry @1000). Stale means
+    # "not reporting", NOT "faulty" -- check whether the brake fired before treating it as a bug.
+    brake_feed_stale_s: int = int(os.getenv("BRAKE_FEED_STALE_S", "300"))
+
 
 def load_settings() -> Settings:
     return Settings()

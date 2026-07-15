@@ -54,6 +54,16 @@ services:
       SPLUNK_HOST_IP: ${SPLUNK_HOST_IP:-}
       BRAKE_DISTINCT_DST_MAX: ${BRAKE_DISTINCT_DST_MAX:-25}
       BRAKE_CONN_RATE_MAX: ${BRAKE_CONN_RATE_MAX:-200}
+      # Feeder liveness watermark. MUST live on /data (the grounding_runs volume), not the
+      # config default of cwd: the deploy step is `up -d --build --force-recreate`, so a
+      # cwd-local file resets total_posts to 0 on every deploy and reads STALE forever -- i.e.
+      # exactly like a dead feeder. Same reasoning as FALCON_STATE_PATH above.
+      # NOTE: BRAKE_ENABLED=false does NOT make the brake inert, it only gates the NSG half.
+      # /brake/nsg-deny returns 200 {"fired": false}, n8n reads 200 as success and walks on to
+      # the Falcon chain, and /falcon/contain-guard gates on FALCON_PINNED_AID alone. Silencing
+      # BOTH layers takes BOTH switches. There is no observe-only mode.
+      BRAKE_FEED_STATE_PATH: /data/brake-feed-state.json
+      BRAKE_FEED_STALE_S: ${BRAKE_FEED_STALE_S:-300}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}

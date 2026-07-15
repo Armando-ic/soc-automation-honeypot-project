@@ -66,6 +66,20 @@ def test_main_wires_brake_factory():
     assert "BRAKE_ENABLED" in src
 
 
+def test_compose_persists_the_feed_watermark_on_the_data_volume():
+    # THE DEPLOY TRAP, fourth instance. This project has shipped green tests over a dead deployed
+    # path three times (the Phase-3 engine missing from the image; the Phase-4 factories unwired
+    # in main.py; the Dockerfile missing honeypot-triage.json -> /verify fail-closed on EVERY
+    # live run). The watermark is the same shape of hazard: config.py defaults
+    # BRAKE_FEED_STATE_PATH to Path.cwd(), which is /app/grounding-service in the image -- NOT
+    # on the grounding_runs:/data volume. The deploy step is `up -d --build --force-recreate`,
+    # so the watermark would reset to total_posts:0 on every deploy and read STALE forever,
+    # exactly like a dead feeder. It must sit on /data, the way FALCON_STATE_PATH already does.
+    text = _COMPOSE.read_text(encoding="utf-8")
+    assert "BRAKE_FEED_STATE_PATH: /data/brake-feed-state.json" in text
+    assert "grounding_runs:/data" in text, "the /data volume is what makes the path persist"
+
+
 def test_compose_injects_brake_env():
     # Without these keys in compose's environment block, main.py's gating always reads
     # them as unset and the brake factory is never built, no matter the .env contents.

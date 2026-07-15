@@ -1,6 +1,7 @@
 """FastAPI surface: /retrieve, /verify, /normalize, /health."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Callable
 
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,12 @@ from pydantic import BaseModel, Field
 from grounding_service import brake as brk
 from grounding_service import falcon as fal
 from grounding_service.config import Settings
+from grounding_service.feed_state import (
+    load_feed_state,
+    record_post,
+    save_feed_state,
+    summarize,
+)
 from grounding_service.enrichment import build_enrichment_results
 from grounding_service.retriever import AttackRetriever
 from grounding_service.verify_adapter import build_report
@@ -182,8 +189,14 @@ def create_app(
     investigation_client_factory: Callable[[], object] | None = None,
     splunk_service_factory: Callable[[], object] | None = None,
     azure_brake_session_factory: Callable[[], object] | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="grounding-service", version="0.1.0")
+
+    # Injected so the liveness watermark is testable without wall-clock. The two known-red falcon
+    # watermark tests are red exactly because load_state falls back to datetime.now() at the
+    # endpoint boundary and their assertions rot against real time. Do not repeat that here.
+    _now = clock or (lambda: datetime.now(timezone.utc))
 
     @app.get("/health")
     def health() -> dict:
@@ -447,7 +460,43 @@ def create_app(
             conn_rate_max=settings.brake_conn_rate_max,
         )
         out["source"] = req.source
+        # Liveness watermark. Recorded for EVERY call including quiet ones (distinct_dst 0) --
+        # arrival is the proof, not content, and a quiet box is byte-identical to a dead feeder
+        # from the brake's side. Both feeders POST here, so this sees both.
+        #
+        # The bare except is deliberate and load-bearing, not laziness. This handler is on the
+        # PROVEN fire path: the evaluate node runs onError=continueErrorOutput with its error
+        # output wired straight to nsg_deny, so ANY exception escaping here DENIES ALL EGRESS and
+        # contains the box. A disk-full or a read-only mount must cost us telemetry, never the
+        # honeypot. Guarded by test_a_broken_watermark_cannot_strangle_the_box.
+        try:
+            st = load_feed_state(settings.brake_feed_state_path)
+            st = record_post(st, now=_now(), distinct_dst=out["distinct_dst"],
+                             conn_count=out["conn_count"], source=req.source,
+                             trip=bool(out["trip"]))
+            save_feed_state(settings.brake_feed_state_path, st)
+        except Exception:
+            pass
         return out
+
+    @app.get("/brake/feed-status")
+    def brake_feed_status() -> dict:
+        """Is a feeder actually alive, and what does its traffic look like?
+
+        The brake cannot answer either question: evaluate_egress([]) and a real quiet box are the
+        same response. This is the SOC-side watermark that can, and it survives a trip -- which
+        matters, because a trip severs the honeypot's own 9997 forwarding (deny @100 beats
+        allow-splunk-telemetry @1000), killing every honeypot-side signal exactly when it counts.
+
+        `stale` is the B7 gate: do not open the box while it is true. Read it honestly though --
+        it also goes stale forever AFTER a legitimate trip, for the same severing reason. Stale
+        means "no feeder is reporting", not "the feeder is faulty".
+
+        `max_distinct_dst` is the threshold baseline BRAKE_DISTINCT_DST_MAX has never had: the
+        closed-box measurement is 0, i.e. the regime where the feeder does not matter.
+        """
+        return summarize(load_feed_state(settings.brake_feed_state_path),
+                         now=_now(), stale_after_s=settings.brake_feed_stale_s)
 
     def _brake_configured() -> bool:
         return bool(

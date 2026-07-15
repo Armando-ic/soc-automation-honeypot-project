@@ -1,4 +1,6 @@
 # grounding-service/tests/test_brake_endpoints.py
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 from grounding_service.app import create_app
@@ -184,6 +186,83 @@ def test_host_feed_factory_outage_is_loud_not_empty():
     c = _feed_client(_boom)
     r = c.get("/brake/host-feed")
     assert r.status_code == 503
+
+
+# --- feeder liveness watermark ---------------------------------------------------------------
+
+_T0 = datetime(2026, 7, 15, 22, 0, 0, tzinfo=timezone.utc)
+
+
+def _feed_client_at(tmp_path, times, **env):
+    """App whose feed clock walks `times`, so nothing here depends on wall-clock."""
+    it = iter(times)
+    settings = Settings(brake_feed_state_path=str(tmp_path / "feed.json"), **env)
+    return TestClient(create_app(_StubRetriever(), settings, clock=lambda: next(it)))
+
+
+def test_evaluate_records_the_post_so_a_quiet_box_is_not_a_dead_feeder(tmp_path):
+    # THE distinction the brake structurally cannot make. This POST is a QUIET box: no watched
+    # destinations, trip:false, distinct_dst 0 -- byte-identical to what a totally dead feeder
+    # produces. The watermark separates them by ARRIVAL: something posted, so the feeder lives.
+    c = _feed_client_at(tmp_path, [_T0, _T0], splunk_host_ip="20.1.2.3")
+    r = c.post("/brake/evaluate", json={"events": [], "source": "splunk"})
+    assert r.status_code == 200 and r.json()["trip"] is False
+
+    st = c.get("/brake/feed-status").json()
+    assert st["total_posts"] == 1
+    assert st["last_post_at"] == "2026-07-15T22:00:00Z"
+    assert st["stale"] is False
+    assert st["age_seconds"] == 0
+
+
+def test_feed_status_with_no_feeder_ever_reads_stale_not_healthy(tmp_path):
+    # Fail-safe: a feeder that has never posted must not look green. This is the state on a fresh
+    # deploy AND the state if the feeder was never imported/activated -- the exact condition that
+    # would let someone open the box believing a feeder guards it.
+    c = _feed_client_at(tmp_path, [_T0])
+    st = c.get("/brake/feed-status").json()
+    assert st["stale"] is True
+    assert st["total_posts"] == 0
+    assert st["last_post_at"] == ""
+
+
+def test_a_broken_watermark_cannot_strangle_the_box(tmp_path, monkeypatch):
+    # LOAD-BEARING. /brake/evaluate is on the PROVEN fire path: the evaluate node runs with
+    # onError=continueErrorOutput and its error output is wired straight to nsg_deny. So ANY
+    # exception escaping this handler -- including from liveness telemetry, which is not even
+    # part of the brake decision -- DENIES ALL EGRESS and contains the box. A disk-full, a
+    # read-only mount or a permissions change must degrade to "no telemetry", never to a trip.
+    import grounding_service.app as app_mod
+
+    def _boom(*a, **k):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(app_mod, "save_feed_state", _boom)
+    c = _feed_client_at(tmp_path, [_T0, _T0], splunk_host_ip="20.1.2.3")
+    r = c.post("/brake/evaluate", json={
+        "events": [{"dst_ip": "93.184.0.1", "dst_port": 443}], "source": "splunk"})
+    assert r.status_code == 200, "a telemetry failure must never reach the evaluate node as an error"
+    assert r.json()["trip"] is False
+    # And the status endpoint stays up, honestly reporting that it knows nothing.
+    assert c.get("/brake/feed-status").json()["stale"] is True
+
+
+def test_feed_status_surfaces_the_open_box_threshold_baseline(tmp_path):
+    # BRAKE_DISTINCT_DST_MAX=25 has never been measured with an attacker present: the 24h
+    # closed-box baseline is ZERO, which is the regime where the feeder does not matter. A Tor
+    # bootstrap fans out to ~30 distinct 443 IPs and tor.exe is in the Sysmon include by name, so
+    # a harmless post-exploitation step would trip the brake. max_distinct_dst is how that gets
+    # answered with data instead of a guess, before anyone touches the threshold.
+    c = _feed_client_at(tmp_path, [_T0, _T0, _T0], splunk_host_ip="20.1.2.3",
+                        brake_distinct_dst_max=25)
+    c.post("/brake/evaluate", json={"events": [], "source": "splunk"})
+    c.post("/brake/evaluate", json={
+        "events": [{"dst_ip": f"93.184.{i}.1", "dst_port": 443} for i in range(12)],
+        "source": "splunk"})
+    st = c.get("/brake/feed-status").json()
+    assert st["max_distinct_dst"] == 12
+    assert st["samples"] == 2
+    assert st["trips"] == 0
 
 
 def test_evaluate_quiet_no_trip():
