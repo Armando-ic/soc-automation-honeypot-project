@@ -2,6 +2,14 @@
 __pycache__/
 *.pyc
 runs.jsonl
+# State files. In the container these live on the grounding_runs:/data volume (compose pins
+# BRAKE_FEED_STATE_PATH + FALCON_STATE_PATH there). The config defaults are cwd-relative, so a
+# local test run against default Settings drops them here as cruft. Never commit them: they are
+# runtime state, and the feed watermark records live honeypot destination counts.
+brake-feed-state.json
+brake-feed-state.json.tmp
+falcon-poller-state.json
+falcon-poller-state.json.tmp
 qdrant_storage/
 .mypy_cache/
 *.egg-info/
