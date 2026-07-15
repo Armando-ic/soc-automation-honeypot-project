@@ -577,6 +577,11 @@ def test_nsg_deny_error_still_reaches_the_alert_on_its_regular_output():
 def test_brake_triggers_doc_has_all_three_queries():
     doc = (_HERE / "honeypot-brake-triggers.md").read_text(encoding="utf-8")
     assert "EventCode=3" in doc or "Sysmon" in doc          # host trigger (EID 3)
-    assert "AzureNetworkAnalytics_CL" in doc                # network trigger (NSG flow logs)
+    # Network trigger: VNet flow logs + Traffic Analytics land in NTANetAnalytics. Verified live
+    # 2026-07-15: AzureNetworkAnalytics_CL (the legacy NSG-flow-log table) does not exist in the
+    # workspace at all and never will, since Azure retired new NSG-flow-log creation. Assert the
+    # table we actually query, or this passes on the mere mention of the dead one.
+    assert "NTANetAnalytics" in doc
+    assert "DestPublicIps" in doc                           # DestIp is empty on every outbound flow
     assert "4624" in doc and "Logon_Type=10" in doc.replace(" ", "").replace("logon_type", "Logon_Type")
     assert "/honeypot-brake" in doc                         # feeders POST to the brake webhook
