@@ -110,7 +110,8 @@
       "position": [
         880,
         0
-      ]
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -142,7 +143,8 @@
           "id": "REPLACE_ME",
           "name": "Crowdstrike Falcon Account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -205,20 +207,22 @@
           "id": "REPLACE_ME",
           "name": "Crowdstrike Falcon Account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Assemble the Discord BRAKE FIRED embed from the evaluate/nsg_deny/contain reads.\nconst ev = $('evaluate').first().json || {};\nconst nsg = $('nsg_deny').first().json || {};\nconst desc = 'reason: **' + (ev.reason || 'unknown') + '**\\n'\n  + 'distinct_dst: ' + (ev.distinct_dst ?? 'n/a') + ', conn_count: ' + (ev.conn_count ?? 'n/a')\n  + ', source: ' + (ev.source || 'unknown') + '\\n\\n'\n  + 'NSG access: **' + (nsg.access || 'unknown') + '** (' + (nsg.provisioning_state || 'unknown') + ')\\n'\n  + 'Falcon contain: **action submitted** (AID-pinned; confirm in the Falcon console or via the '\n  + 'falcon-contain workflow). NSG egress-deny above is the authoritative brake.';\nconst discord_body = { embeds: [{ title: '🛑 AUTO-BRAKE FIRED - ' + 'vm-honeypot-win',\n  description: desc, color: 15548997 }] };\nreturn [{ json: { discord_body } }];"
+        "jsCode": "// Assemble the Discord BRAKE FIRED embed. This node is the ONLY thing standing between a\n// fired brake and a silently contained box, so it must NEVER throw.\n//\n// LIVE BUG (2026-07-15, n8n 2.21.7): the old line 2 was a bare\n//   const ev = $('evaluate').first().json || {};\n// and it threw \"Cannot read properties of undefined (reading 'json')\" on a REAL trip,\n// killing Discord BRAKE FIRED after the NSG had already flipped to Deny.\n// Cause: a zero-arg $('x').first() does NOT default to output 0. n8n resolves the default\n// branchIndex by walking backwards from THIS node to 'evaluate' and taking the sourceIndex\n// of the first connection it finds. Commit b0a68b3 gave evaluate a second (error) output\n// that REJOINS the success path at nsg_deny, so that walk finds evaluate at index 1 -- the\n// ERROR branch -- which is EMPTY on every successful trip. first() -> undefined -> .json\n// -> TypeError, and the `|| {}` never ran because .json derefs first. Inverted polarity:\n// the alert only survived when evaluate ERRORED, i.e. the path with nothing real to report.\n// The trigger is the MERGE, not onError by itself: contain_guard is also two-output but its\n// error branch dead-ends at Discord REFUSED, so it resolves to 0 and is safe.\n// Fix: pass the branch index EXPLICITLY, probe every plausible accessor/branch, and degrade\n// to a well-typed empty (the same pattern as Build Opus Input in honeypot-triage).\nfunction readJson(name, branches) {\n  for (const b of branches) {\n    const tries = [() => $(name).first(b), () => ($(name).all(b) || [])[0]];\n    for (const get of tries) {\n      try {\n        const it = get();\n        if (it && it.json && typeof it.json === 'object') return it.json;\n      } catch (e) { /* branch empty/absent, node never executed, or accessor unsupported */ }\n    }\n  }\n  return {};\n}\n\nlet desc;\ntry {\n  // evaluate output 0 = the verdict {trip, reason, distinct_dst, conn_count, source}.\n  // output 1 = n8n's error item on the fail-closed path, which has none of those fields.\n  const ev = readJson('evaluate', [0]);\n  const nsg = readJson('nsg_deny', [0, 1]);\n  const haveVerdict = (typeof ev.trip !== 'undefined') || !!ev.reason;\n\n  const why = haveVerdict\n    ? 'reason: **' + (ev.reason || 'unknown') + '**\\n'\n      + 'distinct_dst: ' + (ev.distinct_dst ?? 'n/a') + ', conn_count: ' + (ev.conn_count ?? 'n/a')\n      + ', source: ' + (ev.source || 'unknown')\n    : 'reason: **no verdict from /brake/evaluate** (FAIL-CLOSED: the brake fired because '\n      + 'evaluate errored or was unreadable, not because a threshold tripped)';\n\n  // /brake/nsg-deny answers 200 with {fired:false} on brake_not_configured and brake_error,\n  // so read `fired` -- inferring success from `access` would render a FAILED authoritative\n  // brake as a mild 'unknown'. NB: nsg.reason is a FAILURE reason, not the same field as\n  // ev.reason above.\n  const nsgLine = (nsg.fired === true)\n    ? 'NSG egress-deny: **fired** - access **' + (nsg.access || 'unknown') + '** ('\n      + (nsg.provisioning_state || 'unknown') + ')'\n    : 'NSG egress-deny: **NOT CONFIRMED** (' + (nsg.reason || 'unreadable') + '). The '\n      + 'authoritative brake did not report success - check the NSG in the Azure portal NOW.';\n\n  // A10: this node now fires on a branch PARALLEL to the Falcon chain, so at render time\n  // contain has not run yet. Claiming \"action submitted\" here would be a lie. Say plainly\n  // that the alert does not wait, and point at the console.\n  desc = why + '\\n\\n' + nsgLine + '\\n'\n    + 'Falcon contain: AID-pinned, runs on a parallel branch. This alert **does not wait** on '\n    + 'it and the contain response never confirms status anyway, so verify in the Falcon '\n    + 'console. NSG egress-deny above is the authoritative brake.';\n} catch (e) {\n  // Last resort. A fired brake with no notification is the one outcome this workflow may\n  // never produce, so alert with whatever we have rather than throwing.\n  desc = 'AUTO-BRAKE FIRED, but building the alert detail failed ('\n    + ((e && e.message) ? e.message : String(e))\n    + '). Check the NSG deny rule and the Falcon console manually, NOW.';\n}\nconst discord_body = { embeds: [{ title: '🛑 AUTO-BRAKE FIRED - ' + 'vm-honeypot-win',\n  description: desc, color: 15548997 }] };\nreturn [{ json: { discord_body } }];"
       },
       "id": "build-brake-alert",
       "name": "Build Brake Alert",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1760,
-        0
-      ]
+        1100,
+        -200
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -234,9 +238,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1980,
-        0
-      ]
+        1320,
+        -200
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3
     }
   ],
   "connections": {
@@ -302,6 +309,11 @@
       "main": [
         [
           {
+            "node": "Build Brake Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "resolve_host",
             "type": "main",
             "index": 0
@@ -332,17 +344,6 @@
         [
           {
             "node": "Discord REFUSED",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "contain": {
-      "main": [
-        [
-          {
-            "node": "Build Brake Alert",
             "type": "main",
             "index": 0
           }

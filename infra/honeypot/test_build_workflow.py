@@ -4,9 +4,14 @@ only stdlib, so importing it is side-effect-free apart from building the dict.""
 import io
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))  # so build_honeypot_triage_workflow imports
 
@@ -305,6 +310,266 @@ def test_brake_workflow_no_live_secret():
     import re as _re
     real_hooks = [m for m in _re.findall(r"discord\.com/api/webhooks/([^\"'\\ ]+)", s) if m != "REPLACE_ME"]
     assert real_hooks == [], f"non-placeholder Discord webhook(s): {real_hooks}"
+
+
+# ---- Live-bug regression (2026-07-15): Build Brake Alert branch-bound accessor ----
+#
+# A bare $('x').first() binds to ONE statically-resolved output branch of x, chosen by
+# walking backwards from the reading node. evaluate's error branch REJOINS the success
+# path at nsg_deny, so that walk resolved to branch 1 (the error output), which is empty
+# on every successful trip -> first() -> undefined -> .json -> TypeError -> no Discord
+# alert on a fired brake. These tests pin the fix's shape. They do NOT execute the JS.
+
+def _brake_alert_js():
+    wf = _gen_brake()
+    return next(n for n in wf["nodes"] if n["name"] == "Build Brake Alert")["parameters"]["jsCode"]
+
+
+def _code_only(js):
+    """jsCode minus its full-line // comments. These assertions are about what the node
+    EXECUTES: the fix's comment block quotes the very `$('evaluate').first().json` pattern
+    it removed, so a raw grep would flag that prose as a bug AND let a real one hide behind
+    a comment. No string literal in this node starts a line with //, so this is safe."""
+    return "\n".join(ln for ln in js.splitlines() if not ln.strip().startswith("//"))
+
+
+def test_brake_alert_has_no_unguarded_first_json_deref():
+    # The exact live crash: `$('evaluate').first().json || {}` derefs .json BEFORE the
+    # `|| {}` can apply, so an empty branch throws and the alert is never sent.
+    js = _code_only(_brake_alert_js())
+    bad = re.findall(r"\$\([^)]*\)\s*\.\s*(?:first|last)\([^)]*\)\s*\.\s*json", js)
+    assert bad == [], f"unguarded .first(...).json deref(s) in Build Brake Alert: {bad}"
+
+
+def test_brake_alert_reads_no_node_by_string_literal():
+    # Every node read must go through the guarded helper (which takes the name as a
+    # variable), so no read can escape the try/catch. Robust to renaming the helper or
+    # its parameter, unlike asserting a specific identifier.
+    js = _code_only(_brake_alert_js())
+    direct = re.findall(r"\$\(\s*['\"][^'\"]+['\"]\s*\)", js)
+    assert direct == [], f"node read(s) outside the guarded helper: {direct}"
+
+
+def test_brake_alert_pins_an_explicit_branch_index_on_every_accessor():
+    # The whole bug is the DEFAULT branch resolution. Every first/last/all call must pass
+    # a branch index explicitly; a zero-arg call re-opens the exact live failure.
+    js = _code_only(_brake_alert_js())
+    zero_arg = re.findall(r"\$\([^)]*\)\s*\.\s*(?:first|last|all)\(\s*\)", js)
+    assert zero_arg == [], f"zero-arg (default-branch) accessor(s): {zero_arg}"
+
+
+def test_brake_alert_probes_both_nsg_deny_branches():
+    # Blind defence, NOT a convergence fix, and the distinction matters because it is the exact
+    # rule this whole file exists to respect. The branchIndex argument selects the REFERENCED
+    # node's own OUTPUT index. nsg_deny has exactly one output (pinned by
+    # test_nsg_deny_error_still_reaches_the_alert_on_its_regular_output), so a read of it can
+    # only ever resolve to 0 no matter how many nodes feed IN to it. Input convergence is a
+    # different thing from output branch index; what made `evaluate` vulnerable was that IT has
+    # two outputs. The [0,1] probe is cheap insurance if nsg_deny ever regains a second output.
+    js = re.sub(r"\s+", "", _code_only(_brake_alert_js()))
+    assert "readJson('nsg_deny',[0,1])" in js, "nsg_deny must be probed on both branch indexes"
+
+
+def test_brake_alert_reads_the_nsg_fired_flag_not_just_access():
+    # /brake/nsg-deny answers 200 with {fired:false,access:""} on brake_not_configured and
+    # brake_error. Reading only `access` renders a FAILED authoritative brake as a mild
+    # 'unknown'. Assert the property read itself, not the word "fired" (which also appears
+    # in prose and in the '**fired**' literal) -- otherwise the test is tautological.
+    js = _code_only(_brake_alert_js())
+    assert re.search(r"nsg\s*\.\s*fired", js), \
+        "must read nsg_deny's `fired` property, not infer success from `access`"
+    assert "NOT CONFIRMED" in js, "a non-fired NSG deny must render as a loud failure"
+
+
+def test_brake_alert_distinguishes_no_verdict_from_reason_unknown():
+    # On the fail-closed path evaluate's verdict fields are ABSENT. Rendering that as
+    # reason 'unknown' is dishonest on the exact path where the operator most needs to
+    # know the evaluator itself broke.
+    js = _code_only(_brake_alert_js())
+    assert "no verdict" in js and "FAIL-CLOSED" in js
+
+
+def test_brake_alert_body_is_wrapped_so_it_cannot_throw():
+    # Hard operational requirement: a fired brake must always notify. Both the helper and
+    # the render body are guarded, and the embed is returned unconditionally.
+    js = _code_only(_brake_alert_js())
+    assert len(re.findall(r"\bcatch\s*\(", js)) >= 2, \
+        "both the node read helper and the render body must be try/catch guarded"
+    assert js.rstrip().endswith("return [{ json: { discord_body } }];"), \
+        "the embed must be returned unconditionally, outside every try block"
+
+
+def test_brake_alert_does_not_claim_containment_confirmed():
+    # The contain ACTION response never confirms containment status. A10 tightened this:
+    # the alert now fires on a branch PARALLEL to contain, so it cannot even claim the
+    # action was submitted -- at render time contain has not run yet.
+    # _code_only: the comment block quotes the old "action submitted" wording to explain why
+    # A10 removed it, and this assertion is about what the node RENDERS, not what it documents.
+    js = _code_only(_brake_alert_js())
+    assert "does not wait" in js, "the alert must say it does not wait on the contain result"
+    for claim in ["containedStatus", "contained successfully", "is contained",
+                  "containment confirmed", "action submitted"]:
+        assert claim not in js, f"dishonest containment claim: {claim}"
+
+
+def test_no_code_node_reads_a_converging_multi_output_node_by_default_branch():
+    # The generic invariant that would have caught b0a68b3 the day it landed: if BOTH
+    # branches of a multi-output node reach the same Code node, that Code node cannot read
+    # it with a default-branch accessor -- one run type always sees an empty branch.
+    # Convergence, not multi-output-ness, is the distinguishing property (falcon-contain's
+    # contain_guard is two-output but its error branch dead-ends, so it is safe).
+    for wf in (_gen_brake(),
+               json.loads((_ROOT / "JSON" / "honeypot-triage.json").read_text(encoding="utf-8")),
+               json.loads((_ROOT / "JSON" / "falcon-contain.json").read_text(encoding="utf-8"))):
+        conns = wf["connections"]
+        code_nodes = {n["name"]: n for n in wf["nodes"] if n["type"] == "n8n-nodes-base.code"}
+
+        def reachable(start):
+            seen, stack = {start}, [start]
+            while stack:
+                for branch in conns.get(stack.pop(), {}).get("main", []):
+                    for c in branch:
+                        if c["node"] not in seen:
+                            seen.add(c["node"])
+                            stack.append(c["node"])
+            return seen
+
+        offenders = []
+        for src, c in conns.items():
+            outs = [b for b in c.get("main", [])]
+            if len(outs) < 2 or not all(outs):
+                continue
+            common = set.intersection(*[
+                set.union(*[reachable(x["node"]) for x in br]) for br in outs])
+            for name in sorted(common & set(code_nodes)):
+                js = _code_only(code_nodes[name]["parameters"]["jsCode"])
+                if re.search(r"\$\(\s*['\"]%s['\"]\s*\)\s*\.\s*(?:first|last|all)\(\s*\)"
+                             % re.escape(src), js):
+                    offenders.append((wf["name"], name, src))
+        assert offenders == [], (
+            "Code node(s) read a multi-output node with a default-branch accessor even "
+            f"though BOTH of its branches converge on them: {offenders}")
+
+
+# ---- Task A10 (2026-07-15): the alert must not depend on the Falcon path ----
+# The live dry-run proved both brake layers fire, but Discord never arrived. Fixing the
+# Build Brake Alert accessor was necessary and not sufficient: the alert still sat at the
+# END of nsg_deny -> resolve_host -> contain_guard -> contain, and n8n's default onError is
+# stopWorkflow, so ANY throw on that chain kills the alert AFTER the NSG has already flipped.
+# That is the one outcome this workflow may never produce: a braked, contained box and a
+# sleeping operator. It also had a date on it -- once the Falcon trial lapses (2026-07-28),
+# resolve_host/contain start failing auth and silent-brake becomes the DEFAULT, not an edge
+# case. A10 hangs the alert directly off nsg_deny (the authoritative brake) and makes every
+# node on the fire path non-halting.
+
+_FIRE_PATH = ("nsg_deny", "resolve_host", "contain_guard", "contain",
+              "Build Brake Alert", "Discord BRAKE FIRED")
+
+
+def test_alert_hangs_directly_off_the_authoritative_nsg_deny():
+    wf = _gen_brake()
+    targets = [c["node"] for c in wf["connections"]["nsg_deny"]["main"][0]]
+    assert "Build Brake Alert" in targets, "the alert must fire straight off the NSG deny"
+
+
+def test_alert_fires_before_the_falcon_chain_is_attempted():
+    # CANVAS POSITION is the real mechanism, not connection list order. n8n 2.21.7
+    # workflow-execute.ts:2072-2085 re-sorts a fan-out by position under the literal comment
+    # "Always execute the node that is more to the top-left first"; list order survives only as
+    # a stable tiebreak on identical [x,y]. So the invariant that actually decides who runs
+    # first is the LAYOUT: the alert must sit above the Falcon chain. Reviewers proved the
+    # point by moving the alert to y=400, which inverts the true order while a list-order
+    # assertion stayed green. This matters beyond latency: resolve_host/contain carry no
+    # timeout (n8n default ~300s), so a wrong layout after the Falcon trial lapses could stall
+    # the notification for minutes.
+    wf = _gen_brake()
+    pos = {n["name"]: n["position"] for n in wf["nodes"]}
+    assert pos["Build Brake Alert"][1] < pos["resolve_host"][1], \
+        "v1 sorts a fan-out top-left-first: the alert must sit ABOVE resolve_host"
+    # Belt-and-braces, and the tiebreak if the two ever share a position.
+    targets = [c["node"] for c in wf["connections"]["nsg_deny"]["main"][0]]
+    assert targets[0] == "Build Brake Alert", f"alert must be first in the fan-out, got {targets}"
+
+
+def test_alert_delivery_never_halts_the_falcon_contain():
+    # A10 regression caught in review. v1 is depth-first, so the proven order is
+    # nsg_deny -> Build Brake Alert -> Discord BRAKE FIRED -> resolve_host -> ... -> contain.
+    # That puts Discord AHEAD of the Falcon chain, and a node with the default
+    # onError=stopWorkflow halts the whole run on a 429/5xx -- so a rate-limited Discord would
+    # mean the box never gets contained. Both feeders POST to this one workflow, so concurrent
+    # brakes hammering a single rate-limited webhook is exactly the storm case. Discord is
+    # terminal, so continuing on error costs nothing.
+    wf = _gen_brake()
+    d = next(n for n in wf["nodes"] if n["name"] == "Discord BRAKE FIRED")
+    assert d.get("onError") == "continueRegularOutput", \
+        "a Discord failure must not swallow the Falcon contain that runs after it"
+    assert d.get("retryOnFail") is True, "the last link in the must-be-sent chain needs a retry"
+    assert d.get("maxTries", 0) >= 2
+
+
+def test_no_falcon_node_can_reach_the_alert():
+    # The whole point of A10: nothing on the Falcon chain is upstream of the alert, so no
+    # Falcon failure (expired trial, 429, 5xx) can swallow the notification.
+    wf = _gen_brake()
+    for name in ("resolve_host", "contain_guard", "contain"):
+        for branch in wf["connections"].get(name, {}).get("main", []):
+            for c in (branch or []):
+                assert c["node"] != "Build Brake Alert", f"{name} still feeds the alert"
+
+
+def test_no_node_on_the_fire_path_halts_the_workflow():
+    # Default onError is stopWorkflow. A throw in any of these kills the sibling alert branch
+    # too. contain_guard legitimately uses continueErrorOutput (its 409 routes to REFUSED);
+    # the rest continue on their regular output. Either way: non-halting.
+    wf = _gen_brake()
+    for name in _FIRE_PATH:
+        n = next(x for x in wf["nodes"] if x["name"] == name)
+        assert n.get("onError") in ("continueRegularOutput", "continueErrorOutput"), \
+            f"{name} halts the workflow on error, which would swallow the brake alert"
+
+
+def test_brake_alert_reads_the_evaluate_verdict_from_branch_zero():
+    # The exact index at the heart of the live bug, and it was unguarded until review: a
+    # reviewer mutated readJson('evaluate', [0]) -> [1] and all 42 tests still passed, while
+    # every REAL trip would render "no verdict / FAIL-CLOSED" and suppress the reason,
+    # distinct_dst and conn_count. Same inverted-polarity lie as the original crash, except it
+    # does not throw, so nothing else would ever notice.
+    js = re.sub(r"\s+", "", _code_only(_brake_alert_js()))
+    assert "readJson('evaluate',[0])" in js, \
+        "the verdict lives on evaluate output 0; output 1 is the fail-closed error item"
+
+
+def test_every_code_node_parses():
+    # The suite asserts on the jsCode STRING and never runs it, so an unbalanced brace shipped
+    # green: a Code node that cannot parse emits nothing, which IS the silent-brake outcome
+    # this workflow may never produce. Cheapest possible gate against that whole class.
+    node_bin = shutil.which("node")
+    if not node_bin:
+        pytest.skip("node not on PATH")
+    wf = _gen_brake()
+    for n in wf["nodes"]:
+        js = n.get("parameters", {}).get("jsCode")
+        if not js:
+            continue
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+            fh.write(js)
+            tmp = fh.name
+        try:
+            r = subprocess.run([node_bin, "--check", tmp], capture_output=True, text=True)
+            assert r.returncode == 0, f"{n['name']} jsCode does not parse: {r.stderr}"
+        finally:
+            os.unlink(tmp)
+
+
+def test_nsg_deny_error_still_reaches_the_alert_on_its_regular_output():
+    # nsg_deny must NOT use continueErrorOutput: a second output that rejoins the alert's
+    # ancestry is exactly the convergence trap that caused the live bug. continueRegularOutput
+    # keeps one output, so an nsg_deny failure still flows to the alert, which then renders
+    # NOT CONFIRMED instead of going quiet.
+    wf = _gen_brake()
+    nsg = next(x for x in wf["nodes"] if x["name"] == "nsg_deny")
+    assert nsg.get("onError") == "continueRegularOutput"
+    assert len(wf["connections"]["nsg_deny"]["main"]) == 1, "nsg_deny must stay single-output"
 
 
 # ---- Task A8: honeypot-brake-triggers.md (SPL + KQL + the successful-logon alert) ----
