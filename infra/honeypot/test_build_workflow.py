@@ -671,6 +671,12 @@ def test_nsg_deny_error_still_reaches_the_alert_on_its_regular_output():
 def test_brake_triggers_doc_has_all_three_queries():
     doc = (_HERE / "honeypot-brake-triggers.md").read_text(encoding="utf-8")
     assert "EventCode=3" in doc or "Sysmon" in doc          # host trigger (EID 3)
+    # The doc must name the sourcetype that actually matches. splunk-inputs.conf sets renderXml=1,
+    # so Sysmon lands under XmlWinEventLog -- a string with no "Sysmon" substring in it. The doc
+    # carried `sourcetype=*Sysmon*` from d39a1c4 until 2026-07-15 and it matched ZERO events for
+    # two sessions (live receipts, 24h: *Sysmon* -> 0; XmlWinEventLog EventCode=3 -> 15,935).
+    # Note the assert above cannot catch that regression: it passes on the mere word "Sysmon".
+    assert "XmlWinEventLog" in doc
     # Network trigger: VNet flow logs + Traffic Analytics land in NTANetAnalytics. Verified live
     # 2026-07-15: AzureNetworkAnalytics_CL (the legacy NSG-flow-log table) does not exist in the
     # workspace at all and never will, since Azure retired new NSG-flow-log creation. Assert the

@@ -38,7 +38,9 @@ def test_egress_rate_is_dead_against_both_real_feeders():
     # `distinct dst_ip, dst_port`. So conn_count <= 2 * distinct_dst, and the fan-out limb is
     # checked first. The worst legal non-fan-out case is 25 IPs x 2 watched ports = 50, which
     # is nowhere near conn_rate_max=200. BRAKE_CONN_RATE_MAX is therefore dead against the
-    # real system, and egress_fanout is the brake's only live rule.
+    # real system, and egress_fanout is the only live THRESHOLD rule. Scoped deliberately:
+    # splunk_nonuf is live too and is checked FIRST (it is why host_feed_spl carries the Splunk
+    # OR clause), and failsafe_malformed is live but is a validation limb, not a signal.
     worst_case = [{"dst_ip": f"93.184.{i}.{i}", "dst_port": p}
                   for i in range(25) for p in (80, 443)]
     out = evaluate_egress(worst_case, **KW)

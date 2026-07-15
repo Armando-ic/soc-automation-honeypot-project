@@ -226,6 +226,38 @@ def test_feed_status_with_no_feeder_ever_reads_stale_not_healthy(tmp_path):
     assert st["last_post_at"] == ""
 
 
+def test_a_trip_does_not_make_the_feeder_read_stale(tmp_path):
+    # PINS AGAINST AN INVERSION THE DOCS SHIPPED (not the code -- the code was always right).
+    # feed_state.py's docstring, /brake/feed-status's docstring and honeypot-brake-triggers.md all
+    # said a legitimate trip ALSO makes the feeder go stale forever, because the trip severs the
+    # honeypot's 9997 forwarding. That is exactly backwards, in the direction that gets the box
+    # opened unguarded.
+    #
+    # A trip severs the feeder's CONTENT, not its HEARTBEAT. The deny rule is Outbound on
+    # nsg-honeypot, while the whole feeder chain (n8n -> grounding-service -> Splunk) is SOC-side
+    # and keeps running: it polls, finds zero rows, and POSTs {"events": []} every minute forever.
+    # record_post stamps last_post_at on every one of those, so stale stays FALSE. That is the
+    # entire point of measuring ARRIVAL instead of content.
+    #
+    # Why it matters: stale IS the B7 gate. An operator who trips the brake, sees stale, and
+    # recalls "it also goes stale after a trip" waves off a genuinely dead feeder and opens the
+    # box to attackers with nothing watching. stale is ALWAYS a real fault. Do NOT "fix" the code
+    # to match the old comment.
+    c = _feed_client_at(tmp_path, [_T0] * 4, splunk_host_ip="20.1.2.3")
+
+    fanout = [{"dst_ip": f"93.184.{i}.{i}", "dst_port": 443} for i in range(30)]
+    r = c.post("/brake/evaluate", json={"events": fanout, "source": "splunk"})
+    assert r.json()["trip"] is True and r.json()["reason"] == "egress_fanout"
+
+    # The post-trip steady state: telemetry severed, so this feed is empty from here on.
+    c.post("/brake/evaluate", json={"events": [], "source": "splunk"})
+
+    st = c.get("/brake/feed-status").json()
+    assert st["stale"] is False, "the heartbeat survives the severing; only the content dies"
+    assert st["trips"] == 1
+    assert st["total_posts"] == 2
+
+
 def test_a_broken_watermark_cannot_strangle_the_box(tmp_path, monkeypatch):
     # LOAD-BEARING. /brake/evaluate is on the PROVEN fire path: the evaluate node runs with
     # onError=continueErrorOutput and its error output is wired straight to nsg_deny. So ANY

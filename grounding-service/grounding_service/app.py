@@ -88,7 +88,13 @@ def host_feed_spl(splunk_host_ip: str) -> str:
       Scoped, 5000 rows implies >2500 watched destinations, which trips fan-out on its own --
       which is what makes riding through capped_incomplete sound rather than merely assumed.
       The Splunk host is an explicit OR because splunk_nonuf trips on port != 9997, so it needs
-      Splunk rows on ANY port, which a watch-ports filter could never admit.
+      Splunk rows on ANY port, which a watch-ports filter could never admit. NOTE THE SILENT
+      DEGRADE: that OR clause exists only when SPLUNK_HOST_IP is set in the gitignored .env
+      (SPLUNK_HOST_IP is the Splunk PUBLIC ip the brake watches FOR; it is NOT SPLUNK_HOST, the
+      committed compose literal used to CONNECT). Unset, it defaults to "" and splunk_nonuf dies
+      twice over -- no Splunk rows are shipped, and evaluate_egress's `dst_ip == splunk_host_ip`
+      can never match a truthy ip anyway. Nothing 503s, nothing goes red, /brake/nsg-status still
+      reports configured: green and dead, the exact class this endpoint exists to refuse.
     * `| table dst_ip, dst_port` drops stats' `count`: the brake contract never reads it. This
       pre-aggregation to one row per distinct (dst_ip, dst_port) is also precisely why
       BRAKE_CONN_RATE_MAX cannot fire -- see test_egress_rate_is_dead_against_both_real_feeders.
@@ -488,9 +494,11 @@ def create_app(
         matters, because a trip severs the honeypot's own 9997 forwarding (deny @100 beats
         allow-splunk-telemetry @1000), killing every honeypot-side signal exactly when it counts.
 
-        `stale` is the B7 gate: do not open the box while it is true. Read it honestly though --
-        it also goes stale forever AFTER a legitimate trip, for the same severing reason. Stale
-        means "no feeder is reporting", not "the feeder is faulty".
+        `stale` is the B7 gate: do not open the box while it is true. And it is ALWAYS a real
+        fault -- a trip cannot cause it, so never wave one off as "the brake must have fired".
+        The severing kills the feeder's CONTENT (zero rows, forever), not its heartbeat: the
+        feeder chain is SOC-side, so it keeps POSTing an empty list every minute and `stale`
+        stays FALSE. See test_a_trip_does_not_make_the_feeder_read_stale.
 
         `max_distinct_dst` is the threshold baseline BRAKE_DISTINCT_DST_MAX has never had: the
         closed-box measurement is 0, i.e. the regime where the feeder does not matter.

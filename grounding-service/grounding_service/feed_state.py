@@ -27,10 +27,21 @@ THREE DESIGN CONSTRAINTS, each learned the hard way:
   bug would DENY ALL EGRESS and contain the box. Every function here degrades rather than raises,
   and the caller wraps it besides. Liveness telemetry is never worth strangling the honeypot for.
 
-READ THE STALENESS SIGNAL HONESTLY. `stale` means "no feeder has posted recently", which is a
-real alarm. But after a legitimate trip it will ALSO go stale forever, because the trip severs
-the telemetry that feeds it. Stale therefore means "the feeder is not reporting", NOT "the feeder
-is broken" -- check whether the brake has fired before treating it as a fault.
+READ THE STALENESS SIGNAL HONESTLY, AND KNOW WHAT IT IS *NOT*. `stale` means "no feeder has
+posted recently", and it is ALWAYS a real fault. Nothing about a trip can cause it.
+
+An earlier version of this docstring said a trip makes it go stale forever, because the trip
+severs the telemetry. That is exactly backwards, in the direction that gets the box opened
+unguarded. A trip severs the feeder's CONTENT, not its HEARTBEAT: the deny rule is Outbound on
+nsg-honeypot, while the whole feeder chain (n8n -> grounding-service -> Splunk) is SOC-side and
+keeps running. After a trip it keeps polling, keeps finding zero rows, and keeps POSTing
+{"events": []} every minute. record_post stamps last_post_at on every one of those, so `stale`
+stays FALSE. That IS the point of measuring arrival instead of content, and it is also why an
+"N-consecutive-empty" alarm would have been the wrong build: it would fire forever after every
+legitimate trip and train the operator to ignore it.
+
+So never explain a stale reading away with "the brake must have fired" -- it cannot have. Pinned
+by test_a_trip_does_not_make_the_feeder_read_stale.
 """
 from __future__ import annotations
 
