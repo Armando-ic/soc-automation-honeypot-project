@@ -412,15 +412,109 @@ def test_brake_alert_does_not_claim_containment_confirmed():
         assert claim not in js, f"dishonest containment claim: {claim}"
 
 
+# ---- honeypot-host-feeder (2026-07-15): the FAST feeder, rebuilt as a pull ----------------
+# Splunk's built-in webhook alert action cannot deliver the {events, source} contract: its
+# envelope is fixed to {result, sid, results_link, search_name, owner, app} and `result` is the
+# FIRST result row only. POSTed verbatim to the real app it scored 200 trip:false. So the fast
+# feeder pulls: Schedule Trigger -> GET /brake/host-feed -> POST the proven contract. It is a
+# SEPARATE workflow on purpose -- a second trigger on honeypot-brake would add a second ancestry
+# path through the proven graph, which is the exact bug class that already fired live (b0a68b3).
+
+def _gen_host_feeder():
+    subprocess.run([sys.executable, str(_HERE / "build_honeypot_host_feeder_workflow.py")],
+                   check=True, cwd=_ROOT)
+    return json.loads((_ROOT / "JSON" / "honeypot-host-feeder.json").read_text(encoding="utf-8"))
+
+
+def _feeder_nodes(wf):
+    return {n["name"]: n for n in wf["nodes"] if n["type"] != "n8n-nodes-base.stickyNote"}
+
+
+def test_host_feeder_is_a_linear_pull_chain():
+    wf = _gen_host_feeder()
+    conns = wf["connections"]
+    assert sorted(_feeder_nodes(wf)) == ["Schedule Trigger", "host_feed", "post_brake"]
+    assert conns["Schedule Trigger"]["main"] == [[{"node": "host_feed", "type": "main", "index": 0}]]
+    assert conns["host_feed"]["main"] == [[{"node": "post_brake", "type": "main", "index": 0}]]
+    assert "post_brake" not in conns, "post_brake is terminal"
+
+
+def test_host_feeder_polls_every_minute():
+    # 1-minute schedule over the SPL's trailing 5-minute window. The overlap is deliberate and
+    # harmless: /brake/evaluate is stateless per call, so re-sending the same connections cannot
+    # accumulate. It does mean one burst can trip up to 5 times -- the NSG PUT is idempotent
+    # (same rule name/priority) and contain is AID-pinned, so that is noise, not damage.
+    wf = _gen_host_feeder()
+    rule = _feeder_nodes(wf)["Schedule Trigger"]["parameters"]["rule"]
+    assert rule["interval"] == [{"field": "minutes", "minutesInterval": 1}]
+
+
+def test_host_feeder_reads_the_host_feed_endpoint():
+    wf = _gen_host_feeder()
+    n = _feeder_nodes(wf)["host_feed"]
+    assert n["parameters"]["method"] == "GET"
+    assert n["parameters"]["url"] == "http://grounding-service:8000/brake/host-feed"
+
+
+def test_host_feeder_posts_the_proven_brake_contract():
+    # Reads $json (its immediate input), NOT $('host_feed').first(). A zero-arg default-branch
+    # accessor is what silently bound to an empty error branch in b0a68b3; $json has no branch
+    # index to get wrong. host_feed is single-output anyway, so this is belt and braces.
+    wf = _gen_host_feeder()
+    n = _feeder_nodes(wf)["post_brake"]
+    assert n["parameters"]["method"] == "POST"
+    assert n["parameters"]["url"] == "http://10.0.0.6:5678/webhook/honeypot-brake"
+    # sendBody + specifyBody are what make jsonBody mean anything, and the leading "=" is what
+    # makes n8n EVALUATE it rather than POST the literal template text. Drop any of the three and
+    # the brake receives a body with no usable events -> Normalize Events coerces to [] -> 200
+    # trip:false -> a green, permanently inert fast feeder. Pin the expression byte-exactly.
+    assert n["parameters"]["sendBody"] is True
+    assert n["parameters"]["specifyBody"] == "json"
+    body = n["parameters"]["jsonBody"]
+    assert body.startswith("="), "n8n evaluates jsonBody only when it is prefixed '='"
+    assert body == "={{ JSON.stringify({ events: $json.events, source: $json.source }) }}"
+
+
+def test_host_feeder_halts_on_a_feed_error_instead_of_posting():
+    # LOAD-BEARING, and the reason this workflow overrides nothing. /brake/host-feed 503s whenever
+    # Splunk errors, and n8n's DEFAULT onError is stopWorkflow: the execution goes red and nothing
+    # is POSTed. continueRegularOutput would POST a body with events undefined -> JSON.stringify
+    # drops the key -> honeypot-brake's Normalize Events coerces it to events:[] -> 200 trip:false
+    # -> a GREEN, silently inert feeder. (An earlier version of this comment claimed it would 422
+    # into an NSG deny and strangle the box. That was backwards: Normalize Events launders the
+    # missing key one hop before Pydantic can reject it.) Red-and-loud beats green-and-blind.
+    wf = _gen_host_feeder()
+    for name in ("host_feed", "post_brake"):
+        n = _feeder_nodes(wf)[name]
+        assert n.get("onError") in (None, "stopWorkflow"), (
+            f"{name} must halt on error, never continue into a malformed brake POST")
+
+
+def test_host_feeder_no_live_secret():
+    wf = _gen_host_feeder()
+    s = json.dumps(wf, ensure_ascii=False)
+    assert "sk-ant-" not in s
+    assert "discord.com/api/webhooks/" not in s, "the feeder notifies nothing; it has no webhook"
+    for n in wf["nodes"]:
+        for cred in (n.get("credentials") or {}).values():
+            assert cred.get("id") == "REPLACE_ME", f"non-placeholder cred in {n['name']}"
+
+
 def test_no_code_node_reads_a_converging_multi_output_node_by_default_branch():
     # The generic invariant that would have caught b0a68b3 the day it landed: if BOTH
     # branches of a multi-output node reach the same Code node, that Code node cannot read
     # it with a default-branch accessor -- one run type always sees an empty branch.
     # Convergence, not multi-output-ness, is the distinguishing property (falcon-contain's
     # contain_guard is two-output but its error branch dead-ends, so it is safe).
+    # Every workflow we generate belongs here. This list was hardcoded to three and
+    # falcon-alert-poller.json was silently outside it -- a registration gap that defeats the
+    # invariant exactly when a NEW workflow lands, which is when it matters most. Both it and
+    # honeypot-host-feeder are now covered. Add any future workflow to this tuple.
     for wf in (_gen_brake(),
+               _gen_host_feeder(),
                json.loads((_ROOT / "JSON" / "honeypot-triage.json").read_text(encoding="utf-8")),
-               json.loads((_ROOT / "JSON" / "falcon-contain.json").read_text(encoding="utf-8"))):
+               json.loads((_ROOT / "JSON" / "falcon-contain.json").read_text(encoding="utf-8")),
+               json.loads((_ROOT / "JSON" / "falcon-alert-poller.json").read_text(encoding="utf-8"))):
         conns = wf["connections"]
         code_nodes = {n["name"]: n for n in wf["nodes"] if n["type"] == "n8n-nodes-base.code"}
 

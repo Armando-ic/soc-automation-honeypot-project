@@ -1,0 +1,122 @@
+{
+  "name": "honeypot-host-feeder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://grounding-service:8000/brake/host-feed",
+        "options": {}
+      },
+      "id": "host_feed",
+      "name": "host_feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://10.0.0.6:5678/webhook/honeypot-brake",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ events: $json.events, source: $json.source }) }}"
+      },
+      "id": "post_brake",
+      "name": "post_brake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🚦 honeypot-host-feeder\n**What it does:** every minute it asks grounding-service for the honeypot's recent Sysmon EID3 connections and hands them to the `honeypot-brake` webhook, which decides whether to slam the brake.\n\n**Why a pull:** Splunk's built-in webhook alert action physically cannot send this shape (fixed envelope, first result row only, no `events` key), so it would have fed the brake an empty list forever while looking perfectly healthy.",
+        "height": 180,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-doc---how-it-works",
+      "name": "Doc - How It Works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ⚠️ If this workflow goes RED\n**That is the design.** `/brake/host-feed` returns 503 when Splunk errors, and these nodes deliberately halt rather than POST a malformed body (which would fail closed into an NSG egress-deny and strangle the box).\n\n**A red execution means the fast feeder is DOWN and the brake is running on the 10-60 min network backstop alone.** Fix it before the honeypot stays open.\n\n**Green but always empty is NOT proof of health** - a quiet box and a dead feeder look identical from here.",
+        "height": 180,
+        "width": 460,
+        "color": 3
+      },
+      "id": "sticky-doc---failure-modes",
+      "name": "Doc - Failure Modes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        -300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "host_feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "host_feed": {
+      "main": [
+        [
+          {
+            "node": "post_brake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
