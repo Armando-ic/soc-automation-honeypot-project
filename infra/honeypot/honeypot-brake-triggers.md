@@ -441,32 +441,127 @@ remains the feeder that must not be lost.
 
 ---
 
-## 3. "You know the moment it fell": successful RDP logon alert
+## 3. "You know the moment it fell": successful logon alert
 
-**What it watches:** a successful interactive RDP logon (Security EventCode 4624, Logon_Type
-10) on the honeypot. This is not a brake trigger, it's a heads-up: the instant the weak
-credential actually gets used, someone should know, so the attended-monitoring half of the
-safety posture (spec section 3, "semi-attended with an auto-brake") has something to watch for.
+> **REWRITTEN 2026-07-16 (session 41) against LIVE data. TWO of the three things this section
+> specified were WRONG, and both were the same class of wrong as section 1: a thing that had never
+> been executed.** The original was:
+>
+> ```spl
+> index=honeypot source=WinEventLog:Security EventCode=4624 Logon_Type=10 earliest=-5m
+> | table _time, src_ip, user
+> ```
+> ...delivered by a Splunk "Discord webhook" alert action. Both italicized halves are dead:
+>
+> 1. **`Logon_Type=10` MATCHES NOTHING ON THIS BOX.** Live, 24h, executed: `EventCode=4624` grouped
+>    by `Logon_Type, user` returns exactly **Type 5/SYSTEM = 81, Type 3/<admin> = 2, Type 7/<admin>
+>    = 1**. **ZERO Type 10 — despite three real, successful admin RDP logons in that window.** RDP
+>    here is **NLA-brokered**, so the authentication lands as **Type 3 (Network)** and a reconnect
+>    to an existing session as **Type 7 (Unlock)**. Type 10 (RemoteInteractive) is what non-NLA RDP
+>    produces. Decisive corroboration: all **3,751** brute-force `4625` failures in 24h are
+>    **Type 3, and only Type 3** — so when the farm finally succeeds, the success arrives as
+>    `4624` + **Type 3**, the exact event `Logon_Type=10` cannot see. **The specified alert would
+>    have fired green forever and never told anyone the box fell.**
+> 2. **Splunk CANNOT POST to Discord directly.** Discord's webhook API requires a JSON body
+>    carrying `content` or `embeds`; Splunk's built-in webhook action sends its own **FIXED**
+>    envelope (`{sid, search_name, app, owner, results_link, result}`) with neither key -> Discord
+>    answers **400** and the ping never arrives. **This is the same fixed envelope that killed
+>    section 1's host feeder** (second time on this project). Route through n8n instead, exactly
+>    like the brake does.
+>
+> **What DID survive scrutiny, all live-executed:** `source="WinEventLog:Security"` (**14,203**
+> events, dispatched as a filter, not merely enumerated); `EventCode=4624`; the `Logon_Type` FIELD
+> (it extracts — that is how the counts above exist); `user` (resolves to the real account, not `-`
+> or `SYSTEM`); and `src_ip` (populated on a 4624).
 
-**Saved search (SPL):**
+**What it watches:** a successful logon on the honeypot. Not a brake trigger, a heads-up: the
+instant the weak credential is actually used, a human should know, so the attended half of the
+safety posture (spec section 3, "semi-attended with an auto-brake") has something to watch. A human
+must never learn about a compromise secondhand, from post-exploitation telemetry showing up later.
+
+**BUILD STATUS: the SPLs below are live-derived but NOT YET RUN as saved searches, and the n8n
+delivery workflow is NOT BUILT.** Nothing in this section is deployed.
+
+### The design principle: DENYLIST the noise, never ALLOWLIST the types
+
+`Logon_Type=10` died because it was an **allowlist** — it assumed we knew which type Windows would
+use, and we were wrong. `Logon_Type IN (3,7,10)` would repeat that mistake in a wider shape: it
+still assumes the enumeration is complete. **Only the noise is safe to enumerate**, because we have
+measured it. Everything else fires, including types Windows has not shown us yet.
+
+Measured noise is a single tight cluster: **81 of 84** successful logons are `SYSTEM` Type-5
+service logons. Excluding exactly that cluster leaves **3 events/24h**. Note it is scoped to the
+CLUSTER, not to `Logon_Type=5` broadly: a service installed to run as the weak account is Type-5
+**persistence** and must still fire.
+
+### (b) PRIMARY — "the weak credential was used"
+
+The precise tripwire. Filters on the ACCOUNT, not the logon type, so it is immune to the whole
+Type 3/7/10 problem. Zero noise: nothing else ever logs in as this account. `<weak-account>` is the
+name B7 plants.
 
 ```spl
-index=honeypot source=WinEventLog:Security EventCode=4624 Logon_Type=10 earliest=-5m
-| table _time, src_ip, user
+index=honeypot source="WinEventLog:Security" EventCode=4624 user="<weak-account>" earliest=-5m
+| eval src_ip=coalesce(src_ip, Source_Network_Address)
+| table _time, src_ip, user, Logon_Type, ComputerName
 ```
 
-Schedule every 1 minute over a 5-minute lookback, fire-once-per-result (this should be a rare
-event by design, so no dedup/throttling logic beyond Splunk's normal per-alert-fire behavior
-is needed).
+**No `Logon_Type` filter at all, deliberately.** Any successful logon as that account means the box
+fell, however Windows classifies it.
 
-**Alert action: Discord webhook.** Straight to Discord, not through the brake webhook (this
-alert doesn't feed `/brake/evaluate`, it's a standalone notification):
+### (a) BACKSTOP — "somebody logged in"
+
+Catches what (b) structurally cannot: an attacker who creates their **own** account, or who arrives
+on a vector nobody predicted.
+
+```spl
+index=honeypot source="WinEventLog:Security" EventCode=4624 earliest=-5m
+| eval src_ip=coalesce(src_ip, Source_Network_Address)
+| search NOT (Logon_Type=5 AND user="SYSTEM")
+| table _time, src_ip, user, Logon_Type, ComputerName
+```
+
+Expected noise: ~3/day, all of them the operator's own admin logons. **Note them when they fire so
+a real hit is not mistaken for your own session** (spec section 4, prep step 5).
+
+**The `coalesce` is not decoration.** It is copied verbatim from the production search already
+running live (`honeypot-triage-build.md`); this section was the only live-facing SPL in the repo
+reading `src_ip` without it. Non-network 4624s carry `-` or empty, so it guards a blank name in the
+alert at the worst possible moment.
+
+### Delivery: through n8n, never Splunk -> Discord
 
 ```
-honeypot compromised: successful RDP logon from <src_ip> as <user>
+Splunk alert (trigger: FOR EACH RESULT)
+  -> webhook -> http://10.0.0.6:5678/webhook/honeypot-logon-alert
+  -> n8n: Code builds the Discord embed -> HTTP POST -> Discord
 ```
 
-with `<src_ip>` and `<user>` filled from the matching row (`src_ip`, `user`). This is the
-"you know the moment it fell" signal called out in the design spec (section 4, prep step 5):
-a human should never learn about a successful compromise secondhand, from the post-exploitation
-telemetry showing up later. It fires the moment the logon succeeds.
+**Splunk's fixed envelope is SUFFICIENT here even though it was fatal for the brake, and the
+difference is worth understanding rather than memorizing.** The brake needed the whole row **set**
+(fan-out is a property of the set, so `result` = first-row-only destroyed the signal). This alert
+is **one logon = one row**, and "trigger for each result" sends one webhook **per row**, with
+`result` carrying that row's `src_ip`/`user`/`Logon_Type`. Same envelope, different requirement,
+opposite verdict. **Do not generalize either ruling to the other.**
+
+The envelope also carries `search_name`, so **one** n8n workflow serves both alerts and selects its
+embed from whichever fired: a 🚨 CRITICAL embed for (b), a ⚠️ heads-up for (a). Mirror the brake's
+proven Discord node (`{ embeds: [{...}] }` to `https://discord.com/api/webhooks/REPLACE_ME`,
+re-bound on import).
+
+> **UNVERIFIED, and do not assume it: Splunk (`10.0.0.5`) -> n8n (`10.0.0.6:5678`) has NEVER been
+> exercised.** It should work (both are private on the same VNet, unlike the Action Groups in
+> section 2 that could not reach `10.0.0.6` from Microsoft's public infrastructure), but "should"
+> is what this doc keeps getting wrong. Prove it by firing the alert manually and watching n8n's
+> execution list before trusting either alert.
+
+**Schedule** every 1 minute over the 5-minute lookback, **trigger: for each result** (this is what
+makes the envelope carry per-row fields). The 5x overlap means one logon can ping ~5 times; throttle
+on `user` + `src_ip` for 5 minutes if that is annoying, but keep the key per-actor so a second,
+distinct actor is never suppressed.
+
+**Prove it fires BEFORE B7 plants the cred.** (a) is testable today with your own admin RDP logon.
+(b) cannot be tested until the account exists — but B7 already requires confirming RDP reachability
+of the weak account from an external network, and **that step is (b)'s live proof**. Same
+safe-ordering rule as "brake dry-run-verified before the weak cred is planted": prove the tripwire
+fires before opening the door, not after.

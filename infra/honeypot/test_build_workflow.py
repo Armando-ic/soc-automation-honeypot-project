@@ -683,5 +683,19 @@ def test_brake_triggers_doc_has_all_three_queries():
     # table we actually query, or this passes on the mere mention of the dead one.
     assert "NTANetAnalytics" in doc
     assert "DestPublicIps" in doc                           # DestIp is empty on every outbound flow
-    assert "4624" in doc and "Logon_Type=10" in doc.replace(" ", "").replace("logon_type", "Logon_Type")
+    # Section 3, the successful-logon alert. This assert USED to require `Logon_Type=10` in the doc,
+    # which was worse than useless: live 24h data (2026-07-16) shows EventCode=4624 grouped by
+    # Logon_Type/user is Type 5/SYSTEM=81, Type 3/admin=2, Type 7/admin=1 -- ZERO Type 10, despite
+    # three real successful admin RDP logons. RDP here is NLA-brokered, so auth lands as Type 3 and
+    # a reconnect as Type 7; all 3,751 brute-force 4625s are Type 3 ONLY, so a real success arrives
+    # as Type 3 too. The old alert could never have fired, and this test PINNED the dead string in
+    # place -- the same tautology the XmlWinEventLog comment above warns about.
+    assert "4624" in doc
+    # Pin the DENYLIST instead: exclude only the measured noise cluster, never allowlist the types
+    # (allowlisting is exactly what made Logon_Type=10 dead).
+    assert 'NOT (Logon_Type=5 AND user="SYSTEM")' in doc
+    # Delivery must NOT be Splunk -> Discord: Discord requires a body carrying content/embeds and
+    # Splunk's built-in webhook envelope has neither -> 400, ping never arrives. Same fixed envelope
+    # that killed section 1's host feeder. Route through n8n like the brake does.
+    assert "/webhook/honeypot-logon-alert" in doc
     assert "/honeypot-brake" in doc                         # feeders POST to the brake webhook
