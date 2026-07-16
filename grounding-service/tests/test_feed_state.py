@@ -94,11 +94,11 @@ def test_summarize_with_no_posts_ever_is_stale_not_healthy(tmp_path):
 
 
 def test_summarize_exposes_the_distinct_dst_distribution(tmp_path):
-    # The threshold baseline. BRAKE_DISTINCT_DST_MAX=25 was never measured with an attacker on
-    # the box, and the closed-box baseline is 0 -- the regime where the feeder does not matter.
-    # This is what answers it with data once the box is open: a Tor bootstrap (~30 distinct on
-    # 443, tor.exe is in the Sysmon include by name) would show up here BEFORE anyone has to
-    # guess whether 25 is right.
+    # The threshold baseline. The gate was raised 25 -> 150 on reasoning (2026-07-16), because 25
+    # sat below the ~30-distinct benign ceiling a Tor bootstrap reaches (tor.exe is in the Sysmon
+    # include by name). This distribution is what REFINES 150 with live data once the box is open:
+    # if the real ceiling turns out lower, tighten. The closed-box baseline is 0, the regime where
+    # the feeder does not matter.
     st = load_feed_state(tmp_path / "f.json")
     for i, d in enumerate([0, 0, 3, 30, 1]):
         st = record_post(st, now=_at(i), distinct_dst=d, conn_count=d, source="splunk",

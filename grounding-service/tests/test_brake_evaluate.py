@@ -2,6 +2,9 @@
 from grounding_service.brake import evaluate_egress
 
 SPLUNK = "20.1.2.3"
+# A small, convenient threshold for exercising the pure function's limbs. It is NOT the production
+# default (150/400, decided 2026-07-16) -- that is pinned in test_brake_config.py. 25/200 still
+# satisfies the deadness invariant 2*25 <= 200, so the egress_rate-is-dead proof below holds here.
 KW = dict(splunk_host_ip=SPLUNK, distinct_dst_max=25, conn_rate_max=200)
 
 
@@ -36,11 +39,12 @@ def test_egress_rate_is_dead_against_both_real_feeders():
     # row per distinct (dst_ip, dst_port): the host SPL via `stats count by DestinationIp,
     # DestinationPort` (its `count` column is dropped, not sent), the network KQL via
     # `distinct dst_ip, dst_port`. So conn_count <= 2 * distinct_dst, and the fan-out limb is
-    # checked first. The worst legal non-fan-out case is 25 IPs x 2 watched ports = 50, which
-    # is nowhere near conn_rate_max=200. BRAKE_CONN_RATE_MAX is therefore dead against the
-    # real system, and egress_fanout is the only live THRESHOLD rule. Scoped deliberately:
-    # splunk_nonuf is live too and is checked FIRST (it is why host_feed_spl carries the Splunk
-    # OR clause), and failsafe_malformed is live but is a validation limb, not a signal.
+    # checked first. The rate rule is therefore dead so long as 2 * distinct_dst_max <=
+    # conn_rate_max: at THIS test's 25/200 that is 50 <= 200, and at the production 150/400 it is
+    # 300 <= 400 (pinned by test_rate_stays_dead_at_the_configured_thresholds). egress_fanout is
+    # the only live THRESHOLD rule. Scoped deliberately: splunk_nonuf is live too and is checked
+    # FIRST (it is why host_feed_spl carries the Splunk OR clause), and failsafe_malformed is live
+    # but is a validation limb, not a signal.
     worst_case = [{"dst_ip": f"93.184.{i}.{i}", "dst_port": p}
                   for i in range(25) for p in (80, 443)]
     out = evaluate_egress(worst_case, **KW)

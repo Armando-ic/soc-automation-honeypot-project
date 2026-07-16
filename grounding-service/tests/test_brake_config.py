@@ -6,9 +6,20 @@ def test_brake_defaults_are_safe():
     s = Settings()
     assert s.brake_enabled is False                # inert until deliberately enabled
     assert s.splunk_host_ip == ""
-    assert s.brake_distinct_dst_max == 25          # tuned in Part B against a baseline
-    assert s.brake_conn_rate_max == 200
+    assert s.brake_distinct_dst_max == 150         # fan-out gate, decided 2026-07-16 (see config.py)
+    assert s.brake_conn_rate_max == 400            # NOT a rate limit: keeps egress_rate dead
     assert s.honeypot_nsg_deny_priority == 100     # low number = high precedence
+
+
+def test_rate_stays_dead_at_the_configured_thresholds():
+    # egress_rate is dead ONLY while 2 * distinct_dst_max <= conn_rate_max. Both feeders
+    # pre-aggregate to <= 2 * distinct_dst connections (one row per (ip, port) across two watched
+    # ports), so the rate limb can never fire before fan-out while the invariant holds. Raising
+    # the fan-out gate WITHOUT raising conn_rate_max resurrects the un-baselined rate rule BELOW
+    # the gate -- the coupling found when the gate went 25 -> 150 on 2026-07-16. This fails loudly
+    # the moment a future edit breaks the relationship, in either file.
+    s = Settings()
+    assert 2 * s.brake_distinct_dst_max <= s.brake_conn_rate_max
 
 
 def test_env_bool_parses_truthy_at_call_time(monkeypatch):

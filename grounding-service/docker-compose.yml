@@ -52,8 +52,11 @@ services:
       # this committed file. The SP is scoped to ONLY the honeypot NSG (spec section 3.6).
       BRAKE_ENABLED: ${BRAKE_ENABLED:-false}
       SPLUNK_HOST_IP: ${SPLUNK_HOST_IP:-}
-      BRAKE_DISTINCT_DST_MAX: ${BRAKE_DISTINCT_DST_MAX:-25}
-      BRAKE_CONN_RATE_MAX: ${BRAKE_CONN_RATE_MAX:-200}
+      # 150/400 decided 2026-07-16 (see config.py). They move as a PAIR: 400 keeps egress_rate
+      # dead (2*150 <= 400); raising the fan-out gate alone would resurrect the un-baselined rate
+      # rule below it. If .env overrides one, it must override both to preserve the invariant.
+      BRAKE_DISTINCT_DST_MAX: ${BRAKE_DISTINCT_DST_MAX:-150}
+      BRAKE_CONN_RATE_MAX: ${BRAKE_CONN_RATE_MAX:-400}
       # Feeder liveness watermark. MUST live on /data (the grounding_runs volume), not the
       # config default of cwd: the deploy step is `up -d --build --force-recreate`, so a
       # cwd-local file resets total_posts to 0 on every deploy and reads STALE forever -- i.e.

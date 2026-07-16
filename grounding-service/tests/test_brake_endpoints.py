@@ -243,9 +243,10 @@ def test_a_trip_does_not_make_the_feeder_read_stale(tmp_path):
     # recalls "it also goes stale after a trip" waves off a genuinely dead feeder and opens the
     # box to attackers with nothing watching. stale is ALWAYS a real fault. Do NOT "fix" the code
     # to match the old comment.
-    c = _feed_client_at(tmp_path, [_T0] * 4, splunk_host_ip="20.1.2.3")
+    # Explicit low threshold: this test is about trip -> stale, not about the production gate.
+    c = _feed_client_at(tmp_path, [_T0] * 4, splunk_host_ip="20.1.2.3", brake_distinct_dst_max=5)
 
-    fanout = [{"dst_ip": f"93.184.{i}.{i}", "dst_port": 443} for i in range(30)]
+    fanout = [{"dst_ip": f"93.184.{i}.{i}", "dst_port": 443} for i in range(10)]
     r = c.post("/brake/evaluate", json={"events": fanout, "source": "splunk"})
     assert r.json()["trip"] is True and r.json()["reason"] == "egress_fanout"
 
@@ -280,11 +281,11 @@ def test_a_broken_watermark_cannot_strangle_the_box(tmp_path, monkeypatch):
 
 
 def test_feed_status_surfaces_the_open_box_threshold_baseline(tmp_path):
-    # BRAKE_DISTINCT_DST_MAX=25 has never been measured with an attacker present: the 24h
-    # closed-box baseline is ZERO, which is the regime where the feeder does not matter. A Tor
-    # bootstrap fans out to ~30 distinct 443 IPs and tor.exe is in the Sysmon include by name, so
-    # a harmless post-exploitation step would trip the brake. max_distinct_dst is how that gets
-    # answered with data instead of a guess, before anyone touches the threshold.
+    # The fan-out gate was raised 25 -> 150 on 2026-07-16 (see config.py) precisely because 25 sat
+    # BELOW the ~30-distinct benign ceiling a Tor bootstrap reaches (tor.exe is in the Sysmon
+    # include by name). max_distinct_dst is what REFINES 150 with open-box data once the box is
+    # live -- it no longer gates the decision, it sharpens it. This test passes an explicit 25 only
+    # to exercise the watermark's max tracking; the value is a fixture, not the live default.
     c = _feed_client_at(tmp_path, [_T0, _T0, _T0], splunk_host_ip="20.1.2.3",
                         brake_distinct_dst_max=25)
     c.post("/brake/evaluate", json={"events": [], "source": "splunk"})

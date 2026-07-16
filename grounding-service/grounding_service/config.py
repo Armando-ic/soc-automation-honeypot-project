@@ -39,8 +39,19 @@ class Settings:
     # --- honeypot-opening auto-brake (Part A) ---
     brake_enabled: bool = _env_bool("BRAKE_ENABLED")
     splunk_host_ip: str = os.getenv("SPLUNK_HOST_IP", "")
-    brake_distinct_dst_max: int = int(os.getenv("BRAKE_DISTINCT_DST_MAX", "25"))
-    brake_conn_rate_max: int = int(os.getenv("BRAKE_CONN_RATE_MAX", "200"))
+    # 150: the fan-out gate. Decided 2026-07-16 on reasoning, not attacker data (which is
+    # unobtainable without opening the box). The measured benign ceiling is ~30 (a Tor bootstrap,
+    # probed against the real evaluate_egress; the closed-box baseline is 0). A harmful spray floor
+    # is 300+/5min (a scanner at 1 req/sec). 150 sits ~5x over benign and well under a scan, so it
+    # unblocks B7; the open-box max_distinct_dst then refines it rather than gates it. The old 25
+    # was BELOW the benign ceiling -> it strangled the box on a routine Tor install.
+    brake_distinct_dst_max: int = int(os.getenv("BRAKE_DISTINCT_DST_MAX", "150"))
+    # 400 is NOT a baselined rate limit. It exists only to keep egress_rate DEAD: both feeders
+    # pre-aggregate to <= 2*distinct_dst connections, so the rate rule can never fire before
+    # fan-out AS LONG AS 2*brake_distinct_dst_max <= brake_conn_rate_max. At 150 that needs >= 300;
+    # 400 gives margin. Raising the fan-out gate WITHOUT raising this resurrects the un-baselined
+    # rate rule below the gate. Pinned by test_rate_stays_dead_at_the_configured_thresholds.
+    brake_conn_rate_max: int = int(os.getenv("BRAKE_CONN_RATE_MAX", "400"))
     azure_tenant_id: str = os.getenv("AZURE_TENANT_ID", "")
     azure_client_id: str = os.getenv("AZURE_CLIENT_ID", "")
     azure_client_secret: str = os.getenv("AZURE_CLIENT_SECRET", "")

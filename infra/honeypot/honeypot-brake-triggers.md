@@ -7,13 +7,15 @@ Reference doc for the two trip-signal feeders plus the "you know the moment it f
 `infra/honeypot/build_honeypot_host_feeder_workflow.py`). It is not yet deployed or imported.
 Section 2's network feeder is **not built**. Section 3's alert is still hands-on Part B work.
 
-**Two gates are OPEN, and neither is mechanical. Read these before you deploy anything:**
+**One gate is DECIDED, one is still OPEN. Read both before you deploy anything:**
 
-1. **`BRAKE_DISTINCT_DST_MAX=25` is backwards.** It trips on a Tor bootstrap and misses a miner,
-   so the feeder would strangle the box within 60 seconds of a routine post-exploitation Tor
-   install. It needs a **written decision**, not a guess. See "The threshold gap, honestly".
-2. **`/brake/feed-status` must read `stale: false`** before the box opens, and the rendered SPL
-   must carry the Splunk `OR` clause. See "Liveness" and the `SPLUNK_HOST_IP` bullet in section 1.
+1. **The threshold is settled (2026-07-16): `BRAKE_DISTINCT_DST_MAX` raised 25 -> 150, and
+   `BRAKE_CONN_RATE_MAX` 200 -> 400 in lockstep.** The old 25 sat *below* the ~30-distinct benign
+   ceiling a Tor bootstrap reaches, so it strangled the box on a routine post-exploitation step.
+   See "The threshold gap, honestly" for the reasoning and the residual risk this accepts.
+2. **STILL OPEN: `/brake/feed-status` must read `stale: false`** before the box opens, and the
+   rendered SPL must carry the Splunk `OR` clause. See "Liveness" and the `SPLUNK_HOST_IP` bullet
+   in section 1. This one only closes after deploy + activate, not by decision.
 
 **This doc SUPERSEDES spec section 3.3 and plan tasks B4/B7 on trigger mechanism and latency.**
 Where they disagree with this doc, they are wrong: 3.3's "saved-search -> webhook", its "seconds of
@@ -166,10 +168,14 @@ Four details are load-bearing, and the docstring on `host_feed_spl()` is the lon
   same variable and setting the wrong one looks identical from outside.
 - **`| table dst_ip, dst_port` drops `count` on purpose.** The brake contract never reads it. One
   row per distinct `(ip, port)` is also **why `BRAKE_CONN_RATE_MAX` is dead**: both feeders
-  pre-aggregate, so `conn_count <= 2 * distinct_dst`, and the worst legal non-fan-out case is 50
-  against a 200 gate. **`egress_fanout` is the only live THRESHOLD rule** (`splunk_nonuf` is live
-  too and is checked *first*, which is why the Splunk `OR` clause above matters; `failsafe_malformed`
-  is live but is a validation limb, not a signal). See
+  pre-aggregate, so `conn_count <= 2 * distinct_dst`, and the worst legal non-fan-out case is 300
+  against a 400 gate. That is not a coincidence, it is an **invariant**: `egress_rate` stays dead
+  only while `2 * BRAKE_DISTINCT_DST_MAX <= BRAKE_CONN_RATE_MAX`, which is why the 2026-07-16
+  threshold change moved both numbers together (150 and 400). Raising the fan-out gate alone would
+  silently switch the un-baselined rate rule back on below the gate; `test_rate_stays_dead_at_the_
+  configured_thresholds` fails loudly if anyone does. **`egress_fanout` is the only live THRESHOLD
+  rule** (`splunk_nonuf` is live too and is checked *first*, which is why the Splunk `OR` clause
+  above matters; `failsafe_malformed` is live but is a validation limb, not a signal). See
   `test_egress_rate_is_dead_against_both_real_feeders`, whose comment also pins the honest
   consequence: **a single-destination flood** (DDoS participation, a fast C2 beacon, a miner)
   **reaches the brake as ONE row, so neither threshold limb sees it.**
@@ -219,31 +225,40 @@ absence of a baseline. The box genuinely does make outbound 80/443 (the flow log
 The feeder is not inert, though: a positive control passed twice, `powershell.exe`
 `Invoke-WebRequest` producing 3 EID 3 rows on 443 that the exact port-scoped SPL returned.
 
-> **⚠️ `BRAKE_DISTINCT_DST_MAX=25` is BACKWARDS, and this is the open B7 gate.** Probed against
-> the real `evaluate_egress`: a **Tor bootstrap** (~30 distinct on 443; `tor.exe` is in the Sysmon
-> include **by name**, and ORPort is 443) **TRIPS**. A dropped **browser** first-run (~26)
-> **TRIPS**. A **crypto miner** (single pool) is **one row** and **MISSES**. Installing Tor is
-> textbook post-exploitation with **zero third-party harm** and would strangle the box within 60
-> seconds of this feeder going live, while the third-party harm this brake exists to stop arrives
-> as one row and is invisible. **It trips on Tor and misses a miner: backwards on both axes.**
+**The old `BRAKE_DISTINCT_DST_MAX=25` was BACKWARDS.** Probed against the real `evaluate_egress`:
+a **Tor bootstrap** (~30 distinct on 443; `tor.exe` is in the Sysmon include **by name**, and
+ORPort is 443) **tripped**. A dropped **browser** first-run (~26) **tripped**. A **crypto miner**
+(single pool, one row) **missed**. Installing Tor is textbook post-exploitation with **zero
+third-party harm**, so a gate of 25 would strangle the box within 60 seconds of this feeder going
+live, while missing the low-fan-out cases. 25 sat *below* the benign ceiling: disqualifying.
+
+> **DECISION (2026-07-16): raised to 150, with `BRAKE_CONN_RATE_MAX` 200 -> 400 in lockstep.**
+> Made on reasoning, not attacker data, because that data is unobtainable without first opening
+> the box on a threshold that is either safe or not (the chicken-and-egg). The reasoning:
 >
-> **Deliberately not "fixed" by guessing.** `BRAKE_DISTINCT_DST_MAX` is **global** in `.env`,
-> shared with the network backstop (whose 20-min `ExternalPublic` peak is 10), and **neither
-> regime has an attacker-present baseline**. Moving it moves both feeders. The data that answers
-> it is `max_distinct_dst` on `/brake/feed-status`, and it is only decisive once the box is open,
-> which is the chicken-and-egg here. Options on the table: raise the global number, break the
-> coupling into per-feeder thresholds, or accept that Tor strangles the box. **Do not touch 25
-> without a written decision.**
+> - **Benign ceiling ~30**, measured (the Tor bootstrap, the worst legal post-exploitation
+>   fan-out on this box). **Harmful spray floor 300+/5min** (a scanner at 1 req/sec). 150 sits
+>   ~5x over benign and well under a scan, so it opens the box without strangling it.
+> - **The miner "miss" is the design, not a hole.** The spec trips the brake ONLY on third-party
+>   harm and lets normal post-exploitation flow through. A miner to a single pool harms *us*
+>   (compute, bill), not a third party, and it is exactly the telemetry the honeypot exists to
+>   capture. The genuinely uncovered case is *concentrated* third-party harm (a DDoS at one victim
+>   arrives as one row), and that is the separately-deferred dead `egress_rate`, not the fan-out
+>   gate. Widening fan-out would not catch it; a per-event weight in the contract would.
+> - **`max_distinct_dst` on `/brake/feed-status` now REFINES 150, it no longer GATES the decision.**
+>   Watch the open-box distribution and tighten if the real ceiling turns out lower.
 >
-> **The instrument cannot answer two of those three options, and the window to fix that is
-> closing.** `summarize()` maxes `distinct_dst` across the whole ring and **ignores the `source`
-> it stores on every entry**, so `max_distinct_dst` is **pooled across both feeders**. Today that
-> is harmless, because the host feeder is the only thing that posts. The moment
-> `honeypot-flow-feeder` starts POSTing `source: "nsg"` at its ~10-distinct peak, the number
-> becomes a permanent mixture and **"break the coupling into per-feeder thresholds" is no longer
-> answerable from it**. So the ordering is part of the decision, not a detail: either collect the
-> open-box baseline **while the host feeder is the only poster**, or group `max_distinct_dst` by
-> source in `summarize()` **before** section 2 ships.
+> **Residual risk accepted, stated plainly:** a sprayer that stays under 150 distinct destinations
+> per 5-minute window flows through the fast feeder; the 10-60 min network backstop is the second
+> look. And single-destination flooding is invisible to both threshold limbs by construction.
+>
+> **The old "global coupling" objection is currently void**, and there is a window to keep it that
+> way. `summarize()` maxes `distinct_dst` across the whole ring and **ignores the `source` it
+> stores**, so `max_distinct_dst` is **pooled across feeders**. Today nothing else posts (no
+> `honeypot-flow-feeder` exists). The moment section 2 ships and starts POSTing `source: "nsg"`,
+> the number becomes a permanent mixture. So if a *per-feeder* threshold is ever wanted, either
+> collect the open-box baseline while the host feeder is the only poster, or group
+> `max_distinct_dst` by source in `summarize()` **before** section 2 ships.
 
 ### Liveness: green does not mean working
 
@@ -323,13 +338,15 @@ from anything running on the box, so it can't be blinded by killing a process in
 honeypot.
 
 **THRESHOLD CALIBRATION (live baseline, 2026-07-15, closed + idle honeypot).** Peak 20-minute
-window was **20 distinct `AzurePublic` + 10 distinct `ExternalPublic` = ~30 distinct**, against
-`BRAKE_DISTINCT_DST_MAX=25`. An idle box **would have false-tripped its own brake** (the 01:00
-spike is Windows Update fanning out across CDN IPs). Hence `AzurePublic` is **excluded from the
-fan-out count**: those are Microsoft's own service endpoints (Windows Update, IMDS, Falcon
-cloud), not third parties, and this brake exists only to stop **third-party harm**. With
-`AzurePublic` dropped, the observed `ExternalPublic` peak is **10 distinct**, leaving real
-headroom under 25. Keep `MaliciousFlow` in scope: that is where scanning/DDoS would surface.
+window was **20 distinct `AzurePublic` + 10 distinct `ExternalPublic` = ~30 distinct**. Against the
+*old* `BRAKE_DISTINCT_DST_MAX=25` an idle box **would have false-tripped its own brake** (the 01:00
+spike is Windows Update fanning out across CDN IPs). Two independent guards now stop that: the gate
+was raised to **150** (see section 1's threshold decision), and `AzurePublic` is **excluded from
+this feeder's fan-out count** because those are Microsoft's own service endpoints (Windows Update,
+IMDS, Falcon cloud), not third parties. With `AzurePublic` dropped, the observed `ExternalPublic`
+peak is **10 distinct**, far under 150. Keep `MaliciousFlow` in scope: that is where scanning/DDoS
+would surface. Note the exclusion is this feeder's alone; the host feeder classifies nothing and
+leans on the 150 gate plus its own structural blindness to Microsoft CDN traffic (section 1).
 
 **Feeder query (KQL), verified against the live table:**
 
