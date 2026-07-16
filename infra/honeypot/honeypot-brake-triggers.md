@@ -177,8 +177,10 @@ Four details are load-bearing, and the docstring on `host_feed_spl()` is the lon
   rule** (`splunk_nonuf` is live too and is checked *first*, which is why the Splunk `OR` clause
   above matters; `failsafe_malformed` is live but is a validation limb, not a signal). See
   `test_egress_rate_is_dead_against_both_real_feeders`, whose comment also pins the honest
-  consequence: **a single-destination flood** (DDoS participation, a fast C2 beacon, a miner)
-  **reaches the brake as ONE row, so neither threshold limb sees it.**
+  consequence for whoever operates this: **the brake limits fan-out only. Concentrated traffic to
+  a single destination reaches it as ONE row, which neither threshold limb sees, so this is not a
+  defense against concentrated third-party harm.** Do not lean on the brake for what only the NSG
+  egress rules, Falcon, and attended monitoring actually bound.
 
 **Delivery.** The endpoint returns `{events, source, outcome, row_count}`; the `post_brake` node
 forwards `{events, source}` verbatim to `http://10.0.0.6:5678/webhook/honeypot-brake`. `source` is
@@ -248,9 +250,12 @@ live, while missing the low-fan-out cases. 25 sat *below* the benign ceiling: di
 > - **`max_distinct_dst` on `/brake/feed-status` now REFINES 150, it no longer GATES the decision.**
 >   Watch the open-box distribution and tighten if the real ceiling turns out lower.
 >
-> **Residual risk accepted, stated plainly:** a sprayer that stays under 150 distinct destinations
-> per 5-minute window flows through the fast feeder; the 10-60 min network backstop is the second
-> look. And single-destination flooding is invisible to both threshold limbs by construction.
+> **Residual risk accepted, stated plainly:** low-fan-out traffic that stays under 150 distinct
+> destinations per 5-minute window flows through the fast feeder; the 10-60 min network backstop is
+> the second look. And because both limbs count fan-out, concentrated single-destination traffic is
+> not bounded by the brake at all. That is by design: the brake exists to limit broad third-party
+> fan-out, and concentrated harm is bounded by the NSG egress rules, Falcon, and attended
+> monitoring instead. Documented here so no operator mistakes the brake for more than it is.
 >
 > **The old "global coupling" objection is currently void**, and there is a window to keep it that
 > way. `summarize()` maxes `distinct_dst` across the whole ring and **ignores the `source` it

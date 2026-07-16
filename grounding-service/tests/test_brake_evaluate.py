@@ -52,9 +52,11 @@ def test_egress_rate_is_dead_against_both_real_feeders():
     assert out["conn_count"] == 50          # the ceiling a real feeder can reach, vs a 200 gate
     assert out["trip"] is False
 
-    # The consequence, stated as a test: a single-destination flood (DDoS participation, a fast
-    # C2 beacon) reaches the brake as ONE row, so neither limb sees it. Fixing this needs a
-    # per-event weight in the contract, and 200 is un-baselined -- do not enable it blind.
+    # The consequence, stated as a test: the brake limits fan-out only. Concentrated traffic to a
+    # single destination reaches it as ONE row, which neither limb sees, so the brake is not a
+    # defense against concentrated third-party harm (that is the NSG's, Falcon's, and attended
+    # monitoring's job). Catching it in the brake would need a per-event weight in the contract,
+    # and the rate gate is un-baselined -- do not enable it blind.
     flood_as_the_feeder_reports_it = [{"dst_ip": "93.184.1.1", "dst_port": 443}]
     out = evaluate_egress(flood_as_the_feeder_reports_it, **KW)
     assert out["trip"] is False and out["conn_count"] == 1
