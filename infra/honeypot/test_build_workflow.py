@@ -692,9 +692,12 @@ def test_brake_triggers_doc_has_all_three_queries():
     # as Type 3 too. The old alert could never have fired, and this test PINNED the dead string in
     # place -- the same tautology the XmlWinEventLog comment above warns about.
     assert "4624" in doc
-    # Pin the DENYLIST instead: exclude only the measured noise cluster, never allowlist the types
-    # (allowlisting is exactly what made Logon_Type=10 dead).
-    assert 'NOT (Logon_Type=5 AND user="SYSTEM")' in doc
+    # Pin the DENYLIST (never allowlist the types -- allowlisting is what made Logon_Type=10 dead,
+    # and 2026-07-17 live data proved Type 10 is NOT even absent here). Extended 2026-07-17 against
+    # live active-session data: the measured benign cluster is SYSTEM/LOCAL SERVICE/NETWORK SERVICE
+    # plus the DWM-*/UMFD-* per-session virtual accounts, scoped to keep the anti-evasion property.
+    assert '"LOCAL SERVICE","NETWORK SERVICE"' in doc     # service-account noise denylisted
+    assert 'DWM|UMFD' in doc                              # per-session virtual accounts denylisted
     # Delivery must NOT be Splunk -> Discord: Discord requires a body carrying content/embeds and
     # Splunk's built-in webhook envelope has neither -> 400, ping never arrives. Same fixed envelope
     # that killed section 1's host feeder. Route through n8n like the brake does.

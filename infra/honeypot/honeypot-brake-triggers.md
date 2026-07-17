@@ -528,14 +528,46 @@ Catches what (b) structurally cannot: an attacker who creates their **own** acco
 on a vector nobody predicted.
 
 ```spl
-index=honeypot source="WinEventLog:Security" EventCode=4624 earliest=-5m
+index=honeypot source="WinEventLog:Security" EventCode=4624
 | eval src_ip=coalesce(src_ip, Source_Network_Address)
-| search NOT (Logon_Type=5 AND user="SYSTEM")
+| where NOT ((user IN ("SYSTEM","LOCAL SERVICE","NETWORK SERVICE") OR match(user,"^(DWM|UMFD)-\d+$")) AND Logon_Type IN ("0","2","5"))
 | table _time, src_ip, user, Logon_Type, ComputerName
 ```
 
-Expected noise: ~3/day, all of them the operator's own admin logons. **Note them when they fire so
-a real hit is not mistaken for your own session** (spec section 4, prep step 5).
+The 5-minute window is set by the alert schedule (Time Range: Last 5 minutes), not inline, so the
+saved search carries no `earliest=`.
+
+**The denylist was EXTENDED 2026-07-17 against live active-session data — the "denylist the measured
+noise" principle doing exactly its job.** The original `NOT (Logon_Type=5 AND user="SYSTEM")` was
+measured on a CLOSED, IDLE box (81/84 were SYSTEM Type-5). The moment the box is actively used,
+Windows spins up a wider benign cluster the idle baseline never saw: `SYSTEM` (Type 0 and 5),
+`LOCAL SERVICE` / `NETWORK SERVICE` (Type 5), and the per-session virtual accounts `DWM-N` / `UMFD-N`
+(Type 2). All measured, all benign, all now excluded — scoped to keep the anti-evasion property:
+
+- **The three service accounts are BUILT-IN, reserved SIDs** — an attacker cannot BE `SYSTEM` /
+  `LOCAL SERVICE` / `NETWORK SERVICE` without already owning the host, so excluding them by exact
+  name opens no hole. Restricted to their system/service logon types (0/2/5).
+- **`DWM-N` / `UMFD-N` are matched by an ANCHORED regex** (`^(DWM|UMFD)-\d+$`) AND restricted to
+  Type 2. An attacker who names their own account `DWM-99` and logs in over the network arrives as
+  Type 3/7/10, not Type 2, so it is NOT excluded — it fires. `DWMbackdoor` fails the anchor.
+- **The weak account still fires no matter what.** `<weak-account>` is in none of these lists, so a
+  service installed to run as it (Type-5 persistence) STILL fires — the section-3 invariant holds.
+
+Honest tradeoffs: a malicious service persisting as `LOCAL SERVICE`/`NETWORK SERVICE` (Type 5) would
+not fire this backstop, but a 4624 cannot distinguish that from the dozens of benign such logons
+every box makes, so it was never a usable signal (the same tradeoff already accepted for `SYSTEM`);
+Sysmon service/process creation is the detector for that, not a logon backstop. And a `DWM-99`
+attacker who obtains a LOCAL console (Type 2) logon is the one contrived edge accepted here — console
+access to a cloud VM is already a deep compromise.
+
+**Also corrected 2026-07-17: Type 10 is NOT absent on this box.** Session 41 measured "zero Type 10,
+all admin RDP is Type 3" on the closed box; live active-session data shows the same admin logon
+producing Type 3 AND Type 7 AND **Type 10**. This changes nothing and vindicates the design: the
+primary (b) is account-based with NO type filter, so it catches the Type 10 that a `Logon_Type IN
+(3,7)` allowlist would now miss. Do not reintroduce a type allowlist on either alert.
+
+Expected noise after the extension: the operator's own admin logons only. **Note them when they fire
+so a real hit is not mistaken for your own session** (spec section 4, prep step 5).
 
 **The `coalesce` is not decoration.** It is copied verbatim from the production search already
 running live (`honeypot-triage-build.md`); this section was the only live-facing SPL in the repo
