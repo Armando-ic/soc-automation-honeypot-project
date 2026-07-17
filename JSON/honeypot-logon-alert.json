@@ -1,0 +1,102 @@
+{
+  "name": "honeypot-logon-alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "honeypot-logon-alert",
+        "options": {}
+      },
+      "id": "logon-webhook",
+      "name": "Logon Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "honeypot-logon-alert"
+    },
+    {
+      "parameters": {
+        "jsCode": "// honeypot-logon-alert: build the Discord embed for a successful logon.\n// ONE workflow serves both saved searches. Splunk's built-in webhook action (trigger: for each\n// result) POSTs a FIXED envelope { result:{<one row>}, sid, results_link, search_name, owner, app }.\n// `result` is that single row -- _time, src_ip, user, Logon_Type, ComputerName -- every value a\n// STRING (Splunk types all webhook/oneshot fields as strings).\n//\n// THREE-WAY SEVERITY, defaulting to CRITICAL, honest about what it knows:\n//   * search_name == PRIMARY  -> CRITICAL, and the ONLY branch that may claim the weak-credential\n//                                tripwire fired (that branch knows the box fell).\n//   * search_name == BACKSTOP -> heads-up (mostly your own ~3x/day admin logons).\n//   * anything else           -> CRITICAL, but it does NOT assert the tripwire fired: it only knows\n//                                a logon arrived under an UNRECOGNIZED alert name (real compromise\n//                                OR a misnamed saved search). Escalate, say what is actually known.\n// Downgrading a real compromise to a mild ping is the dangerous failure, so only the recognized\n// backstop is ever downgraded. Read the body defensively and NEVER throw: this webhook is\n// unauthenticated on the private SOC net, so a malformed body must still fire an alarming ping.\nconst BACKSTOP_SEARCH_NAME = \"honeypot-any-logon\";\nconst PRIMARY_SEARCH_NAME = \"honeypot-weak-cred-logon\";\nconst HOST = \"vm-honeypot-win\";\n\n// EVERYTHING that touches the (untrusted, unauthenticated) input lives inside this try, so no\n// malformed body can throw past it and drop the ping. Only the consts above sit outside, and the\n// catch depends solely on HOST + e, so the node truly cannot throw: it always returns an embed.\nlet discord_body;\ntry {\n  const first = $input.first() || {};\n  const outer = (first && first.json) ? first.json : {};\n  const body = (outer && typeof outer.body === 'object' && outer.body) ? outer.body : outer;\n  const result = (body && typeof body.result === 'object' && body.result) ? body.result : {};\n  const searchName = (body && body.search_name != null) ? String(body.search_name) : '';\n\n  // Bound every attacker-influenceable field. An account name / src_ip is short in practice, but on\n  // the backstop path the attacker CREATES the account, so cap the rendered length to keep the\n  // embed well under Discord's limits and unbreakable by a pathological value. JSON.stringify\n  // downstream escapes the content; this only bounds length. … is the ellipsis.\n  const cap = (v, n) => {\n    const str = (v == null) ? '' : String(v);\n    return str.length > n ? str.slice(0, n) + '…' : str;\n  };\n\n  // _time often arrives as an epoch-seconds float (live Splunk webhook, session 33), and \"the\n  // moment it fell\" must not show a raw Unix timestamp. Convert a plausible CURRENT epoch to ISO\n  // UTC; pass everything else through untouched. Bounded to EXACTLY 10 integer digits on purpose:\n  // a current unix-seconds value is 10 digits (through year 2286), and reformatting a 9- or\n  // 11-digit number would render a confidently WRONG date (1973 / 5138), which is worse than an\n  // obvious raw number. A 13-digit ms epoch (not what Splunk sends) also shows raw, which is safe.\n  const fmtTime = (v) => {\n    const str = (v == null) ? '' : String(v).trim();\n    if (/^\\d{10}(\\.\\d+)?$/.test(str)) {\n      const d = new Date(parseFloat(str) * 1000);\n      if (!isNaN(d.getTime())) return d.toISOString() + ' (UTC)';\n    }\n    return str;\n  };\n\n  const sn = searchName.trim().toLowerCase();\n  const isPrimary = sn === PRIMARY_SEARCH_NAME.toLowerCase();\n  const isBackstop = sn === BACKSTOP_SEARCH_NAME.toLowerCase();\n\n  const user = cap(result.user, 200) || 'unknown';\n  const srcIp = cap(result.src_ip, 200) || 'unknown';\n  const logonType = cap(result.Logon_Type, 40) || 'n/a';\n  const when = cap(fmtTime(result._time), 60) || 'n/a';\n  const computer = cap(result.ComputerName, 120) || HOST;\n  const fired = cap(searchName, 200) || 'unknown';\n\n  // The one-click pivot into Splunk, present in the envelope for free. Render it ONLY when it is\n  // plainly http(s): we refuse to surface a non-http value (it is never the real deep link), which\n  // also keeps a junk value out of the embed. Trimmed for consistency with fmtTime, so a link with\n  // stray surrounding whitespace is not silently dropped.\n  const rawLink = (body && body.results_link != null) ? String(body.results_link).trim() : '';\n  const pivot = /^https?:\\/\\//i.test(rawLink) ? '\\n[→ open in Splunk](' + cap(rawLink, 400) + ')' : '';\n\n  const detail =\n    'account: **' + user + '**\\n' +\n    'from src_ip: **' + srcIp + '**\\n' +\n    'logon type: ' + logonType + ', when: ' + when + '\\n' +\n    'host: ' + computer + '\\n' +\n    'fired by: `' + fired + '`' + pivot;\n\n  // isPrimary is checked FIRST so escalation wins by construction: the amber downgrade below is\n  // structurally gated on !isPrimary. (The two names are distinct constants, so they are already\n  // mutually exclusive; this is belt-and-braces against anyone ever setting them equal.)\n  if (isPrimary) {\n    discord_body = { embeds: [{\n      title: '🚨 HONEYPOT COMPROMISED - ' + HOST,\n      description: 'A successful logon fired the weak-credential tripwire (`' + fired + '`). ' +\n        '**Consider the box compromised.**\\n\\n' + detail +\n        '\\n\\nCapture telemetry (B8), then tear down from the pre-open snapshot (B9). Do NOT reopen ' +\n        'until you know how it fell.',\n      color: 15158332 }] };\n  } else if (isBackstop) {\n    discord_body = { embeds: [{\n      title: '⚠️ Honeypot logon - ' + HOST,\n      description: 'A successful logon on the honeypot.\\n\\n' + detail +\n        '\\n\\nIf this was YOU, note it (spec section 4, prep step 5) so a real hit is not mistaken ' +\n        'for your own admin session. If it was NOT you, treat the box as compromised and start the ' +\n        'B8 capture.',\n      color: 16776960 }] };\n  } else {\n    discord_body = { embeds: [{\n      title: '🚨 HONEYPOT logon: UNRECOGNIZED alert - ' + HOST,\n      description: 'A successful logon fired an alert that is NOT the recognized benign backstop. ' +\n        'Either the box fell or a saved search is misnamed - treat as compromise until you confirm ' +\n        'which.\\n\\n' + detail +\n        '\\n\\nIf `fired by` above is not one of your two configured searches, fix the saved-search ' +\n        'name; otherwise start the B8 capture.',\n      color: 15158332 }] };\n  }\n} catch (e) {\n  // A logon alert that throws is a silent miss on the one event this build exists to catch.\n  // Fail TOWARD the alarm: send an alarming ping with whatever is known and let the operator dig.\n  discord_body = { embeds: [{\n    title: '🚨 HONEYPOT logon alert - ' + HOST,\n    description: 'A successful-logon alert fired but building the detail failed (' +\n      ((e && e.message) ? e.message : String(e)) + '). A logon happened on the honeypot - ' +\n      'check Splunk NOW.',\n    color: 15158332 }] };\n}\nreturn [{ json: { discord_body } }];"
+      },
+      "id": "build-logon-alert",
+      "name": "Build Logon Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REPLACE_ME",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord_body) }}",
+        "options": {}
+      },
+      "id": "discord-logon-alert",
+      "name": "Discord Logon Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "content": "## 🚨 honeypot-logon-alert\n**What it does:** Splunk is EXPECTED to fire one webhook per successful-logon row (verify at B6c); this workflow builds a Discord embed and POSTs it.\n\n**One workflow, two searches, keyed on `search_name` (name them EXACTLY):**\n- `honeypot-weak-cred-logon` (the weak cred was used) -> 🚨 **CRITICAL**\n- `honeypot-any-logon` (somebody logged in) -> ⚠️ heads-up\n\n**Severity defaults to CRITICAL:** only the recognized backstop name is downgraded; the primary and any renamed search escalate, and only the primary claims the tripwire fired. A drifted backstop name = a false critical on your own logon; a drifted primary name never downgrades.\n\n**Never Splunk -> Discord directly** (fixed envelope, no embeds -> 400).",
+        "height": 300,
+        "width": 520,
+        "color": 4
+      },
+      "id": "sticky-doc---logon-alert",
+      "name": "Doc - Logon Alert",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -340
+      ]
+    }
+  ],
+  "connections": {
+    "Logon Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Logon Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Logon Alert": {
+      "main": [
+        [
+          {
+            "node": "Discord Logon Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

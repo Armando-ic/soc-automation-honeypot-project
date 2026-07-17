@@ -513,6 +513,7 @@ def test_no_code_node_reads_a_converging_multi_output_node_by_default_branch():
     for wf in (_gen_brake(),
                _gen_host_feeder(),
                json.loads((_ROOT / "JSON" / "honeypot-triage.json").read_text(encoding="utf-8")),
+               json.loads((_ROOT / "JSON" / "honeypot-logon-alert.json").read_text(encoding="utf-8")),
                json.loads((_ROOT / "JSON" / "falcon-contain.json").read_text(encoding="utf-8")),
                json.loads((_ROOT / "JSON" / "falcon-alert-poller.json").read_text(encoding="utf-8"))):
         conns = wf["connections"]
@@ -699,3 +700,243 @@ def test_brake_triggers_doc_has_all_three_queries():
     # that killed section 1's host feeder. Route through n8n like the brake does.
     assert "/webhook/honeypot-logon-alert" in doc
     assert "/honeypot-brake" in doc                         # feeders POST to the brake webhook
+
+
+# ---- B6a (session 42): honeypot-logon-alert -- "you know the moment it fell" ----
+# ONE n8n workflow serves BOTH successful-logon saved searches, selecting its Discord embed from
+# the Splunk envelope's search_name:
+#   (b) PRIMARY  "the weak credential was used" -> the box fell             -> CRITICAL
+#   (a) BACKSTOP "somebody logged in" (minus the SYSTEM Type-5 noise)       -> heads-up
+# Splunk's fixed webhook envelope is FATAL for the brake (fan-out is a property of the row SET, and
+# `result` is first-row-only) but SUFFICIENT here (one logon = one row, trigger-for-each-result),
+# so delivery is Splunk webhook -> n8n Code -> Discord, NEVER Splunk -> Discord (Discord 400s on
+# the envelope, which carries no content/embeds). Same envelope, opposite verdict.
+
+def _logon_module():
+    import importlib
+    sys.path.insert(0, str(_HERE))
+    import build_honeypot_logon_alert_workflow as m
+    return importlib.reload(m)
+
+
+def _logon_wf():
+    return _logon_module().workflow
+
+
+def _logon_nodes():
+    return {n["name"]: n for n in _logon_wf()["nodes"]
+            if n["type"] != "n8n-nodes-base.stickyNote"}
+
+
+def _exec_logon_code(payload):
+    """Actually RUN the Build Logon Alert Code node against a Splunk-shaped webhook body and
+    return the discord_body it emits. A test that only greps the jsCode for a string proves
+    nothing about whether the branch fires -- this project has shipped exactly that kind of
+    corpse-pinning test before (Logon_Type=10). Execute the node; assert on its output."""
+    node_bin = shutil.which("node")
+    if not node_bin:
+        pytest.skip("node not on PATH")
+    js = _logon_nodes()["Build Logon Alert"]["parameters"]["jsCode"]
+    harness = (
+        "const PAYLOAD = " + json.dumps(payload) + ";\n"
+        "function run($input) {\n" + js + "\n}\n"
+        "const out = run({ first: () => ({ json: { body: PAYLOAD } }) });\n"
+        "process.stdout.write(JSON.stringify(out[0].json.discord_body));\n"
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(harness)
+        tmp = fh.name
+    try:
+        r = subprocess.run([node_bin, tmp], capture_output=True, text=True, encoding="utf-8")
+        assert r.returncode == 0, f"node exec failed: {r.stderr}"
+        return json.loads(r.stdout)
+    finally:
+        os.unlink(tmp)
+
+
+_LOGON_ROW = {"_time": "2026-07-17T12:00:00", "src_ip": "203.0.113.9",
+              "user": "svc-backup", "Logon_Type": "3", "ComputerName": "vm-honeypot-win"}
+_CRITICAL_RED = 15158332
+_HEADSUP_AMBER = 16776960
+
+
+def test_logon_alert_is_a_linear_webhook_to_discord_chain():
+    wf = _logon_wf()
+    conns = wf["connections"]
+    assert sorted(_logon_nodes()) == ["Build Logon Alert", "Discord Logon Alert", "Logon Webhook"]
+    assert conns["Logon Webhook"]["main"] == [[{"node": "Build Logon Alert", "type": "main", "index": 0}]]
+    assert conns["Build Logon Alert"]["main"] == [[{"node": "Discord Logon Alert", "type": "main", "index": 0}]]
+    assert "Discord Logon Alert" not in conns, "the Discord node is terminal"
+
+
+def test_logon_alert_webhook_listens_on_the_documented_path():
+    n = _logon_nodes()["Logon Webhook"]
+    assert n["type"] == "n8n-nodes-base.webhook"
+    assert n["parameters"]["httpMethod"] == "POST"
+    assert n["parameters"]["path"] == "honeypot-logon-alert"
+
+
+def test_logon_alert_posts_the_embed_to_discord():
+    n = _logon_nodes()["Discord Logon Alert"]
+    assert n["parameters"]["method"] == "POST"
+    assert n["parameters"]["url"] == "https://discord.com/api/webhooks/REPLACE_ME"
+    assert n["parameters"]["sendBody"] is True
+    assert n["parameters"]["specifyBody"] == "json"
+    assert n["parameters"]["jsonBody"] == "={{ JSON.stringify($json.discord_body) }}"
+
+
+def test_logon_alert_one_workflow_branches_on_search_name():
+    # ONE workflow serves both alerts: the Code node keys off the envelope's search_name and
+    # references the backstop constant it recognizes.
+    m = _logon_module()
+    js = _logon_nodes()["Build Logon Alert"]["parameters"]["jsCode"]
+    assert "search_name" in js
+    assert m.BACKSTOP_SEARCH_NAME in js
+
+
+def test_logon_backstop_name_yields_a_headsup_embed():
+    m = _logon_module()
+    body = _exec_logon_code({"search_name": m.BACKSTOP_SEARCH_NAME, "result": _LOGON_ROW})
+    embed = body["embeds"][0]
+    assert embed["color"] == _HEADSUP_AMBER
+    assert "COMPROMISED" not in embed["title"]
+
+
+def test_logon_primary_name_yields_a_critical_embed_that_claims_the_tripwire():
+    # Only the recognized PRIMARY may assert the weak-credential tripwire actually fired -- that is
+    # the one branch that knows the box fell.
+    m = _logon_module()
+    body = _exec_logon_code({"search_name": m.PRIMARY_SEARCH_NAME, "result": _LOGON_ROW})
+    embed = body["embeds"][0]
+    assert embed["color"] == _CRITICAL_RED
+    assert "COMPROMISED" in embed["title"]
+    assert "tripwire" in embed["description"].lower()
+
+
+def test_logon_unknown_search_name_escalates_to_critical_without_overclaiming():
+    # SAFETY-CRITICAL default: an unrecognized search still escalates (red), but it must NOT assert
+    # the weak-credential tripwire fired -- it was not the recognized primary. Overclaiming a cause
+    # it cannot know is the dishonesty that bites when a backstop name is mistyped: a benign own
+    # logon would otherwise render a red embed swearing the box fell and telling you to tear it
+    # down. Same escalation, honest text, and an "UNRECOGNIZED" tell that surfaces a misconfigured
+    # saved-search name instead of hiding it behind a false compromise claim.
+    body = _exec_logon_code({"search_name": "honeypot-something-renamed", "result": _LOGON_ROW})
+    embed = body["embeds"][0]
+    assert embed["color"] == _CRITICAL_RED
+    assert "tripwire" not in embed["description"].lower()
+    assert "UNRECOGNIZED" in embed["title"]
+
+
+def test_logon_epoch_time_renders_as_readable_utc_not_raw_epoch():
+    # Session 33 saw the live Splunk webhook deliver epoch-seconds floats (e.g. 1782768757.163).
+    # "The moment it fell" must not show a raw Unix timestamp; epoch -> ISO UTC.
+    m = _logon_module()
+    row = dict(_LOGON_ROW, _time="1782768757.163")
+    body = _exec_logon_code({"search_name": m.BACKSTOP_SEARCH_NAME, "result": row})
+    desc = body["embeds"][0]["description"]
+    assert "1782768757" not in desc, "raw epoch leaked into the alert"
+    assert "UTC" in desc
+
+
+def test_logon_iso_time_passes_through_untouched():
+    # An already-formatted _time (not an epoch) must not be mangled by the epoch path.
+    m = _logon_module()
+    body = _exec_logon_code({"search_name": m.BACKSTOP_SEARCH_NAME, "result": _LOGON_ROW})
+    assert "2026-07-17T12:00:00" in body["embeds"][0]["description"]
+
+
+def test_logon_only_a_current_second_epoch_is_reformatted_others_shown_raw():
+    # Re-verify follow-up: a "moment it fell" epoch is a CURRENT unix-seconds value = 10 digits
+    # (until year 2286). Reformatting a 9- or 11-digit number would render a CONFIDENTLY WRONG date
+    # (1973 / 5138), which is worse than an obvious raw number. Only a 10-digit epoch is treated as
+    # one; anything else passes through raw (fail-safe).
+    m = _logon_module()
+    row = dict(_LOGON_ROW, _time="100000000")   # 9 digits -> not a plausible current epoch
+    body = _exec_logon_code({"search_name": m.BACKSTOP_SEARCH_NAME, "result": row})
+    assert "100000000" in body["embeds"][0]["description"], \
+        "a non-second-epoch numeric _time must be shown raw, not confidently misformatted"
+
+
+def test_logon_embed_links_to_splunk_when_results_link_present():
+    # The envelope hands over results_link (a one-click pivot to the firing event) for free; the
+    # 3am operator's next move is to open it. Runtime-only (the operator's own Discord), same class
+    # as the src_ip already surfaced -- the committed workflow still carries no real URL.
+    m = _logon_module()
+    link = "https://splunk.example.test:8000/app/search/@go?sid=abc"
+    body = _exec_logon_code({"search_name": m.BACKSTOP_SEARCH_NAME, "result": _LOGON_ROW,
+                             "results_link": link})
+    assert link in json.dumps(body["embeds"][0])
+
+
+def test_logon_embed_stays_valid_and_alarming_without_a_usable_results_link():
+    # No results_link, or a non-http one, must NOT break the embed. Render the pivot only when it is
+    # plainly http(s); otherwise omit it (a bad embed.url would make Discord 400 the whole ping).
+    m = _logon_module()
+    for payload in ({"search_name": m.PRIMARY_SEARCH_NAME, "result": _LOGON_ROW},
+                    {"search_name": m.PRIMARY_SEARCH_NAME, "result": _LOGON_ROW,
+                     "results_link": "not-a-url"}):
+        embed = _exec_logon_code(payload)["embeds"][0]
+        assert embed["color"] == _CRITICAL_RED
+        assert "not-a-url" not in json.dumps(embed)
+        assert embed.get("url", "https://x").startswith("http")
+
+
+def test_logon_search_names_are_documented_in_the_trigger_doc():
+    # GAP-1 coupling: the Code node's whole severity split hinges on the backstop being named
+    # EXACTLY the constant, but at wiring time the operator reads section 3 of the trigger doc, not
+    # the builder source. If the doc and the constant drift, a mistyped backstop name fires red on
+    # every benign ~3x/day admin logon -> alarm fatigue on the safety-critical signal. Pin both
+    # names into the doc so the Splunk-side name and the n8n constant cannot silently diverge.
+    m = _logon_module()
+    doc = (_HERE / "honeypot-brake-triggers.md").read_text(encoding="utf-8")
+    assert m.BACKSTOP_SEARCH_NAME in doc
+    assert m.PRIMARY_SEARCH_NAME in doc
+
+
+def test_logon_embed_names_the_actor_and_source():
+    m = _logon_module()
+    body = _exec_logon_code({"search_name": m.BACKSTOP_SEARCH_NAME, "result": _LOGON_ROW})
+    desc = body["embeds"][0]["description"]
+    assert "svc-backup" in desc                              # who
+    assert "203.0.113.9" in desc                             # from where
+
+
+def test_logon_malformed_body_still_alarms_and_never_throws():
+    # The webhook is unauthenticated on the private SOC net. A malformed/absent result must degrade
+    # to an ALARMING ping (fail toward the alarm), never a thrown execution that silently drops the
+    # one notification this whole build exists to send.
+    for payload in ({}, {"search_name": "x"}, {"result": "not-an-object"}, {"result": {}}):
+        body = _exec_logon_code(payload)
+        assert body["embeds"][0]["color"] == _CRITICAL_RED, f"must alarm on {payload!r}"
+
+
+def test_logon_alert_no_live_secret():
+    wf = _logon_wf()
+    s = json.dumps(wf, ensure_ascii=False)
+    assert "sk-ant-" not in s
+    for n in wf["nodes"]:
+        for cred in (n.get("credentials") or {}).values():
+            assert cred.get("id") == "REPLACE_ME", f"non-placeholder cred in {n['name']}"
+    assert "discord.com/api/webhooks/REPLACE_ME" in s
+    real_hooks = [x for x in re.findall(r"discord\.com/api/webhooks/([^\"'\\ ]+)", s) if x != "REPLACE_ME"]
+    assert real_hooks == [], f"non-placeholder Discord webhook(s): {real_hooks}"
+
+
+def test_logon_alert_deployed_json_is_byte_identical_to_builder_output():
+    # Same invariant as the triage/host-feeder builders: the checked-in JSON n8n imports must be
+    # byte-identical to what running the builder produces. Replicate the __main__ write exactly
+    # (json.dump indent=2 ensure_ascii=False, utf-8, universal newlines) without touching disk.
+    m = _logon_module()
+    deployed_path = os.path.join(str(_ROOT), "JSON", "honeypot-logon-alert.json")
+    with open(deployed_path, "rb") as fh:
+        deployed_bytes = fh.read()
+    buf = io.BytesIO()
+    wrapper = io.TextIOWrapper(buf, encoding="utf-8", newline=None)
+    json.dump(m.workflow, wrapper, indent=2, ensure_ascii=False)
+    wrapper.flush()
+    wrapper.detach()
+    expected_bytes = buf.getvalue()
+    assert deployed_bytes == expected_bytes, (
+        "JSON/honeypot-logon-alert.json is out of sync with "
+        "build_honeypot_logon_alert_workflow.py -- regenerate it "
+        "(python infra/honeypot/build_honeypot_logon_alert_workflow.py) and commit")

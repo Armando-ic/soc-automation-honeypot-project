@@ -496,6 +496,11 @@ CLUSTER, not to `Logon_Type=5` broadly: a service installed to run as the weak a
 
 ### (b) PRIMARY — "the weak credential was used"
 
+**Name this saved search EXACTLY `honeypot-weak-cred-logon`.** The n8n workflow keys its 🚨 CRITICAL
+embed off this `search_name` (it is the one branch allowed to claim the tripwire fired), so the
+saved-search name and the workflow constant must match. This is the search NAME, distinct from
+`<weak-account>` (the account it *filters on*, which B7 plants).
+
 The precise tripwire. Filters on the ACCOUNT, not the logon type, so it is immune to the whole
 Type 3/7/10 problem. Zero noise: nothing else ever logs in as this account. `<weak-account>` is the
 name B7 plants.
@@ -510,6 +515,14 @@ index=honeypot source="WinEventLog:Security" EventCode=4624 user="<weak-account>
 fell, however Windows classifies it.
 
 ### (a) BACKSTOP — "somebody logged in"
+
+**Name this saved search EXACTLY `honeypot-any-logon`.** This is the ONLY name the n8n workflow
+downgrades to the ⚠️ heads-up embed; ANY other name — a typo included — escalates to the red
+CRITICAL embed. That default is deliberate (a mistyped primary must never downgrade), but it has a
+sharp edge: a mistyped BACKSTOP name turns every benign ~3/day admin logon into a red critical, which
+is alarm-fatigue on the one signal that must never be ignored. So match this name precisely. (The
+critical embed for a non-recognized name is honest — it says "UNRECOGNIZED alert … a saved search
+may be misnamed", not a false "the box fell" — but the fix is to name it right, not to lean on that.)
 
 Catches what (b) structurally cannot: an attacker who creates their **own** account, or who arrives
 on a vector nobody predicted.
@@ -540,9 +553,18 @@ Splunk alert (trigger: FOR EACH RESULT)
 **Splunk's fixed envelope is SUFFICIENT here even though it was fatal for the brake, and the
 difference is worth understanding rather than memorizing.** The brake needed the whole row **set**
 (fan-out is a property of the set, so `result` = first-row-only destroyed the signal). This alert
-is **one logon = one row**, and "trigger for each result" sends one webhook **per row**, with
-`result` carrying that row's `src_ip`/`user`/`Logon_Type`. Same envelope, different requirement,
-opposite verdict. **Do not generalize either ruling to the other.**
+is **one logon = one row**, and "trigger for each result" is **expected** to send one webhook **per
+row**, with `result` carrying that row's `src_ip`/`user`/`Logon_Type`. Same envelope, different
+requirement, opposite verdict. **Do not generalize either ruling to the other.**
+
+> **UNVERIFIED, and this is the SAME class as `Logon_Type=10`: the "one webhook per row" half has
+> NEVER been run on this box.** Only the Discord-400 half is proven live (2026-07-16). Splunk could
+> fire per-result but still carry first-row-only, or batch. If it does, the alert still ALARMS
+> (fail-safe critical, unlike the brake, which failed silent), but it would under-report concurrent
+> distinct logons. **Verify at B6c BEFORE trusting it:** fire two distinct logons (or two `src_ip`s)
+> inside one 5-minute window and confirm n8n's execution list shows **two** executions, each
+> carrying its own row in `result` — not one execution with the first row. Until that passes, treat
+> "per row" as expected, not proven.
 
 The envelope also carries `search_name`, so **one** n8n workflow serves both alerts and selects its
 embed from whichever fired: a 🚨 CRITICAL embed for (b), a ⚠️ heads-up for (a). Mirror the brake's
