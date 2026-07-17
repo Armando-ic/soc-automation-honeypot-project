@@ -68,9 +68,13 @@ class Settings:
         "BRAKE_FEED_STATE_PATH", str(Path.cwd() / "brake-feed-state.json")
     )
     # The host feeder posts every 60s. Five missed ticks is not a blip, it is a dead feeder.
-    # NOTE: this also goes stale forever after a legitimate trip, because the trip severs the
-    # honeypot's 9997 forwarding (deny @100 beats allow-splunk-telemetry @1000). Stale means
-    # "not reporting", NOT "faulty" -- check whether the brake fired before treating it as a bug.
+    # stale:true is ALWAYS a real fault, before AND after a trip -- NEVER wave it off as "the brake
+    # must have fired." A trip severs the feeder's CONTENT, not its HEARTBEAT: the deny rule is
+    # Outbound on nsg-honeypot, but the whole feeder chain (n8n -> grounding-service -> Splunk) is
+    # SOC-side and untouched, so after a trip it keeps POSTing {"events": []} and record_post keeps
+    # stamping -> stale stays FALSE. This comment was BACKWARDS (the 5th surface; session 41 reversed
+    # the inversion in feed_state.py, /brake/feed-status, the trigger doc and the handoff, missed
+    # this one). Pinned by test_a_trip_does_not_make_the_feeder_read_stale. See feed_state.py.
     brake_feed_stale_s: int = int(os.getenv("BRAKE_FEED_STALE_S", "300"))
 
 
