@@ -210,6 +210,83 @@ def check_relative_dates(path: Path, root: Path, text: str) -> list[Finding]:
     return out
 
 
+SUBPROJECT_REQUIRED = {"README.md", "spec.md", "plan.md", "runbook.md", "notes.md"}
+ADR_REQUIRED_SECTIONS = {"status", "context", "decision", "consequences"}
+FRONTMATTER_KEYS = {"status", "updated", "related"}
+FRONTMATTER_EXEMPT = {"log.md", "index.md", "CLAUDE.md"}
+
+
+def _parse_frontmatter(text: str) -> dict | None:
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    block = text[3:end]
+    fm: dict = {}
+    for line in block.splitlines():
+        if ":" in line:
+            k, _, v = line.partition(":")
+            fm[k.strip()] = v.strip()
+    return fm
+
+
+def check_vault_structure(root: Path) -> list[Finding]:
+    out: list[Finding] = []
+    vault = root / "vault"
+    if not vault.is_dir():
+        return out
+
+    subs = vault / "subprojects"
+    if subs.is_dir():
+        for sub in sorted(p for p in subs.iterdir() if p.is_dir()):
+            present = {p.name for p in sub.glob("*.md")}
+            missing = SUBPROJECT_REQUIRED - present
+            if missing:
+                out.append(Finding(_rel(sub, root), 0, "vault-structure",
+                                   f"subproject missing file(s): {', '.join(sorted(missing))}"))
+
+    dec = vault / "decisions"
+    if dec.is_dir():
+        nums = sorted(int(p.name[:4]) for p in dec.glob("[0-9][0-9][0-9][0-9]-*.md"))
+        if len(nums) != len(set(nums)):
+            dupes = sorted({n for n in nums if nums.count(n) > 1})
+            out.append(Finding(_rel(dec, root), 0, "vault-structure",
+                               f"duplicate ADR number(s): {dupes}"))
+        elif nums and nums != list(range(1, len(nums) + 1)):
+            out.append(Finding(_rel(dec, root), 0, "vault-structure",
+                               f"ADR numbering not contiguous from 0001: found {nums}"))
+        for p in dec.glob("[0-9][0-9][0-9][0-9]-*.md"):
+            slugs = _section_slugs(p.read_text(encoding="utf-8", errors="replace"))
+            missing = ADR_REQUIRED_SECTIONS - slugs
+            if missing:
+                out.append(Finding(_rel(p, root), 0, "vault-structure",
+                                   f"ADR missing required section(s): {', '.join(sorted(missing))}"))
+
+    for template in vault.rglob("_template.md"):
+        required = _section_slugs(template.read_text(encoding="utf-8", errors="replace"))
+        for p in template.parent.glob("*.md"):
+            if p.name == "_template.md" or p.name.lower() == "readme.md":
+                continue
+            missing = required - _section_slugs(p.read_text(encoding="utf-8", errors="replace"))
+            if missing:
+                out.append(Finding(_rel(p, root), 0, "vault-structure",
+                                   f"missing template section(s): {', '.join(sorted(missing))}"))
+
+    for p in vault.rglob("*.md"):
+        if p.name in FRONTMATTER_EXEMPT or p.name == "_template.md":
+            continue
+        fm = _parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
+        if fm is None:
+            out.append(Finding(_rel(p, root), 0, "vault-structure", "missing frontmatter block"))
+        else:
+            missing = FRONTMATTER_KEYS - set(fm)
+            if missing:
+                out.append(Finding(_rel(p, root), 0, "vault-structure",
+                                   f"frontmatter missing key(s): {', '.join(sorted(missing))}"))
+    return out
+
+
 def run(root: Path) -> list[Finding]:
     return []
 

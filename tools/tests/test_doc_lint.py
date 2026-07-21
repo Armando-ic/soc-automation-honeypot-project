@@ -104,3 +104,52 @@ def test_relative_date_phrases(repo):
     assert "yesterday" in msgs
     assert "3 days ago" in msgs
     assert "2026-07-21" not in msgs
+
+
+def _fm(status="active"):
+    return f"---\nstatus: {status}\nupdated: 2026-07-21\nrelated: [[x]]\n---\n"
+
+
+def test_vault_subproject_missing_files(repo):
+    repo.write("vault/subprojects/2026-01-01-thing/README.md", _fm())
+    # missing spec.md, plan.md, runbook.md, notes.md
+    findings = doc_lint.check_vault_structure(repo)
+    assert any("spec.md" in f.message and "notes.md" in f.message for f in findings)
+
+
+def test_vault_adr_numbering_and_sections(repo):
+    repo.write("vault/decisions/0001-a.md", _fm() + "## Status\n## Context\n## Decision\n## Consequences\n")
+    repo.write("vault/decisions/0003-c.md", _fm() + "## Status\n")  # gap (no 0002) + missing sections
+    findings = doc_lint.check_vault_structure(repo)
+    joined = " ".join(f.message for f in findings)
+    assert "not contiguous" in joined
+    assert "context" in joined  # 0003 missing sections; message emits the lowercase slug
+
+
+def test_vault_adr_duplicate_number(repo):
+    repo.write("vault/decisions/0001-a.md", _fm() + "## Status\n## Context\n## Decision\n## Consequences\n")
+    repo.write("vault/decisions/0001-b.md", _fm() + "## Status\n## Context\n## Decision\n## Consequences\n")
+    findings = doc_lint.check_vault_structure(repo)
+    assert any("duplicate ADR number" in f.message for f in findings)
+
+
+def test_vault_frontmatter_missing_key(repo):
+    repo.write("vault/architecture/current-state.md", "---\nstatus: active\nupdated: 2026-07-21\n---\n# X\n")
+    findings = doc_lint.check_vault_structure(repo)
+    assert any("related" in f.message for f in findings)
+
+
+def test_vault_template_sections(repo):
+    repo.write("vault/detections/_template.md", "## Detection\n## Logic\n## Coverage\n")
+    repo.write("vault/detections/T1059.md", _fm() + "## Detection\n## Logic\n")  # missing Coverage
+    findings = doc_lint.check_vault_structure(repo)
+    assert any("coverage" in f.message.lower() for f in findings)
+
+
+def test_vault_template_h1_title_not_required(repo):
+    # The template's H1 is a per-page title placeholder, not a shared section: a page
+    # with its own H1 must not be flagged as missing the template's title heading.
+    repo.write("vault/detections/_template.md", "# T<id> - <name>\n## Detection\n## Logic\n")
+    repo.write("vault/detections/t1.md", _fm() + "# T1059 - PowerShell\n## Detection\n## Logic\n")
+    findings = doc_lint.check_vault_structure(repo)
+    assert not any("template section" in f.message for f in findings)
