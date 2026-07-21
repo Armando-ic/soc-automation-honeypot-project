@@ -153,3 +153,33 @@ def test_vault_template_h1_title_not_required(repo):
     repo.write("vault/detections/t1.md", _fm() + "# T1059 - PowerShell\n## Detection\n## Logic\n")
     findings = doc_lint.check_vault_structure(repo)
     assert not any("template section" in f.message for f in findings)
+
+
+def test_orphan_vault_page(repo):
+    repo.write("vault/README.md", _fm() + "See [[architecture/current-state]]\n")
+    repo.write("vault/architecture/current-state.md", _fm() + "linked\n")
+    repo.write("vault/concepts/lonely.md", _fm() + "nobody links here\n")
+    findings = doc_lint.check_vault_orphans(repo)
+    orphans = [f.file for f in findings]
+    assert "vault/concepts/lonely.md" in orphans
+    assert "vault/architecture/current-state.md" not in orphans  # it is linked
+
+
+def test_orphan_respects_resolution_and_exemptions(repo):
+    repo.write("vault/log.md", "journal, never wiki-linked\n")
+    repo.write("vault/CLAUDE.md", "agent context, never wiki-linked\n")
+    repo.write("vault/subprojects/a/spec.md", _fm() + "reached only via same-folder bare stem\n")
+    repo.write("vault/subprojects/b/spec.md", _fm() + "other spec (makes 'spec' ambiguous)\n")
+    repo.write("vault/subprojects/a/README.md", _fm() + "See [[spec]]\n")
+    orphans = {f.file for f in doc_lint.check_vault_orphans(repo)}
+    assert "vault/log.md" not in orphans                 # exempt (journal)
+    assert "vault/CLAUDE.md" not in orphans               # exempt (agent context)
+    assert "vault/subprojects/a/spec.md" not in orphans   # inbound via same-folder [[spec]]
+
+
+def test_run_aggregates_and_sorts(repo):
+    repo.write("README.md", "[bad](missing.md)\nyesterday\n")
+    findings = doc_lint.run(repo)
+    checks = {f.check for f in findings}
+    assert "link" in checks and "relative-date" in checks
+    assert findings == sorted(findings, key=lambda f: (f.file, f.line, f.check))

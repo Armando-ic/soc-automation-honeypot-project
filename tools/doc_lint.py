@@ -287,8 +287,45 @@ def check_vault_structure(root: Path) -> list[Finding]:
     return out
 
 
+def check_vault_orphans(root: Path) -> list[Finding]:
+    vault = root / "vault"
+    if not vault.is_dir():
+        return []
+    index = build_vault_index(root)
+    linked: set[Path] = set()
+    for src in vault.rglob("*.md"):
+        text = src.read_text(encoding="utf-8", errors="replace")
+        for _, line in _content_lines(text, blank_code=True):
+            for m in WIKI_LINK_RE.finditer(line):
+                ref = m.group(1).split("|", 1)[0].split("#", 1)[0].strip()
+                if not ref:
+                    continue
+                dest, status = _resolve_wiki_ref(ref, src, root, index)
+                if status == "ok":
+                    linked.add(dest.resolve())
+    out: list[Finding] = []
+    exempt = FRONTMATTER_EXEMPT | {"_template.md"}  # log.md/index.md/CLAUDE.md/_template; README handled below
+    for p in sorted(vault.rglob("*.md")):
+        if p.name in exempt or p.name.lower() == "readme.md":
+            continue
+        if p.resolve() not in linked:
+            out.append(Finding(_rel(p, root), 0, "vault-structure", "orphan page (no inbound [[wiki-links]])"))
+    return out
+
+
 def run(root: Path) -> list[Finding]:
-    return []
+    found: list[Finding] = []
+    index = build_vault_index(root)
+    for path in iter_scope_files(root):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        found += check_md_links(path, root, text)
+        found += check_relative_dates(path, root, text)
+        if (root / "vault") in path.parents:
+            found += check_wiki_links(path, root, text, index)
+    found += check_vault_structure(root)
+    found += check_vault_orphans(root)
+    unique = sorted(set(found), key=lambda f: (f.file, f.line, f.check, f.message))
+    return unique
 
 
 def main(argv: list[str]) -> int:
