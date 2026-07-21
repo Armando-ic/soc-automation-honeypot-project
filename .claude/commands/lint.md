@@ -2,7 +2,7 @@
 description: Documentation-consistency lint (reports-only) for the honeypot repo. `/lint` runs both tiers; `/lint fast` runs the deterministic tier only; `/lint fix` applies fixes on explicit direction.
 ---
 
-You are running the repo's documentation linter. It is REPORTS-ONLY unless the argument is `fix`. Never modify a linted file except under `fix`, and even then only after confirming each change. This is NOT the secret scrub gate and NOT the code toolchain (black/isort/mypy) — do not do those here.
+You are running the repo's documentation linter. It is REPORTS-ONLY unless the argument is `fix`. Never modify a linted file except under `fix`, and even then only after the user confirms the proposed changes. This is NOT the secret scrub gate and NOT the code toolchain (black/isort/mypy) — do not do those here.
 
 Argument: `$ARGUMENTS` (one of empty, `fast`, or `fix`).
 
@@ -28,8 +28,8 @@ Use the project's standard finder → skeptic → critic Workflow shape (see the
 ## Output + journal
 
 Print one consolidated report: Tier-1 findings first (certain), Tier-2 second (with confidence + spanned docs). State "0 findings" explicitly per check when clean. Then append ONE line to `lint-log.md`:
-`<today> | <mode> | links:<n> dates:<n> vault:<n> contradictions:<n> stale:<n>` (use `-` for tiers not run).
+`<today> | <mode> | links:<n> dates:<n> vault:<n> contradictions:<n> stale:<n>` — `<mode>` is `full` for a plain `/lint`, else `fast` or `fix`; use `-` for the counts of any tier not run (e.g. `contradictions:- stale:-` under `fast`).
 
 ## `fix` mode
 
-Only when the argument is `fix`: git is the snapshot (the tree is versioned). Propose the fixes, get the user's go, apply them, then RE-RUN `python tools/doc_lint.py` to confirm mechanical fixes cleared. For any semantic (Tier-2) fix, verify against ground truth (the code, `newest_handoff`, the actual state) BEFORE applying. Never auto-fix without confirmation.
+Only when the argument is `fix`. Tier 1 has already run above; `fix` does NOT itself launch the paid Tier-2 Workflow, so it acts on findings ALREADY SURFACED — the current Tier-1 findings plus any Tier-2/semantic findings from a prior `/lint` in this conversation (run `/lint` first if you need semantic ones). git is the snapshot (the tree is versioned). Propose the fixes, get the user's explicit go, and apply only what they approve. For any semantic (Tier-2) fix, verify against ground truth (the code, `newest_handoff`, the actual state) BEFORE applying. After applying, RE-RUN `python tools/doc_lint.py` to confirm the mechanical (Tier-1) fixes cleared, and append a `fix`-mode journal line. Never auto-fix without confirmation.
