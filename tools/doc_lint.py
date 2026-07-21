@@ -110,6 +110,90 @@ def _section_slugs(text: str) -> set[str]:
     return slugs
 
 
+MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+WIKI_LINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+
+
+def build_vault_index(root: Path) -> dict[str, Path | None]:
+    vault = root / "vault"
+    index: dict[str, Path | None] = {}
+    seen_base: dict[str, int] = {}
+    if not vault.is_dir():
+        return index
+    for p in vault.rglob("*.md"):
+        rel = str(p.relative_to(vault)).replace("\\", "/")[:-3]  # drop .md
+        index[rel] = p
+        base = p.stem
+        seen_base[base] = seen_base.get(base, 0) + 1
+        index[base] = p if seen_base[base] == 1 else None  # None marks ambiguous
+    return index
+
+
+def _resolve_wiki_ref(ref: str, src: Path, root: Path, index: dict[str, Path | None]) -> tuple[Path | None, str]:
+    """Resolve an Obsidian [[wiki-ref]] to a vault page. Returns (path, "ok"),
+    (None, "ambiguous"), or (None, "missing"). Resolution mirrors Obsidian:
+    first path-relative to the linking file (handles ../ and same-folder bare
+    names), then the vault-root-relative index key or a unique bare basename.
+    A basename shared by several pages with no local match is "ambiguous"."""
+    vault = (root / "vault").resolve()
+    ref = ref.removesuffix(".md")  # Obsidian resolves [[page]] and [[page.md]] alike
+    cand = (src.parent / (ref + ".md")).resolve()
+    if cand.is_file() and cand.is_relative_to(vault):
+        return cand, "ok"
+    hit = index.get(ref)
+    if hit is not None:
+        return hit, "ok"
+    if ref in index:            # present but None -> ambiguous basename
+        return None, "ambiguous"
+    return None, "missing"
+
+
+def check_md_links(path: Path, root: Path, text: str) -> list[Finding]:
+    out: list[Finding] = []
+    rel = _rel(path, root)
+    for i, line in _content_lines(text, blank_code=True):
+        for m in MD_LINK_RE.finditer(line):
+            if m.start() > 0 and line[m.start() - 1] == "!":
+                continue  # image embed ![alt](src), not a link
+            target = m.group(1).strip().split(" ", 1)[0]  # drop optional "title"
+            if target.startswith(("http://", "https://", "mailto:", "tel:")):
+                continue
+            if target.startswith("#"):
+                anchor = _slugify(urllib.parse.unquote(target[1:]))
+                if anchor and anchor not in _heading_slugs(text):
+                    out.append(Finding(rel, i, "link", f"broken same-file anchor: {target}"))
+                continue
+            path_part, _, anchor = target.partition("#")
+            path_part = urllib.parse.unquote(path_part)
+            if not path_part:
+                continue
+            dest = (path.parent / path_part).resolve()
+            if not dest.exists():
+                out.append(Finding(rel, i, "link", f"broken link target: {target}"))
+                continue
+            if anchor and dest.suffix == ".md":
+                slugs = _heading_slugs(dest.read_text(encoding="utf-8", errors="replace"))
+                if _slugify(urllib.parse.unquote(anchor)) not in slugs:
+                    out.append(Finding(rel, i, "link", f"broken anchor: {target}"))
+    return out
+
+
+def check_wiki_links(path: Path, root: Path, text: str, index: dict[str, Path | None]) -> list[Finding]:
+    out: list[Finding] = []
+    rel = _rel(path, root)
+    for i, line in _content_lines(text, blank_code=True):
+        for m in WIKI_LINK_RE.finditer(line):
+            ref = m.group(1).split("|", 1)[0].split("#", 1)[0].strip()  # drop alias + heading
+            if not ref:
+                continue
+            _dest, status = _resolve_wiki_ref(ref, path, root, index)
+            if status == "missing":
+                out.append(Finding(rel, i, "link", f"broken wiki-link: [[{ref}]] (no such vault page)"))
+            elif status == "ambiguous":
+                out.append(Finding(rel, i, "link", f"ambiguous wiki-link: [[{ref}]] (matches multiple pages)"))
+    return out
+
+
 def run(root: Path) -> list[Finding]:
     return []
 
