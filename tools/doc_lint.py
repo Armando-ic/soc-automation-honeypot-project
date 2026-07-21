@@ -256,16 +256,16 @@ def check_vault_structure(root: Path) -> list[Finding]:
         elif nums and nums != list(range(1, len(nums) + 1)):
             out.append(Finding(_rel(dec, root), 0, "vault-structure",
                                f"ADR numbering not contiguous from 0001: found {nums}"))
-        for p in dec.glob("[0-9][0-9][0-9][0-9]-*.md"):
+        for p in sorted(dec.glob("[0-9][0-9][0-9][0-9]-*.md")):
             slugs = _section_slugs(p.read_text(encoding="utf-8", errors="replace"))
             missing = ADR_REQUIRED_SECTIONS - slugs
             if missing:
                 out.append(Finding(_rel(p, root), 0, "vault-structure",
                                    f"ADR missing required section(s): {', '.join(sorted(missing))}"))
 
-    for template in vault.rglob("_template.md"):
+    for template in sorted(vault.rglob("_template.md")):
         required = _section_slugs(template.read_text(encoding="utf-8", errors="replace"))
-        for p in template.parent.glob("*.md"):
+        for p in sorted(template.parent.glob("*.md")):
             if p.name == "_template.md" or p.name.lower() == "readme.md":
                 continue
             missing = required - _section_slugs(p.read_text(encoding="utf-8", errors="replace"))
@@ -273,7 +273,7 @@ def check_vault_structure(root: Path) -> list[Finding]:
                 out.append(Finding(_rel(p, root), 0, "vault-structure",
                                    f"missing template section(s): {', '.join(sorted(missing))}"))
 
-    for p in vault.rglob("*.md"):
+    for p in sorted(vault.rglob("*.md")):
         if p.name in FRONTMATTER_EXEMPT or p.name == "_template.md":
             continue
         fm = _parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
