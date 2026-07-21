@@ -53,6 +53,13 @@ def iter_scope_files(root: Path) -> list[Path]:
 
 INLINE_CODE_RE = re.compile(r"`[^`]*`")
 
+# Conservative: only unambiguous relative-date constructs. Bare "today"/"now" are
+# too common in casual prose to flag without noise, so they are deliberately excluded.
+REL_DATE_RE = re.compile(
+    r"\b(yesterday|tomorrow|(?:last|next)\s+(?:week|month|year)|\d+\s+days?\s+ago)\b",
+    re.IGNORECASE,
+)
+
 
 def _content_lines(text: str, blank_code: bool = False):
     """Yield (lineno, line) for prose lines, skipping fenced code blocks (delimited
@@ -191,6 +198,15 @@ def check_wiki_links(path: Path, root: Path, text: str, index: dict[str, Path | 
                 out.append(Finding(rel, i, "link", f"broken wiki-link: [[{ref}]] (no such vault page)"))
             elif status == "ambiguous":
                 out.append(Finding(rel, i, "link", f"ambiguous wiki-link: [[{ref}]] (matches multiple pages)"))
+    return out
+
+
+def check_relative_dates(path: Path, root: Path, text: str) -> list[Finding]:
+    out: list[Finding] = []
+    rel = _rel(path, root)
+    for i, line in enumerate(text.splitlines(), 1):
+        for m in REL_DATE_RE.finditer(line):
+            out.append(Finding(rel, i, "relative-date", f"relative-date phrase: '{m.group(0)}' (prefer an absolute date)"))
     return out
 
 

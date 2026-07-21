@@ -95,3 +95,12 @@ def test_links_and_wikilinks_ignored_in_code(repo):
     index = doc_lint.build_vault_index(repo)
     assert doc_lint.check_md_links(src, repo, src.read_text()) == []
     assert doc_lint.check_wiki_links(src, repo, src.read_text(), index) == []
+
+
+def test_relative_date_phrases(repo):
+    src = repo.write("README.md", "Fixed yesterday.\nDeploy 3 days ago.\nAbsolute 2026-07-21 is fine.\n")
+    findings = doc_lint.check_relative_dates(src, repo, src.read_text())
+    msgs = " ".join(f.message for f in findings)
+    assert "yesterday" in msgs
+    assert "3 days ago" in msgs
+    assert "2026-07-21" not in msgs
