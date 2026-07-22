@@ -1,10 +1,12 @@
 ---
 status: active
-updated: 2026-05-26
+updated: 2026-07-22
 related: [[architecture/target-state]], [[workflows/soc-triage-pipeline]], [[decisions/0007-remove-slack-iris-native-gate]], [[../subprojects/2026-05-23-azure-port/runbook]]
 ---
 
 # Current System State
+
+> **Scope + currency (2026-07-22):** this page documents the **v1 SOC_Automation_Project SOAR lab** (Splunk → n8n → Claude → DFIR-IRIS) as ported to Azure IaaS at P2. That infrastructure is still live — the **honeypot agentic-SOC upgrade** (Phases 0-4, shipped + public) runs on these same Azure VMs and is documented separately under [`infra/honeypot/`](../../infra/honeypot/). The VM inventory, pipeline, and detections below remain accurate for the v1 lab; the "Sub-projects shipped / Next planned" section at the bottom is updated for the honeypot direction.
 
 The lab as it exists today, **post-P2 (Azure Port shipped 2026-05-26)**. Splunk, n8n, and DFIR-IRIS now run on Azure IaaS VMs in `rg-soc-v2-azure-central-us` (Central US); the Windows endpoint (`vm-soc-v2-win`) has been in Azure since Phase 1 (2026-05-22). All 4 local-VMware VMs were decommissioned during P2 Tasks 20–23 and archived to `F:\VMs\`.
 
@@ -97,11 +99,9 @@ D1 deliberately scoped to a single vertical-slice technique. T1059.003 was added
 | Phase 1 — Azure foundation | 2026-05-22 | Sentinel + Log Analytics + `vm-soc-v2-win` + AMA + DCR + T1059.001 KQL detection. Parallel telemetry path to Splunk. |
 | **P2 — Azure Port (v1 → Azure IaaS)** | **2026-05-26** | **Lift-and-shift v1 SOAR stack to Azure IaaS. 3 new Linux VMs (Splunk + n8n + IRIS), v1 stack decommissioned + archived to F:\\VMs. Primary driver: C: drive recovery (+112.1 GB). See [[../subprojects/2026-05-23-azure-port/README]].** |
 
-Active sub-project: **none** — P2 closed 2026-05-26.
+Active direction (2026-07-22): the **honeypot agentic-SOC upgrade** — an internet-exposed Windows honeypot feeding this same Splunk → n8n → Claude → IRIS pipeline (plus CrowdStrike Falcon EDR, RAG, detection-as-code, a de-obfuscation triage engine, and a grounded Splunk investigation agent). Phases 0-4 have shipped and are public; the honeypot live-opening op is in progress. It builds on the Azure infra documented above and is documented separately under [`infra/honeypot/`](../../infra/honeypot/).
 
-Next planned: **Phase 3 — Microsoft-native SOAR rewrite** (Logic Apps + Sentinel-native incidents replacing n8n + IRIS). Full spec + plan exist on the `v3-microsoft-native` branch — `v2-azure/specs/2026-05-23-phase-2-soar-logic-app-design.md` and `v2-azure/plans/2026-05-23-phase-2-soar-logic-app-plan.md` (both labeled "Phase 2" historically; conceptually Phase 3 under the post-reversal numbering).
-
-A3 Enrichment Expansion remains permanently deferred — likely dropped if Phase 3 delivers more portfolio value than additional v1 enrichment.
+**Deferred:** the Microsoft-native SOAR rewrite (Logic Apps + Sentinel-native incidents replacing n8n + IRIS) — spec/plan live on the `v3-microsoft-native` branch. Development went to the honeypot direction instead. The `A3 — Enrichment Expansion` sub-project also remains permanently deferred.
 
 ## Known issues in the current workflow
 

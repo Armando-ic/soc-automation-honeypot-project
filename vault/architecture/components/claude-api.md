@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-04-27
+updated: 2026-07-22
 related: [[decisions/0002-claude-api-vs-subscription]], [[architecture/components/splunk-mcp]]
 ---
 
@@ -14,9 +14,9 @@ Programmatic access to Claude via Anthropic's API, used by the n8n workflow's "M
 
 | | |
 |---|---|
-| Model | `claude-opus-4-7` (latest Opus) |
+| Model | `claude-opus-4-7` (the model this v1 SOC-Triage pipeline pins; the honeypot's separate triage workflow uses `claude-opus-4-8`) |
 | Node type | `@n8n/n8n-nodes-langchain.anthropic` |
-| Credential in n8n | `Anthropic account` (id: `VozkiMP8QqbykLLj`) |
+| Credential in n8n | `Anthropic account`. **The v1 id `VozkiMP8QqbykLLj` no longer exists** after the 2026-05-25 fresh Azure n8n install — credentials are re-bound to new ids on import (see [[architecture/components/n8n]] "Configured credentials in n8n"). |
 | API key location | `SOC-Automation-Project.md` (gitignored) — see [[runbooks/secrets-management]] |
 
 ## Why API and not the Max subscription

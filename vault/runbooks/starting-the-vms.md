@@ -1,65 +1,78 @@
 ---
 status: active
-updated: 2026-04-27
+updated: 2026-07-22
 related: [[architecture/current-state]]
 ---
 
 # Starting the VMs
 
-Boot sequence for the SOC automation lab.
+Boot sequence for the SOC automation lab. **The lab moved to Azure IaaS at P2 (2026-05-26)** — the four VMs now live in resource group `rg-soc-v2-azure-central-us` (Central US), not local VMware. (The old local-VMware procedure with `192.168.129.x` IPs is retired; those VMs were decommissioned and archived to `F:\VMs\`.)
 
 ## Prerequisites
 
-- VMware Workstation installed on host
-- VMs imported into the `Soc_Automation_Project` folder in VMware
+- Azure access to `rg-soc-v2-azure-central-us` (the portal, or `az login` for the CLI).
+- The SSH key for the Linux VMs: `C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem`.
+- **Auto-shutdown is 11 PM Eastern on all four VMs**, so they are usually stopped (deallocated) and must be started before use.
 
 ## VM start order (matters)
 
-1. **MyDFIR-Splunk** — start first; SIEM must be up before forwarders/agents can ship logs
-2. **MyDFIR-n8n-VM** — workflow engine
-3. **MyDFIR-DFIR-IRIS-VM** — case management
-4. **MyDfir-Windows-10** — endpoint generating telemetry
-5. **kali-linux-2026** — optional, for adversary simulation
+Start the SIEM first so forwarders/agents have somewhere to ship; the rest can start in parallel.
+
+1. **`vm-soc-v2-splunk`** (`10.0.0.5`) — Splunk SIEM, start first
+2. **`vm-soc-v2-n8n`** (`10.0.0.6`) — n8n SOAR engine
+3. **`vm-soc-v2-iris`** (`10.0.0.7`) — DFIR-IRIS case management
+4. **`vm-soc-v2-win`** (`10.0.0.4`) — Windows endpoint generating telemetry
+
+**Start each VM:** Azure portal → the VM → **Start** (~30 s each to reach Running, parallelizable across all four). Or via the CLI:
+
+```bash
+az vm start -g rg-soc-v2-azure-central-us -n vm-soc-v2-splunk
+az vm start -g rg-soc-v2-azure-central-us -n vm-soc-v2-n8n
+az vm start -g rg-soc-v2-azure-central-us -n vm-soc-v2-iris
+az vm start -g rg-soc-v2-azure-central-us -n vm-soc-v2-win
+```
 
 ## After boot — getting things running
 
-### Splunk
+### Splunk (`vm-soc-v2-splunk`)
 
-Splunk is configured to start at boot via `splunk enable boot-start --user splunk`. No manual start needed.
+Auto-starts at boot (`Splunkd.service`, boot-start enabled). No manual start needed once the VM is Running.
 
-### n8n
+### n8n (`vm-soc-v2-n8n`)
 
-Not configured to auto-start. After SSHing in:
-
-```bash
-ssh mydfir@192.168.129.132
-cd n8n-compose
-sudo docker-compose up -d
-```
-
-Web UI then available at http://192.168.129.132:5678.
-
-### DFIR-Iris
-
-Same pattern:
+Not configured to auto-start the container. SSH in and bring the stack up (modern `docker compose` plugin, not legacy `docker-compose`):
 
 ```bash
-ssh mydfir@192.168.129.133
-cd iris-web
-sudo docker-compose up
+ssh -i C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem azureuser@x.x.x.x
+cd ~ && docker compose up -d
 ```
 
-Web UI at https://192.168.129.133 (accept the self-signed cert warning).
+Web UI then available at http://x.x.x.x:5678 (or `http://10.0.0.6:5678` intra-VNet).
+
+### DFIR-Iris (`vm-soc-v2-iris`)
+
+Same pattern, from the `iris-web` directory (five containers come up in sequence):
+
+```bash
+ssh -i C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem azureuser@x.x.x.x
+cd ~/iris-web && docker compose up -d
+```
+
+Web UI at https://x.x.x.x (accept the self-signed cert warning; or `https://10.0.0.7` intra-VNet).
+
+### Windows endpoint (`vm-soc-v2-win`)
+
+Nothing to start manually — Sysmon and the Splunk Universal Forwarder run as services and start with the VM. Just confirm it reached Running.
 
 ## Verification
 
-Open all four web pages and confirm reachability:
+Public web UIs are **NSG-restricted to the home IP** (`x.x.x.x`); from inside the VNet use the private IPs.
 
-| Service | URL |
-|---|---|
-| Splunk | http://192.168.129.131:8000 |
-| n8n | http://192.168.129.132:5678 |
-| DFIR-Iris | https://192.168.129.133 |
-| Windows 10 (RDP) | RDP to 192.168.129.130 |
+| Service | Public (home-IP-restricted) | Private (intra-VNet) |
+|---|---|---|
+| Splunk | http://x.x.x.x:8000 | http://10.0.0.5:8000 |
+| n8n | http://x.x.x.x:5678 | http://10.0.0.6:5678 |
+| DFIR-Iris | https://x.x.x.x (self-signed) | https://10.0.0.7 |
+| Windows (RDP) | RDP to x.x.x.x | 10.0.0.4 |
 
-Credentials: see [[runbooks/secrets-management]].
+Detailed operational commands (restart a single service, the gotcha catalog) are in [[subprojects/2026-05-23-azure-port/runbook]]. Credentials: see [[runbooks/secrets-management]].

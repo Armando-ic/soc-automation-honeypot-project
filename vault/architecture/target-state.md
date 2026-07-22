@@ -1,10 +1,12 @@
 ---
-status: draft
-updated: 2026-04-30
+status: superseded
+updated: 2026-07-22
 related: [[architecture/current-state]]
 ---
 
 # Target State
+
+> **Superseded (2026-07-22).** This is the original v1 SOC_Automation_Project roadmap, frozen at 2026-04-30. Development moved to the **honeypot agentic-SOC upgrade** (Phases 0-4 shipped + public; see [`infra/honeypot/`](../../infra/honeypot/)), which realized parts of this direction under different framing — D1 detection foundations, RAG case-memory (E/F below), and multi-agent triage. Kept as a historical record of the original plan.
 
 Where the project is heading. Not a commitment — a direction. Updated as sub-projects ship and priorities evolve.
 
@@ -16,7 +18,7 @@ Where the project is heading. Not a commitment — a direction. Updated as sub-p
 
 ## Phase 2 — Detection content + capability expansion
 
-- [ ] **D1: Detection foundations — Sysmon + Atomic Red Team + Splunk SPL practice** — install Sysmon on the Windows 10 VM (SwiftOnSecurity-style config), install ART, run a tightly-scoped vertical slice (one MITRE technique → one Splunk saved search detecting it → one integration with the n8n webhook). Generates real endpoint telemetry the SOAR pipeline consumes; gives the project a detection-engineering surface to pair with the response-automation surface A1-A3 cover. **Pulled forward** ahead of A3 (see "Sequencing decision" below).
+- [x] **D1: Detection foundations — Sysmon + Atomic Red Team + Splunk SPL practice** — install Sysmon on the Windows 10 VM (SwiftOnSecurity-style config), install ART, run a tightly-scoped vertical slice (one MITRE technique → one Splunk saved search detecting it → one integration with the n8n webhook). Generates real endpoint telemetry the SOAR pipeline consumes; gives the project a detection-engineering surface to pair with the response-automation surface A1-A3 cover. **Pulled forward** ahead of A3 (see "Sequencing decision" below). — shipped 2026-04-30.
 - [ ] **B: EDR layer** — LimaCharlie or Velociraptor, generates real endpoint telemetry beyond what Sysmon covers (file-system collection, response actions, threat-intel integration). May absorb or extend D1 depending on what D1 surfaces.
 - [ ] **C: Detection engineering at scale** — Sigma rules, multiple detection types per MITRE tactic, MITRE coverage map. D1 is the seed; C is the build-out.
 
