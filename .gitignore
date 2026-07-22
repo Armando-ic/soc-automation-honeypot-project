@@ -29,8 +29,11 @@ Thumbs.db
 *.swp
 .vscode/
 
-# Claude Code session metadata + per-instance context file (workspace-only, not for public repo)
-.claude/
+# Claude Code session metadata + per-instance context file (workspace-only, not for public repo).
+# Exception: .claude/commands/ holds first-class repo tooling (the /lint command) and IS tracked.
+# Glob-then-negate: a bare `.claude/` parent-exclude cannot be re-included, `.claude/*` can.
+.claude/*
+!.claude/commands/
 CLAUDE.md
 scratch/
 
