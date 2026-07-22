@@ -25,7 +25,7 @@ workflows are pure orchestration. Field names are the ones **confirmed on us-2**
   `docker exec grounding-service curl -s localhost:8000/falcon/state` → `{"watermark":...,"seen":[...]}`.
 - `FALCON_PINNED_AID` set in `/root/soc-src/grounding-service/.env`; container recreated (0D-2 Task 6).
 - The watermark is **seeded** (Task 6) so the first poll is bounded.
-- Falcon trial active (expires **2026-07-13**); `honeypot-soar` API client (Alerts R/W, Hosts R/W).
+- Falcon trial active (expires **2026-07-28**, extended from 2026-07-13); `honeypot-soar` API client (Alerts R/W, Hosts R/W).
 - Splunk saved-search (`honeypot-triage` Splunk trigger) is **unchanged** — the poller is an *additional* source.
 
 ---

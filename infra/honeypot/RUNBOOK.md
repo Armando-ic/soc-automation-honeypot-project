@@ -103,7 +103,7 @@ Posture = **detect-only** (policy `honeypot-detect-only`, host group `hg-honeypo
 - **Off-board a host:** uninstall the sensor on the box —
   `WindowsSensor.exe /uninstall /quiet [MAINTENANCE_TOKEN=<token>]` (token from **Sensor update policies** if
   uninstall protection is on) — then remove/hide it in Host management.
-- **Trial keep/drop checkpoint ~2026-07-12** (trial day ~14; **trial expires 2026-07-13**):
+- **Trial keep/drop checkpoint at the extended trial end ~2026-07-28** (**trial expires 2026-07-28**, extended from an initial 2026-07-13):
   - **DROP (default, $0):** uninstall the sensor + delete/revoke the `honeypot-soar` API client. Evidence is
     already captured in `falcon-validation.md`, so nothing is lost.
   - **KEEP NGAV:** Falcon Go (~$60/device/yr) — **no EDR** (no Alerts API detections feeding 0D-2).

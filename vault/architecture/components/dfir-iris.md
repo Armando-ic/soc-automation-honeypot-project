@@ -1,7 +1,7 @@
 ---
 status: active
 updated: 2026-05-26
-related: [[architecture/current-state]], [[workflows/soc-triage-pipeline]], [[decisions/0007-remove-slack-iris-native-gate]], [[../subprojects/2026-05-23-azure-port/runbook]]
+related: [[architecture/current-state]], [[workflows/soc-triage-pipeline]], [[decisions/0007-remove-slack-iris-native-gate]], [[subprojects/2026-05-23-azure-port/runbook]]
 ---
 
 # DFIR-Iris
@@ -25,7 +25,7 @@ Open-source incident response case management. Receives alerts from the n8n work
 | Containers | `iriswebapp_db` (postgres) · `iriswebapp_app` · `iriswebapp_nginx` (with healthcheck) · `iriswebapp_rabbitmq` · `iriswebapp_worker` |
 | Auto-shutdown | 11 PM Eastern |
 
-See [[../subprojects/2026-05-23-azure-port/runbook]] for operational commands; gotcha §I1–§I4 cover IRIS-specific pitfalls.
+See [[subprojects/2026-05-23-azure-port/runbook]] for operational commands; gotcha §I1–§I4 cover IRIS-specific pitfalls.
 
 ## Migrated from v1 (decommissioned 2026-05-26)
 

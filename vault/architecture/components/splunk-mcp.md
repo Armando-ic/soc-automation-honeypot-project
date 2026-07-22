@@ -1,12 +1,12 @@
 ---
 status: active
 updated: 2026-05-26
-related: [[runbooks/splunk-mcp-setup]], [[decisions/0004-mirror-mcp-to-claude-code]], [[sources/session-notes/2026-04-27-mcp-mirror-fork]], [[../subprojects/2026-05-23-azure-port/runbook]]
+related: [[runbooks/splunk-mcp-setup]], [[decisions/0004-mirror-mcp-to-claude-code]], [[sources/session-notes/2026-04-27-mcp-mirror-fork]], [[subprojects/2026-05-23-azure-port/runbook]]
 ---
 
 # Splunk MCP
 
-> **P2 reconfiguration pending.** The connection details below still point at the decommissioned local Splunk (`192.168.129.131`). To restore MCP queries against the Azure Splunk, update `SPLUNK_HOST` to `x.x.x.x` (public; requires home-IP-NSG access) or set up an SSH tunnel from the host to `10.0.0.5:8089`. `mcpuser` account itself was not recreated on the Azure Splunk during P2 fresh-install — re-create as needed (`splunk add user mcpuser -role admin -auth mydfir:<pw>`). Track at [[../subprojects/2026-05-23-azure-port/notes]] follow-ups.
+> **P2 reconfiguration pending.** The connection details below still point at the decommissioned local Splunk (`192.168.129.131`). To restore MCP queries against the Azure Splunk, update `SPLUNK_HOST` to `x.x.x.x` (public; requires home-IP-NSG access) or set up an SSH tunnel from the host to `10.0.0.5:8089`. `mcpuser` account itself was not recreated on the Azure Splunk during P2 fresh-install — re-create as needed (`splunk add user mcpuser -role admin -auth mydfir:<pw>`). Track at [[subprojects/2026-05-23-azure-port/notes]] follow-ups.
 
 ## What it is
 

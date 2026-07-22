@@ -121,7 +121,7 @@ flowchart TB
 - **Falcon is in detect-only mode.** We *want* the attack to fully play out so we get rich telemetry, so Falcon
   watches and reports but doesn't block. That's why an attacker can actually get somewhere — by design.
 
-> **Trial clock:** the CrowdStrike Falcon trial expires **2026-07-13**. Anything that needs the live Falcon API
+> **Trial clock:** the CrowdStrike Falcon trial expires **2026-07-28** (extended from an initial 2026-07-13). Anything that needs the live Falcon API
 > (the poller pulling real detections, the `falcon-contain` round-trip) has to be demoed/recorded before then.
 
 ---

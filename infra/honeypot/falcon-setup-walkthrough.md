@@ -19,7 +19,7 @@ blocks/quarantines/kills.
 | Tenant cloud | **us-2** · API base `https://api.us-2.crowdstrike.com` |
 | API client | `honeypot-soar` (scopes: Alerts R/W, Hosts R/W, Event streams R) |
 | Sensor | Falcon Windows sensor **7.38.21003.0** |
-| Trial | activated ~2026-06-28, **expires 2026-07-13** (15-day); keep/drop checkpoint ~2026-07-12 |
+| Trial | activated ~2026-06-28, **expires 2026-07-28** (initially 15-day to 2026-07-13, later extended); keep/drop checkpoint ~2026-07-28 |
 | Secrets | Client ID/Secret + CID live ONLY in gitignored `Personal/honeypot-vm-creds.txt` — never committed/echoed |
 
 ---

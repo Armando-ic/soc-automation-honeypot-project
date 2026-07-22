@@ -1,7 +1,7 @@
 ---
 status: active
 updated: 2026-05-26
-related: [[architecture/current-state]], [[architecture/components/splunk-mcp]], [[architecture/components/sysmon]], [[../subprojects/2026-05-23-azure-port/runbook]]
+related: [[architecture/current-state]], [[architecture/components/splunk-mcp]], [[architecture/components/sysmon]], [[subprojects/2026-05-23-azure-port/runbook]]
 ---
 
 # Splunk
@@ -25,7 +25,7 @@ The SIEM. Splunk Enterprise running on Ubuntu Server. **As of P2 (2026-05-26) ru
 | Service | `Splunkd.service` (systemd; boot-start enabled) |
 | Auto-shutdown | 11 PM Eastern |
 
-See [[../subprojects/2026-05-23-azure-port/runbook]] for operational commands and gotcha catalog.
+See [[subprojects/2026-05-23-azure-port/runbook]] for operational commands and gotcha catalog.
 
 ## Migrated from v1 (decommissioned 2026-05-23 → 2026-05-26)
 
@@ -42,7 +42,7 @@ Original local Splunk on `MyDFIR-Splunk` (192.168.129.131) was decommissioned du
 |---|---|---|---|---|---|
 | `Test-Brute-Force-External-Spoofed` | disabled | `* * * * *` (test value) | For each result | n/a | A1/A2 development; disabled at A2 closeout 2026-04-30. SPL re-derived during P2 Task 11 (canonical not in vault); reconstruction-only. |
 | `T1059.001 - PowerShell Encoded Command` | enabled | `*/5 * * * *` | For each result | `http://10.0.0.6:5678/webhook/db7245f7-8451-4bea-b47d-f6ad35b818cd` | D1 worked-example detection. See [[../../detections/t1059-001-powershell-encoded]]. |
-| `T1059.003 - Suspicious cmd.exe IOC References` | enabled | `*/5 * * * *` | For each result | same n8n webhook URL | Created 2026-05-19 (demo session); back-ported to Azure Splunk 2026-05-26 during P2 Task 24 IOC validation fire. Exercises AbuseIPDB + VirusTotal naturally. SPL captured at [[../subprojects/2026-05-23-azure-port/notes]] Task 24 prep. |
+| `T1059.003 - Suspicious cmd.exe IOC References` | enabled | `*/5 * * * *` | For each result | same n8n webhook URL | Created 2026-05-19 (demo session); back-ported to Azure Splunk 2026-05-26 during P2 Task 24 IOC validation fire. Exercises AbuseIPDB + VirusTotal naturally. SPL captured at [[subprojects/2026-05-23-azure-port/notes]] Task 24 prep. |
 
 The brute-force search will be replaced with a properly-thresholded version as part of future detection-engineering work; tracking is captured in [[../../subprojects/2026-04-30-detection-foundations/notes]].
 
@@ -56,7 +56,7 @@ index=mydfir-project source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
 
 The `XmlWinEventLog:` prefix (not `WinEventLog:`) is the canonical Sysmon source value when the Splunk Add-on for Microsoft Sysmon is installed; that add-on's parsing is keyed on this exact source.
 
-See [[components/sysmon]] for the full EventCode + field reference, install metadata (commit SHA, version, hashes), and gotchas (e.g., `host` field instead of `ComputerName`, the `realtime_schedule=False` saved-search requirement).
+See [[architecture/components/sysmon]] for the full EventCode + field reference, install metadata (commit SHA, version, hashes), and gotchas (e.g., `host` field instead of `ComputerName`, the `realtime_schedule=False` saved-search requirement).
 
 ### Side-effects of D1's UF restart on the PowerShell + Defender source values
 
@@ -69,6 +69,6 @@ Vault grep at the time confirmed no downstream consumers of the old strings. Fut
 
 ## How to access
 
-- Web UI: browser to http://x.x.x.x:8000 (NSG-restricted to home IP per [[../subprojects/2026-05-23-azure-port/runbook]])
+- Web UI: browser to http://x.x.x.x:8000 (NSG-restricted to home IP per [[subprojects/2026-05-23-azure-port/runbook]])
 - SSH: `ssh -i C:\Users\Owner\.ssh\vm-soc-v2-linux-key.pem azureuser@x.x.x.x`
 - MCP (programmatic): see [[architecture/components/splunk-mcp]] (note: MCP host references need update if the splunk-mcp doc still points at 192.168.129.131)

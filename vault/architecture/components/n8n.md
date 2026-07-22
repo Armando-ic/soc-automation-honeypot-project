@@ -1,7 +1,7 @@
 ---
 status: active
 updated: 2026-05-26
-related: [[architecture/current-state]], [[workflows/soc-triage-pipeline]], [[decisions/0007-remove-slack-iris-native-gate]], [[../subprojects/2026-05-23-azure-port/runbook]]
+related: [[architecture/current-state]], [[workflows/soc-triage-pipeline]], [[decisions/0007-remove-slack-iris-native-gate]], [[subprojects/2026-05-23-azure-port/runbook]]
 ---
 
 # n8n
@@ -26,7 +26,7 @@ Workflow automation engine playing the SOAR role. Runs in Docker via docker comp
 | Auth | **n8n native user management** (owner: `owner@example.com` / secrets file). **NOT `N8N_BASIC_AUTH_*`** — deprecated since n8n 1.0+ |
 | Auto-shutdown | 11 PM Eastern |
 
-See [[../subprojects/2026-05-23-azure-port/runbook]] for operational commands; gotcha §N1–§N5 cover community-node + UI pitfalls.
+See [[subprojects/2026-05-23-azure-port/runbook]] for operational commands; gotcha §N1–§N5 cover community-node + UI pitfalls.
 
 ## Migrated from v1 (decommissioned 2026-05-26)
 
@@ -43,7 +43,7 @@ After the 2026-05-25 fresh n8n install on Azure, the credential IDs are again ne
 | AbuseIPDB account | `httpHeaderAuth` (Header Auth) | enrich_ip_abuseipdb (AI tool) | Header name `Key`, value is API key. **Migrated from v0-inline-key to credential during A1.** |
 | DFIR IRIS account | `dfirIrisApi` (community node `n8n-nodes-dfir-iris` v2.0.3) | Add new Alert node | Host `https://10.0.0.7` (IRIS private IP — intra-VNet), API Version `2.0.4`, Use HTTP OFF, **Ignore SSL Issues ON** (self-signed). Bearer API key from `IRIS_ADM_API_KEY` in `~/iris-web/.env` on `vm-soc-v2-iris`. |
 
-**Community-node swap (P2 deviation from v3 JSON):** The v3 workflow's "Create Iris Alert" was an `n8n-nodes-base.httpRequest` referencing a hand-registered `dfirIrisApi` custom credential type. On a fresh n8n install (no custom credential file), the JSON imports with a broken Iris node. P2 swapped this to the upstream community package `n8n-nodes-dfir-iris` v2.0.3 (`barn4k`) — more reproducible (one npm install vs. hunting for a custom credential file). See [[../subprojects/2026-05-23-azure-port/notes]] Task 15. The **`Add IOCs (JSON)`** field on this node MUST be `{{ $json.alert_iocs }}` raw — NOT `{{ JSON.stringify($json.alert_iocs) }}` (Gotcha §N1 in the P2 runbook; root-cause analysis at [[../subprojects/2026-05-23-azure-port/notes]] Task 19 gotcha #1).
+**Community-node swap (P2 deviation from v3 JSON):** The v3 workflow's "Create Iris Alert" was an `n8n-nodes-base.httpRequest` referencing a hand-registered `dfirIrisApi` custom credential type. On a fresh n8n install (no custom credential file), the JSON imports with a broken Iris node. P2 swapped this to the upstream community package `n8n-nodes-dfir-iris` v2.0.3 (`barn4k`) — more reproducible (one npm install vs. hunting for a custom credential file). See [[subprojects/2026-05-23-azure-port/notes]] Task 15. The **`Add IOCs (JSON)`** field on this node MUST be `{{ $json.alert_iocs }}` raw — NOT `{{ JSON.stringify($json.alert_iocs) }}` (Gotcha §N1 in the P2 runbook; root-cause analysis at [[subprojects/2026-05-23-azure-port/notes]] Task 19 gotcha #1).
 
 **Slack credential intentionally absent** as of v3 (ADR 0007 — human approval moved to IRIS-native review).
 
