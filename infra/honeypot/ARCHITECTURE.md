@@ -212,7 +212,7 @@ project's primary hallucination control — and because it's plain Python, it's 
 ```mermaid
 %%{init: {'theme':'dark','themeVariables':{'lineColor':'#9198a1'}}}%%
 flowchart TB
-  TR["Opus triage result"] --> DET["Deterministic gate (pure Python)<br/>~10 grounding + honesty checks"]
+  TR["Opus triage result"] --> DET["Deterministic gate (pure Python)<br/>~13 grounding + honesty checks"]
   TR --> JG["Advisory AI judge (same model)<br/>skeptical second read"]
   DET -->|all pass| PASS["verification_passed = TRUE → green Iris case"]
   DET -->|any fail| FAIL["verification_passed = FALSE → Needs-Human"]
@@ -234,7 +234,8 @@ The deterministic checks, grouped by what they're really asking (`triage-verifie
 | **Structure** | `schema_valid` | Is it even the right shape, with valid enums? |
 | **IOC grounding** | `iocs_enriched_grounded`, `ioc_type_consistent`, `verdict_sourced`, `enrichment_grounded` | Did it only enrich IOCs we actually observed? Is an "ip" shaped like an IP? Does a "malicious" call name its source — and does that verdict **match what enrichment actually returned**? |
 | **MITRE grounding** | `mitre_id_exists`, `mitre_name_match`, `mitre_tactic_valid`, `mitre_in_retrieved` | Is the technique real, named correctly, with the right tactic — and was it actually in the candidate set we offered? (No citing something off-menu.) |
-| **Honesty** | `severity_supported` | No "high/critical" unless a malicious/suspicious IOC **or** a hot tactic (credential-access, lateral-movement, exfiltration, impact, C2) backs it up. |
+| **Honesty** | `severity_supported`, `notes_no_config_leak` | No "high/critical" unless a malicious/suspicious IOC **or** a hot tactic (credential-access, lateral-movement, exfiltration, impact, C2) backs it up — and the notes never leak the system prompt or schema internals. |
+| **Scope grounding** | `scope_findings_grounded`, `scope_notes_honesty` | Does every `scope_finding` trace field-for-field to real `scope_evidence`, and do the notes avoid asserting a scope outcome nothing backs? |
 
 **The deterministic gate is what actually decides pass/fail.** All checks green → `verification_passed = true`
 → green path. Any fail → Needs-Human. No LLM in that decision.

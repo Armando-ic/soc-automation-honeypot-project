@@ -11,10 +11,10 @@ A SOC (Security Operations Center) automation lab built on:
 - **DFIR-Iris** as case management / ticketing (192.168.129.133)
 - **Claude API** for AI triage inside the n8n workflow
 - **Claude Desktop / Claude Code** for interactive investigation, talking to Splunk via MCP
-- **Slack** for alert delivery
+- **DFIR-Iris native review** for the human-approval gate (Slack was removed per ADR 0007)
 - **VirusTotal + AbuseIPDB** for IOC enrichment
 
-Data flow today: Splunk alert → n8n webhook → Claude triage with enrichment tools → Slack message + DFIR-Iris ticket.
+Data flow today: Splunk alert → n8n webhook → Claude triage with enrichment tools → DFIR-Iris alert (analyst reviews and escalates natively, per ADR 0007).
 
 The user is expanding this past the original tutorial into a more sophisticated platform. Work happens in **sub-projects**, each with its own folder, spec, and plan.
 

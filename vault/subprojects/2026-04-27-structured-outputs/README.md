@@ -1,5 +1,5 @@
 ---
-status: active
+status: complete
 updated: 2026-04-27
 sub_project: A1
 related: [[../../decisions/0003-split-structured-outputs-from-response-actions]]

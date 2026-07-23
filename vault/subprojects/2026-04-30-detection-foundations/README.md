@@ -1,5 +1,5 @@
 ---
-status: draft
+status: complete
 updated: 2026-04-30
 sub_project: D1
 related: [[../2026-04-28-iris-escalation-gate/README]], [[../../architecture/target-state]]

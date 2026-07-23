@@ -4,7 +4,7 @@ A pure, offline, test-driven **credibility-gate verifier** over the SOC pipeline
 `submit_triage_result` output, plus a lightweight **eval harness**. Ports the SOP-RAG verifier
 pattern to SOC triage. Wired into the live SOAR path in Plan 0D.
 
-## What it checks (8 deterministic checks, all must pass)
+## What it checks (11 deterministic checks, all must pass)
 1. `schema_valid` — validates against `schema/submit_triage_result.json`
 2. `iocs_enriched_grounded` — every enriched IOC was actually observed in `iocs`
 3. `ioc_type_consistent` — `ioc_type` matches the value's shape and bucket
@@ -13,6 +13,9 @@ pattern to SOC triage. Wired into the live SOAR path in Plan 0D.
 6. `mitre_tactic_valid` — tactic is valid for the technique
 7. `severity_supported` — high/critical needs a malicious/suspicious IOC or a high-severity tactic
 8. `verdict_sourced` — a malicious/suspicious verdict must cite a source
+9. `notes_no_config_leak` — `investigation_notes` must not leak a verbatim system-prompt line or ≥3 distinctive schema field names
+10. `scope_findings_grounded` — every `scope_finding` field-for-field matches a `scope_evidence` claim (fails closed if findings are present with no evidence)
+11. `scope_notes_honesty` — `investigation_notes` must not assert a scope outcome with no grounded backing
 
 Plus an **advisory judge** that always returns `needs_human` (never auto-approves), and two
 **deferred** retrieval-grounding checks (`mitre_in_retrieved`, `enrichment_grounded`) that report
