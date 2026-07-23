@@ -318,7 +318,7 @@ vault/
 
 | Technique ID | Tactic | Status | Last Run | Page |
 |---|---|---|---|---|
-| T1059.001 | Execution | saved-search-active | 2026-04-30 | [t1059-001-powershell-encoded](t1059-001-powershell-encoded.md) |
+| T1059.001 | Execution | saved-search-active | 2026-04-30 | `[t1059-001-powershell-encoded](t1059-001-powershell-encoded.md)` |
 
 The `Status` column uses the lifecycle: `untested` → `observed` → `spl-drafted` → `saved-search-active`.
 

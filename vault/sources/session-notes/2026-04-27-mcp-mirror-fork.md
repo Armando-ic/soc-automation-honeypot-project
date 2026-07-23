@@ -1,3 +1,9 @@
+---
+status: archived
+updated: 2026-04-27
+related: [[../../runbooks/splunk-mcp-setup]], [[../../architecture/components/splunk-mcp]], [[../../decisions/0004-mirror-mcp-to-claude-code]]
+---
+
 # Forked Session — Splunk MCP Mirrored to VS Code
 
 > **Note (2026-04-27):** This file was originally created at the project root as `FORK-NOTES-2026-04-27-mcp-mirror-to-vscode.md` during a fork of the main brainstorming session. It has been moved here as the canonical session record. Its distilled findings live in [[../../runbooks/splunk-mcp-setup]], [[../../architecture/components/splunk-mcp]], and [[../../decisions/0004-mirror-mcp-to-claude-code]].

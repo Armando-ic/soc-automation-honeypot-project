@@ -6,7 +6,7 @@ related: [[2026-05-19-test-run-handoff]], [[../../detections/t1059-001-powershel
 
 # Demo Video — Full Script, Shot-by-Shot, Recording Setup, Post-Record Artifacts
 
-Visibility-sprint deliverable for the [career action plan](../../../docs/superpowers/plans/2026-05-18-career-direction-and-action-plan.md) Days 2-7. 3-5 min demo of the SOAR pipeline firing end-to-end on the **T1059.003 Suspicious cmd.exe IOC References** detection (validated end-to-end on 2026-05-20).
+Visibility-sprint deliverable for the career action plan (parent-workspace `docs/`, outside this repo), Days 2-7. 3-5 min demo of the SOAR pipeline firing end-to-end on the **T1059.003 Suspicious cmd.exe IOC References** detection (validated end-to-end on 2026-05-20).
 
 **Approach:** Hybrid — short live talking-head intro + silent screen capture with caption overlays. Recorded with OBS. Storyline: Linear walk-forward.
 

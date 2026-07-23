@@ -2,7 +2,7 @@
 status: complete
 updated: 2026-05-26
 sub_project: P2 (Azure Port)
-related: [[spec]], [[plan]], [[runbook]], [[notes]], [[comparison-latency]], [[../../../docs/SOC-Automation-Project-to-Azure-Port]]
+related: [[spec]], [[plan]], [[runbook]], [[notes]], [[comparison-latency]]
 ---
 
 # Sub-project P2 — Azure Port (v1 → Azure IaaS)

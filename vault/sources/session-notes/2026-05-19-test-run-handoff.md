@@ -131,7 +131,7 @@ Items learned today that should be backfilled into the runbook + detection pages
    - The runbook's suppress-key recipe `_time,host,Image,CommandLine` is broken because `CommandLine` doesn't exist in the SPL's `stats` output (it's renamed to `command_lines`). **Correct recipe:** `_time,host,Image` (sufficient because `_time` is per-event unique)
 2. **n8n credential rotation steps must be explicit:** the 2026-05-18 secrets-management runbook says "update n8n credentials" but doesn't enumerate which credentials. Today proved that step is critical AND easy to skip — Claude/Anthropic credential update was missed during the original 2026-05-18 rotation.
 3. **VT free-tier multi-account behavior:** create-multiple-accounts-rapidly may trigger an inactive-account flag. Worth documenting.
-4. **New T1059.003 detection should get its own vault page** under [[../../detections/]] once validated end-to-end. Sibling to t1059-001-powershell-encoded.md.
+4. **New T1059.003 detection should get its own vault page** under `detections/` once validated end-to-end. Sibling to t1059-001-powershell-encoded.md.
 
 ## Session-end todo state
 

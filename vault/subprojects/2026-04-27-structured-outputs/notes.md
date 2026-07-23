@@ -1,3 +1,10 @@
+---
+status: complete
+updated: 2026-04-28
+sub_project: A1
+related: [[README]], [[spec]], [[plan]]
+---
+
 # Notes — Sub-project A1, Structured Outputs
 
 Working notes, gotchas, learnings, open questions discovered during build.

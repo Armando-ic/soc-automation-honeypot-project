@@ -1,6 +1,6 @@
 ---
 status: stub-awaiting-brainstorm
-date: 2026-05-12
+updated: 2026-05-12
 related: [[../../architecture/components/n8n]], [[../2026-04-27-structured-outputs/spec]], [[../../decisions/0007-remove-slack-iris-native-gate]]
 ---
 

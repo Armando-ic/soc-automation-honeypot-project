@@ -1,3 +1,9 @@
+---
+status: active
+updated: 2026-07-22
+related: [[architecture/current-state]], [[CLAUDE]], [[index]]
+---
+
 # SOC Automation Project Vault
 
 Documentation vault for an n8n-based SOC automation lab. Organized for both human reading and fresh Claude instances.

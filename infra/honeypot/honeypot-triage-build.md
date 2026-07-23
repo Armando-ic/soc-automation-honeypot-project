@@ -380,7 +380,7 @@ index=honeypot EventCode=4625
 `| sort -count | head 1` = **triage the single most aggressive attacker per run.** Splunk's built-in webhook
 action posts only the **first** result row (no per-result fan-out without a custom action), and Parse Alert (C.1)
 expects exactly one `result`/`src_ip` — head-1 makes that explicit. The short trailing window keeps the "top"
-rotating instead of getting stuck on yesterday's #1.
+rotating instead of getting stuck on the prior window's #1.
 
 > ⏱️ **event_time anchoring for the Phase-4 `/investigate` step (LB-1).** The `stats ... earliest(_time) as
 > earliest, latest(_time) as latest by src_ip` line DROPS the raw `_time`, so the webhook `result` row carries

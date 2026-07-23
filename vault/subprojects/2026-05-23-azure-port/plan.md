@@ -1,3 +1,10 @@
+---
+status: complete
+updated: 2026-05-26
+sub_project: P2 (Azure Port)
+related: [[README]], [[spec]], [[runbook]], [[notes]]
+---
+
 # P2 — Azure Port (v1 → Azure IaaS) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

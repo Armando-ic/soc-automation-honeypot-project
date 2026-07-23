@@ -1,3 +1,10 @@
+---
+status: complete
+updated: 2026-04-29
+sub_project: A2
+related: [[README]], [[spec]], [[plan]], [[runbook]]
+---
+
 # Notes — Sub-project A2, Iris Escalation Gate
 
 Working notes, gotchas, learnings, open questions discovered during build.
