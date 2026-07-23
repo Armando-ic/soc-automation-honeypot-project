@@ -93,14 +93,17 @@ For the full box-by-box walkthrough, see [ARCHITECTURE.md](infra/honeypot/ARCHIT
 
 ## What's shipped
 
-Phase 0 is complete and the autonomous loop is live: the Azure honeypot VM with its telemetry, CrowdStrike Falcon in detect-only mode plus a validated Contain/Lift round-trip, the `grounding-service` pipeline (`/normalize`, `/retrieve`, `/verify`), the `honeypot-triage` workflow running end to end, and the `falcon-alert-poller` polling the Falcon Alerts API every 15 minutes.
+Phases 0-4 are complete and public; the autonomous triage loop runs end to end.
+
+- **Phase 0 — Autonomous loop.** The Azure honeypot VM with its telemetry, CrowdStrike Falcon in detect-only mode plus a validated Contain/Lift round-trip, the `grounding-service` pipeline (`/normalize`, `/retrieve`, `/verify`), the `honeypot-triage` workflow running end to end, and the `falcon-alert-poller` polling the Falcon Alerts API every 15 minutes.
+- **Phase 1 — Adversarial red-team.** OWASP-LLM Top-10 and MITRE ATLAS payloads against the guardrails, with before-and-after measurement.
+- **Phase 2 — RAG + detection-as-code.** Claude-drafted Sigma rules on top of the ATT&CK RAG corpus.
+- **Phase 3 — Malware-triage add-on.** File hash to VirusTotal plus Claude static de-obfuscation behind a byte-exact decode gate.
+- **Phase 4 — Splunk investigation agent.** A grounded, entity-scoped `/investigate` tool-loop over Splunk with a scope-grounded verifier that fails closed.
 
 ## Roadmap
 
-- **Phase 1: Adversarial red-team.** OWASP-LLM Top-10 and MITRE ATLAS payloads against the guardrails, with before-and-after measurement.
-- **Phase 2: RAG + detection-as-code.** Claude-drafted Sigma rules on top of the existing ATT&CK RAG corpus.
-- **Phase 3: Malware-triage add-on.** File hash to VirusTotal plus Claude static de-obfuscation.
-- **Phase 4: splunk-MCP as a first-class Opus tool.**
+- **Honeypot live-opening op** (in progress) — open the honeypot for real post-exploitation telemetry behind a layered, fails-closed auto-brake (Part A public; the live run is the active work).
 - **Phase 5: Multi-agent.** Separate enrichment, triage, and escalation agents under a supervisor.
 
 ## Repo layout
