@@ -212,8 +212,36 @@ def check_relative_dates(path: Path, root: Path, text: str) -> list[Finding]:
 
 SUBPROJECT_REQUIRED = {"README.md", "spec.md", "plan.md", "runbook.md", "notes.md"}
 ADR_REQUIRED_SECTIONS = {"status", "context", "decision", "consequences"}
-FRONTMATTER_KEYS = {"status", "updated", "related"}
+FRONTMATTER_KEYS = {"status", "updated", "related"}      # default page shape (vault/CLAUDE.md)
+ADR_FRONTMATTER_KEYS = {"status", "date"}                # immutable ADR shape (decisions/NNNN-*.md)
+ADR_NAME_RE = re.compile(r"^\d{4}-.*\.md$")
 FRONTMATTER_EXEMPT = {"log.md", "index.md", "CLAUDE.md"}
+
+
+def _template_frontmatter_keys(vault: Path) -> dict[Path, set[str]]:
+    """Directories with a _template.md define their own required frontmatter keys, so a
+    templated folder is checked against its own canonical shape rather than the default
+    (e.g. detections/ carries `last_run`, not `updated`). A directory whose _template.md
+    has no frontmatter block is omitted, falling back to the default keys."""
+    out: dict[Path, set[str]] = {}
+    for template in vault.rglob("_template.md"):
+        fm = _parse_frontmatter(template.read_text(encoding="utf-8", errors="replace"))
+        if fm:
+            out[template.parent] = set(fm)
+    return out
+
+
+def _required_frontmatter_keys(p: Path, vault: Path, template_keys: dict[Path, set[str]]) -> set[str]:
+    """Required frontmatter keys for a vault page. ADRs are immutable and use the
+    {status, date} shape; a page in a directory with a _template.md takes that template's
+    keys; everything else uses the default {status, updated, related}."""
+    if p.parent == vault / "decisions" and ADR_NAME_RE.match(p.name):
+        return ADR_FRONTMATTER_KEYS
+    if p.name.lower() != "readme.md":  # a folder README is an index, keeps the default shape
+        keys = template_keys.get(p.parent)
+        if keys is not None:
+            return keys
+    return FRONTMATTER_KEYS
 
 
 def _parse_frontmatter(text: str) -> dict | None:
@@ -273,6 +301,7 @@ def check_vault_structure(root: Path) -> list[Finding]:
                 out.append(Finding(_rel(p, root), 0, "vault-structure",
                                    f"missing template section(s): {', '.join(sorted(missing))}"))
 
+    template_keys = _template_frontmatter_keys(vault)
     for p in sorted(vault.rglob("*.md")):
         if p.name in FRONTMATTER_EXEMPT or p.name == "_template.md":
             continue
@@ -280,7 +309,7 @@ def check_vault_structure(root: Path) -> list[Finding]:
         if fm is None:
             out.append(Finding(_rel(p, root), 0, "vault-structure", "missing frontmatter block"))
         else:
-            missing = FRONTMATTER_KEYS - set(fm)
+            missing = _required_frontmatter_keys(p, vault, template_keys) - set(fm)
             if missing:
                 out.append(Finding(_rel(p, root), 0, "vault-structure",
                                    f"frontmatter missing key(s): {', '.join(sorted(missing))}"))

@@ -139,6 +139,69 @@ def test_vault_frontmatter_missing_key(repo):
     assert any("related" in f.message for f in findings)
 
 
+# ADRs are immutable (vault/CLAUDE.md) and in practice carry a {status, date} frontmatter
+# shape (per the actual decisions/ files) rather than the schema's default {status, updated,
+# related}. detections/ pages instead derive their required keys from the sibling _template.md
+# (last_run, not updated). Both are per-directory frontmatter shapes.
+
+def test_vault_adr_frontmatter_accepts_status_date(repo):
+    # status + date is the full ADR shape; the default updated/related must not be demanded.
+    repo.write("vault/decisions/0001-x.md",
+               "---\nstatus: active\ndate: 2026-04-27\n---\n"
+               "## Status\n## Context\n## Decision\n## Consequences\n")
+    findings = doc_lint.check_vault_structure(repo)
+    assert not any("frontmatter missing key" in f.message for f in findings)
+
+
+def test_vault_adr_frontmatter_requires_date(repo):
+    # The ADR shape is still enforced: status alone is missing date (and only date;
+    # the ': date' / no-'updated' check avoids the 'date' substring inside 'updated').
+    repo.write("vault/decisions/0001-x.md",
+               "---\nstatus: active\n---\n"
+               "## Status\n## Context\n## Decision\n## Consequences\n")
+    findings = doc_lint.check_vault_structure(repo)
+    fm = [f for f in findings if "frontmatter missing key" in f.message]
+    assert fm and all(": date" in f.message and "updated" not in f.message for f in fm)
+
+
+def _detection_template():
+    return ("---\nstatus: untested\ntechnique_id: T<id>\ntactic: <x>\n"
+            "last_run: YYYY-MM-DD\nrelated: [[x]]\n---\n## Description\n")
+
+
+def test_vault_detection_frontmatter_from_template(repo):
+    # A page carrying the template's keys (last_run, no updated) must not be flagged.
+    repo.write("vault/detections/_template.md", _detection_template())
+    repo.write("vault/detections/t1.md",
+               "---\nstatus: saved-search-active\ntechnique_id: T1059.001\ntactic: Execution\n"
+               "last_run: 2026-05-12\nrelated: [[x]]\n---\n## Description\n")
+    findings = doc_lint.check_vault_structure(repo)
+    assert not any(f.file == "vault/detections/t1.md" and "frontmatter missing key" in f.message
+                   for f in findings)
+
+
+def test_vault_detection_frontmatter_requires_template_key(repo):
+    # The template shape is enforced: a page missing tactic + last_run is flagged for both.
+    repo.write("vault/detections/_template.md", _detection_template())
+    repo.write("vault/detections/t1.md",
+               "---\nstatus: observed\ntechnique_id: T1059.001\nrelated: [[x]]\n---\n## Description\n")
+    findings = doc_lint.check_vault_structure(repo)
+    assert any(f.file == "vault/detections/t1.md" and "frontmatter missing key" in f.message
+               and "tactic" in f.message and "last_run" in f.message for f in findings)
+
+
+def test_vault_readme_keeps_default_frontmatter_shape(repo):
+    # A folder README is an index, not a content page: it keeps the default
+    # {status, updated, related} shape even when a sibling _template.md declares
+    # technique_id/tactic/last_run, so it must not inherit the template's keys.
+    repo.write("vault/detections/_template.md", _detection_template())
+    repo.write("vault/detections/README.md",
+               "---\nstatus: active\nupdated: 2026-04-30\nrelated: [[x]]\n---\n# Coverage index\n")
+    findings = doc_lint.check_vault_structure(repo)
+    assert not any(f.file == "vault/detections/README.md" and "frontmatter missing key" in f.message
+                   for f in findings)
+
+
 def test_vault_template_sections(repo):
     repo.write("vault/detections/_template.md", "## Detection\n## Logic\n## Coverage\n")
     repo.write("vault/detections/T1059.md", _fm() + "## Detection\n## Logic\n")  # missing Coverage
