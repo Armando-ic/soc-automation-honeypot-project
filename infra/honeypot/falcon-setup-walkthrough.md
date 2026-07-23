@@ -147,7 +147,7 @@ Capture the AID + status transitions in `falcon-validation.md`.
 
 ## Step 8 — Lifecycle + trial-end *(PENDING — resume here)*
 Add the Falcon lifecycle/off-board/rebuild-re-register section to `RUNBOOK.md` and the trial keep/drop
-checkpoint (~2026-07-12). At trial end: DROP (default) = uninstall sensor + revoke API client ($0 ongoing,
+checkpoint (~2026-07-28). At trial end: DROP (default) = uninstall sensor + revoke API client ($0 ongoing,
 evidence already captured); KEEP NGAV = Falcon Go ~$60/dev/yr; KEEP EDR = Falcon Enterprise ~$185/dev/yr.
 
 ---

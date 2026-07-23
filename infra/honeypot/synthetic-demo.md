@@ -44,7 +44,7 @@ Invoke-RestMethod -Method POST -Uri 'http://10.0.0.6:5678/webhook/honeypot-triag
   fully-populated recommended actions.
 - **Discord:** an embed titled `✅ HIGH — Falcon — [SYNTHETIC PATH-VALIDATION] Successful Brute-Force Compromise
   (Critical)` whose description ends `⚠️ Contain recommended — run falcon-contain for vm-honeypot-win`.
-- (Optional) grounding-service `runs.jsonl` shows `verification_passed=true` (all 10 deterministic checks).
+- (Optional) grounding-service `runs.jsonl` shows `verification_passed=true` (all 11 deterministic checks).
 
 Notes:
 - **Title says "(Critical)" but the badge is HIGH** — the parenthetical is the (synthetic) Falcon

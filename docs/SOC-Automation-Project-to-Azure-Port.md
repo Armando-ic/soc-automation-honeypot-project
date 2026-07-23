@@ -1,5 +1,7 @@
 # SOC-Automation-Project — Port to Azure
 
+> **⚠️ SUPERSEDED (2026-05-26).** The P2 Azure Port shipped 2026-05-26 — the SOAR stack (Splunk + n8n + DFIR-IRIS) is live on Azure IaaS and the local VMs were decommissioned. This file is kept as the port's historical handoff; for current state see [current-state.md](../vault/architecture/current-state.md). Active work is now the honeypot agentic-SOC upgrade.
+
 > **Read this first.** This is the durable handoff for porting the existing local-VMware SOC Automation Project (Splunk + n8n + DFIR-IRIS) onto Azure IaaS. Once that's stable and the local VMs can be decommissioned, the existing Microsoft-native rewrite work (currently deferred) resumes as the *next* phase after this one.
 
 ---
@@ -9,7 +11,7 @@
 | | |
 |---|---|
 | **Created** | 2026-05-23 |
-| **Active** | Yes — this is what the next session works on |
+| **Active** | No — superseded; the P2 Azure Port shipped 2026-05-26 (see the banner above) |
 | **Defers** | The v2-azure Microsoft-native rewrite (full spec + plan exist; resumes after this port is stable) |
 | **Branch (current)** | `v2-azure` (where this handoff doc was committed). Migration work should likely happen on a NEW branch from `main` — see "Open questions" §3. |
 

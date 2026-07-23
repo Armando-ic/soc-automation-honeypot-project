@@ -43,7 +43,7 @@ Create Iris Alert (HTTP POST /alerts/add)                          ← Terminal 
 Splunk saved search **`T1059.001 - PowerShell Encoded Command`** (and any future saved searches added by D-series sub-projects) calls the webhook URL:
 
 ```
-http://192.168.129.132:5678/webhook/db7245f7-8451-4bea-b47d-f6ad35b818cd
+http://10.0.0.6:5678/webhook/db7245f7-8451-4bea-b47d-f6ad35b818cd
 ```
 
 The webhook path/GUID is preserved verbatim from v2 → v3 so the Splunk saved search needed no change at the v3 cutover (verified 2026-05-12: alert #4 fired end-to-end through the original webhook URL).
@@ -59,7 +59,7 @@ After the 2026-05-12 IRIS API key regen + workflow re-import, the n8n credential
 | `anthropicApi` | Message a model | Claude Opus 4.7 |
 | `virusTotalApi` | lookup_file_hash_virustotal | VT account API key |
 | `httpHeaderAuth` | enrich_ip_abuseipdb | AbuseIPDB; header `Key` = api key |
-| `dfirIrisApi` | Create Iris Alert | Base URL `https://192.168.129.133`, API key regenerated 2026-05-12, **Ignore SSL Issues** enabled (self-signed cert) |
+| `dfirIrisApi` | Create Iris Alert | Base URL `https://10.0.0.7`, API key regenerated 2026-05-12, **Ignore SSL Issues** enabled (self-signed cert) |
 
 `slackApi` is no longer present in v3.
 
@@ -82,7 +82,7 @@ Acts as a Tier-1 SOC analyst:
 - `alert_customer_id: 1` (hardcoded; single-tenant lab)
 - `alert_iocs` ← built from `iocs_enriched` per the IOC-type-ID mapping in dfir-iris.md (only IOCs with mapped type IDs are included; unmapped types are skipped)
 
-Then `Create Iris Alert` HTTPs POSTs to `https://192.168.129.133/alerts/add` with the Bearer API key. Self-signed cert tolerance is enabled on the credential.
+Then `Create Iris Alert` HTTPs POSTs to `https://10.0.0.7/alerts/add` with the Bearer API key. Self-signed cert tolerance is enabled on the credential.
 
 ## Pinned test data
 
@@ -101,7 +101,7 @@ Inherited from v2, not yet addressed:
 1. Import `JSON/SOC-Triage-v3.json` via n8n's *Workflows → Import from File*.
 2. Verify the Webhook node's path is `db7245f7-8451-4bea-b47d-f6ad35b818cd` (preserved on import; if n8n changes it, manually patch back).
 3. Recreate the 4 credentials with values from gitignored `SOC-Automation-Project.md`. Bind each to the corresponding node.
-4. IRIS credential: enable **Ignore SSL Issues** (self-signed cert at 192.168.129.133).
+4. IRIS credential: enable **Ignore SSL Issues** (self-signed cert at 10.0.0.7).
 5. Activate the workflow.
 6. Verify via curl-probe against the webhook URL — should return `{"message":"Workflow was started"}` and produce a new IRIS alert within ~30 seconds.
 

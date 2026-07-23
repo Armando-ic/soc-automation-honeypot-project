@@ -24,7 +24,7 @@ fully instrumented: Sysmon + Universal Forwarder already installed and forwardin
 ## Malware handling
 - Hash-first, static-only, **NEVER execute** a captured sample on a connected host.
 - Store samples zipped + password-protected in an isolated location; record only the **SHA256** in the repo.
-- The honeypot's egress is capped (Splunk:9997, DNS, web:443 only) so a running sample can't reach
+- The honeypot's egress is capped (Splunk:9997, DNS, web:80/443) so a running sample can't reach
   arbitrary C2 ports — but treat the box as hostile regardless.
 
 ## Cost governance

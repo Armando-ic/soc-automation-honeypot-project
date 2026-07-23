@@ -8,6 +8,8 @@ related: [[architecture/components/splunk-mcp]], [[decisions/0004-mirror-mcp-to-
 
 How to install and verify the Splunk MCP server for both Claude Desktop and Claude Code on Windows.
 
+> **P2 reconfiguration pending (post-Azure port).** The `SPLUNK_HOST` value used below (`192.168.129.131`) is the **v1-era local-VMware IP**, decommissioned during the P2 Azure port. Splunk now runs on Azure at `10.0.0.5:8089`, but this MCP has **not yet been repointed** and the `mcpuser` account was not recreated on the Azure Splunk. When standing up a fresh instance against the Azure Splunk, substitute `10.0.0.5` for `192.168.129.131` in the `SPLUNK_HOST` values below and re-create `mcpuser` first. See [[architecture/components/splunk-mcp]] and [[architecture/current-state]] known-issue #7.
+
 ## Prerequisites
 
 - Splunk reachable from the host machine on port 8089 (the management API, **not** 8000 web UI)

@@ -6,9 +6,9 @@ You are working in the documentation vault for an n8n-based SOC automation pipel
 
 A SOC (Security Operations Center) automation lab built on:
 
-- **Splunk** as the SIEM (192.168.129.131)
-- **n8n** as the SOAR / workflow engine (192.168.129.132)
-- **DFIR-Iris** as case management / ticketing (192.168.129.133)
+- **Splunk** as the SIEM (10.0.0.5)
+- **n8n** as the SOAR / workflow engine (10.0.0.6)
+- **DFIR-Iris** as case management / ticketing (10.0.0.7)
 - **Claude API** for AI triage inside the n8n workflow
 - **Claude Desktop / Claude Code** for interactive investigation, talking to Splunk via MCP
 - **DFIR-Iris native review** for the human-approval gate (Slack was removed per ADR 0007)

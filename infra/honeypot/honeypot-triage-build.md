@@ -8,7 +8,7 @@ hand in the n8n UI following Section B (node list) + Section C (Code-node JS), t
 - **Design spec:** `docs/superpowers/specs/2026-06-28-honeypot-phase0d1b-phase2-wire-design.md`
 - **Plan:** `docs/superpowers/plans/2026-06-28-honeypot-phase0d1b-phase2-wire.md`
 - **Forks:** `JSON/SOC-Triage-v3.json` (flipped to deterministic up-front enrichment).
-- **Opus system prompt:** `triage-verifier/prompts/triage-honeypot.md`.
+- **Opus system prompt (authoritative):** the `PROMPT` string in `infra/honeypot/build_honeypot_triage_workflow.py`, serialized to `JSON/honeypot-triage.json` → `options.system`. (`triage-verifier/prompts/triage-honeypot.md` is a drifted, reference-only copy — its own header says so — not the deployed prompt.)
 
 ---
 
@@ -50,8 +50,11 @@ Build in this order (positions are cosmetic). The integration-critical endpoints
 9. **submit_triage_result** — `@n8n/n8n-nodes-langchain.toolCode`. Copy verbatim from `JSON/SOC-Triage-v3.json`
    (description, jsCode, and the full `inputSchema` — **schema unchanged**).
 10. **Opus triage** — `@n8n/n8n-nodes-langchain.anthropic` "Message a model". Model = `claude-opus-4-8`;
-    Credentials = "Anthropic account"; `retryOnFail` = ON, wait 5000 ms; System = full text of
-    `triage-verifier/prompts/triage-honeypot.md`; Message content = `={{ $json.opus_user_message }}`. Connect
+    Credentials = "Anthropic account"; `retryOnFail` = ON, wait 5000 ms; System = the authoritative
+    `PROMPT` string from `infra/honeypot/build_honeypot_triage_workflow.py` (equivalently
+    `JSON/honeypot-triage.json` → `options.system`); do **not** paste
+    `triage-verifier/prompts/triage-honeypot.md` — its header marks it a drifted, reference-only copy that
+    lacks the Phase-4 `scope_findings` rules; Message content = `={{ $json.opus_user_message }}`. Connect
     `submit_triage_result` → this node's **ai_tool** input. **Do NOT connect any enrichment tool** (enrichment
     is deterministic now).
 11. **Extract Result** — `n8n-nodes-base.code` (Run Once for All Items). JS = Section C.4.
