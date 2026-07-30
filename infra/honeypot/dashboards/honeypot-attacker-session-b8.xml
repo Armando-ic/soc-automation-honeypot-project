@@ -1,0 +1,100 @@
+<dashboard version="1.1" theme="dark">
+  <label>Honeypot - Attacker Session (B8)</label>
+  <description>Post-exploitation capture for a real landing on any planted weak-cred account. When a RED honeypot-weak-cred-logon alert fires from an unfamiliar IP, set the Incident Window from the alert timestamp to now and read down. Your own proof logons are the baseline, but judge by whether you were actually logged in at that moment rather than by address alone: the home IP is stable while the cellular one rotates (two distinct addresses observed on 2026-07-24). Field names are the Splunk Sysmon TA convention (verified live 2026-07-24).</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="tr">
+      <label>Incident window</label>
+      <default>
+        <earliest>-4h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>Sysmon activity timeline (spot the landing burst)</title>
+      <chart>
+        <search>
+          <query>index=honeypot sourcetype=XmlWinEventLog (EventCode=1 OR EventCode=3 OR EventCode=11 OR EventCode=22) | timechart span=1m count by EventCode</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.axisTitleX.text">time</option>
+        <option name="charting.axisTitleY.text">Sysmon events / min</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Weak-cred logons (planted accounts): the fall</title>
+      <table>
+        <search>
+          <query>index=honeypot source="WinEventLog:Security" EventCode=4624 user IN ("backup","Administrator") | eval src_ip=coalesce(src_ip, Source_Network_Address) | table _time, src_ip, user, Logon_Type, ComputerName | sort - _time</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>All meaningful logons (catches attacker-created accounts)</title>
+      <table>
+        <search>
+          <query>index=honeypot source="WinEventLog:Security" EventCode=4624 | eval src_ip=coalesce(src_ip, Source_Network_Address) | where NOT ((user IN ("SYSTEM","LOCAL SERVICE","NETWORK SERVICE") OR match(user,"^(DWM|UMFD)-\d+$")) AND Logon_Type IN ("0","2","5")) | table _time, src_ip, user, Logon_Type, ComputerName | sort - _time</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Process creation (Sysmon EID1): what they ran</title>
+      <table>
+        <search>
+          <query>index=honeypot sourcetype=XmlWinEventLog EventCode=1 NOT Image="*SplunkUniversalForwarder*" | table _time, User, Image, CommandLine, ParentImage, ParentCommandLine, CurrentDirectory, Computer | sort - _time</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Outbound network (Sysmon EID3): C2 / tool pulls (inbound 3389 brute-force excluded)</title>
+      <table>
+        <search>
+          <query>index=honeypot sourcetype=XmlWinEventLog EventCode=3 | where NOT (DestinationPort="3389" AND Initiated="false") | table _time, User, Image, Initiated, DestinationIp, DestinationPort, DestinationHostname, Protocol | sort - _time</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>DNS queries (Sysmon EID22)</title>
+      <table>
+        <search>
+          <query>index=honeypot sourcetype=XmlWinEventLog EventCode=22 | table _time, User, Image, QueryName, QueryResults | sort - _time</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
