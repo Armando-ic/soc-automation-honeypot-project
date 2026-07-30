@@ -4,6 +4,19 @@ An internet-exposed Windows honeypot gets attacked for real, its logs and EDR de
 
 Nothing here is synthetic. The attacks are real strangers hammering an exposed RDP port.
 
+> **EDR status, 2026-07-30.** The CrowdStrike Falcon layer described throughout this repo was fully built
+> and validated against a free trial that **ended 2026-07-28** — detect-only sensor, OAuth API integration,
+> a 15-minute autonomous alert poller, and a proven `Contain → Lift` round-trip pinned to the host's agent
+> ID. It stays documented because it was real work against real telemetry, but the poller is now disabled
+> and the Contain path no longer executes.
+>
+> **The safety-critical control was deliberately built not to depend on it.** The honeypot's automatic
+> egress brake writes a deny-all rule into the Azure NSG through a least-privilege service principal, so it
+> is enforced at the Azure control plane rather than inside the guest OS. That means it survives both the
+> trial expiry and a host-level compromise. Falcon containment was always the fast *second* layer, never
+> the floor — and the design was verified live on 2026-07-30, after the trial lapsed, by tripping the brake
+> and confirming the real NSG flipped to Deny.
+
 ## The loop at a glance
 
 ```mermaid
@@ -74,7 +87,7 @@ For the full box-by-box walkthrough, see [ARCHITECTURE.md](infra/honeypot/ARCHIT
 - **Verifier-gated AI triage.** Claude Opus writes a structured triage, then a verifier gate plus an advisory AI judge decide whether it is trustworthy before anything downstream acts on it. The AI is instructed to stay grounded; the verifier is what actually enforces it.
 - **Real attacks, not synthetic data.** The honeypot is a live, internet-exposed RDP/SMB/web box, so the telemetry is genuine adversary behavior, not lab replays.
 - **Two detection sources, one pipeline.** A Splunk saved-search webhook and a CrowdStrike Falcon Alerts-API poller both feed the same n8n triage workflow, so log-based and EDR-based alerts get the same treatment.
-- **Autonomous, with a human in the loop for response.** The Falcon poller runs every 15 minutes on its own. Network-isolation (Contain) stays a human-fired action, pinned to the host's Falcon agent ID so it cannot isolate the wrong machine.
+- **Autonomous, with a human in the loop for response.** The Falcon poller ran every 15 minutes on its own. Network-isolation (Contain) stayed a human-fired action, pinned to the host's Falcon agent ID so it could not isolate the wrong machine. (Past tense since 2026-07-28 — see the EDR status note above. The autonomous *egress brake* is unaffected and still fires without a human.)
 
 ## Tech stack
 
@@ -86,7 +99,8 @@ For the full box-by-box walkthrough, see [ARCHITECTURE.md](infra/honeypot/ARCHIT
 | AI triage | Claude Opus 4.8 via `grounding-service` (`/normalize`, `/retrieve`, `/verify`, `/falcon/*`) |
 | RAG | qdrant (MITRE ATT&CK technique embeddings) |
 | Verifier | `triage-verifier` (eval harness + verifier gate) |
-| EDR | CrowdStrike Falcon (detect-only, plus Contain/Lift response) |
+| EDR | CrowdStrike Falcon (detect-only, plus Contain/Lift response) — built and validated on a trial that ended 2026-07-28 |
+| Auto-brake | Azure NSG egress-deny via a least-privilege service principal (EDR-independent, control-plane enforced) |
 | Case management | DFIR-Iris |
 | Enrichment | AbuseIPDB, GreyNoise, VirusTotal |
 | Notify | Discord |

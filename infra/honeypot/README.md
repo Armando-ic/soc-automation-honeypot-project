@@ -72,9 +72,15 @@ auto-shutdown OFF + telemetry resumes in Splunk `honeypot` index (Task 9). Full
 procedure in `RUNBOOK.md`.
 
 ## Falcon (Plan 0B)
-- Trial: activated ~2026-06-28, **expires 2026-07-28** (initially a 15-day trial to 2026-07-13, later extended).
+> **Status 2026-07-30: the trial EXPIRED 2026-07-28 and the keep/drop checkpoint resolved to DROP** (a
+> second extension was declined). Everything below was built and validated while it was live; it is kept
+> as a build record. `falcon-alert-poller` was deactivated in n8n on 2026-07-30 so it stops 401-ing every
+> 15 minutes. The auto-brake is unaffected — it was designed EDR-independent and was re-proven against the
+> real NSG on 2026-07-30, after expiry. See `ARCHITECTURE.md`'s "Trial clock" note.
+
+- Trial: activated ~2026-06-28, **expired 2026-07-28** (initially a 15-day trial to 2026-07-13, later extended once).
   Tier = Falcon platform trial (Go default — NGAV; free Insight XDR EDR module added at Task 4).
-- Decision: trial-capture, keep/drop at trial end (no paid provisioning in 0B). Keep/drop checkpoint at the extended trial end ~2026-07-28.
+- Decision: trial-capture, keep/drop at trial end (no paid provisioning in 0B). **Checkpoint resolved 2026-07-28: DROPPED.**
 - API client: `honeypot-soar` · cloud = **us-2** · base URL `https://api.us-2.crowdstrike.com` ·
   scopes **Alerts:R/W, Hosts:R/W, Event streams:R** (created 2026-06-29, Plan 0B Task 2).
   Client ID/Secret live ONLY in `Personal/honeypot-vm-creds.txt` (gitignored — never committed/echoed).

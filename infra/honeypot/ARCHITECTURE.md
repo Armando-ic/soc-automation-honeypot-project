@@ -10,6 +10,13 @@ it's bad enough, the system recommends network-isolating the box via CrowdStrike
 
 Nothing here is synthetic. The attacks are real strangers hammering an exposed RDP port.
 
+> **Read this before the CrowdStrike sections (status as of 2026-07-30).** The Falcon EDR layer described
+> below was fully built and validated, but the trial it ran on **ended 2026-07-28**, so the poller and the
+> Contain action no longer execute. It is documented here as built rather than deleted, because it was
+> real work against real telemetry — and because the more interesting engineering point is that the
+> honeypot's automatic safety brake was deliberately designed *not* to depend on it. Full detail in the
+> "Trial clock" note further down.
+
 ---
 
 ## Layer 1 — the whole loop (the part you'd point at in a demo)
@@ -121,8 +128,25 @@ flowchart TB
 - **Falcon is in detect-only mode.** We *want* the attack to fully play out so we get rich telemetry, so Falcon
   watches and reports but doesn't block. That's why an attacker can actually get somewhere — by design.
 
-> **Trial clock:** the CrowdStrike Falcon trial expires **2026-07-28** (extended from an initial 2026-07-13). Anything that needs the live Falcon API
-> (the poller pulling real detections, the `falcon-contain` round-trip) has to be demoed/recorded before then.
+> **Trial clock — expired.** The CrowdStrike Falcon trial ran out on **2026-07-28** (already once extended
+> from an initial 2026-07-13; a second extension was declined). Everything that needed the live Falcon API
+> was built and validated before then: the sensor in detect-only, the OAuth integration, the 15-minute
+> `falcon-alert-poller` pulling real detections, and a full `Contain → Lift` round-trip. What no longer
+> runs: the poller (deactivated in n8n 2026-07-30 so it stops 401-ing every 15 minutes) and the
+> `falcon-contain` action.
+>
+> **This is worth understanding rather than skipping, because it is the part the design got right.** The
+> honeypot's automatic egress brake never depended on the EDR. Read the workflow generator
+> (`build_honeypot_brake_workflow.py`) and the ordering is explicit: `evaluate → nsg_deny` fires first, the
+> Discord alert hangs off `nsg_deny` rather than off the Falcon chain, and every Falcon node is non-halting
+> (`resolve_host` and `contain` are `continueRegularOutput`, `contain_guard` is `continueErrorOutput`). So
+> a dead Falcon degrades the fast second layer and changes nothing about the floor. That floor is an Azure
+> NSG deny-all-egress rule written by a least-privilege service principal — enforced at the control plane,
+> outside the guest OS, where a host-level compromise cannot reach it.
+>
+> Verified live on **2026-07-30**, two days after expiry: the brake tripped and the real NSG flipped to
+> `access: Deny, provisioningState: Succeeded`. The EDR layer is documented throughout this repo as built
+> because it *was* built, and the sections below describe it in the present tense as it operated.
 
 ---
 
