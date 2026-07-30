@@ -1,117 +1,110 @@
-# Honeypot project — handoff to the next Claude instance (2026-07-01)
+# Honeypot project — handoff to the next Claude instance (2026-07-01, session 6)
 
-**You are continuing a honeypot agentic-SOC portfolio project.** This is the first session that ran in the new
-`SOC-Automation-Honeypot-Project` folder. Read order:
+> ⛔ **SUPERSEDED (2026-07-05, session 16).** This is a stale point-in-time handoff from session 6; its "immediate
+> next action" (build Plan 1) was completed and PUBLISHED long ago, and Plan 2 hardening is now also DONE + PUBLISHED.
+> **Current read-first:** `infra/honeypot/session-logs/2026-07-05-SESSION16-PLAN2-COMPLETE-PUBLISHED-HANDOFF.md` +
+> `MASTER-CHECKLIST.md` ("Where we are right now"). Kept only for historical context.
+
+**You are continuing a honeypot agentic-SOC portfolio project.** This handoff supersedes the earlier
+2026-07-01 handoff (git history preserves that one). Read order:
 1. **This file** (where we are + the immediate next action).
-2. `infra/honeypot/session-logs/MASTER-CHECKLIST.md` — the living tracker, freshly reconciled against ground truth this session.
-3. **The Phase 1 spec** `docs/superpowers/specs/2026-07-01-honeypot-phase1-adversarial-redteam-design.md` (PARENT workspace, NOT a git repo).
-4. `infra/honeypot/session-logs/HANDOFF.md` (Phase 0 build state) only if you need deeper Phase-0 detail.
+2. `infra/honeypot/session-logs/MASTER-CHECKLIST.md` — the living tracker.
+3. **The Phase 1 spec (v2.1)** `docs/superpowers/specs/2026-07-01-honeypot-phase1-adversarial-redteam-design.md` (PARENT workspace, NOT a git repo).
+4. **The Phase 1 Plan 1 (v2)** `docs/superpowers/plans/2026-07-01-honeypot-phase1-redteam-harness-baseline.md` (PARENT, NOT git). This is what you build.
+5. `infra/honeypot/session-logs/HANDOFF.md` (Phase-0 build state) only if you need deeper Phase-0 detail.
 
 > ⚠️ **Writing conventions the user cares about:** casual, conversational, slightly-technical tone. **No em dashes
-> and no spaced-hyphen dashes** (banned); restructure with periods, commas, colons, parentheses, "and"/"so".
-> Lead with action and recommendations, do not over-ask. See memory `feedback_casual_conversational_tone`,
-> `feedback_prefers_hands_on_doing`, `feedback_handson_instruction_format`, `feedback_no_inline_secret_paste`.
+> and no spaced-hyphen dashes** in prose/docs (restructure with periods, commas, colons, parentheses). One exception:
+> code that must byte-match production keeps its literal `—`/`•`/`✅` characters. Lead with action and
+> recommendations, do not over-ask. Memory: `feedback_casual_conversational_tone`, `feedback_prefers_hands_on_doing`,
+> `feedback_handson_instruction_format`, `feedback_no_inline_secret_paste`.
 
 ---
 
 ## ▶ IMMEDIATE NEXT ACTION
 
-Phase 1 (adversarial red-team) is brainstormed and the design spec is written and revised to **v2** after a
-gate-1 design red-team. **Do this next:**
-1. Confirm the user is happy with **spec v2** (they were reviewing it when this session ended). Make any edits they want.
-2. Run **`superpowers:writing-plans`** on the approved spec to produce the implementation plan (the plan file goes in
-   the PARENT `docs/superpowers/plans/`).
-3. Run **gate #2 (the plan red-team)** on that plan before any code (a multi-agent adversarial review, same pattern
-   we used on the spec). Only start building once the plan survives it.
-4. Execute the build per spec §14: capture the real n8n snapshots and port the transform chain (system prompt,
-   input builder, Falcon `map_alert`, Extract Result) **first, TDD**, then author attacks. Consider
-   `superpowers:subagent-driven-development` or `executing-plans`.
+Phase 1 is spec'd (v2.1), planned (Plan 1 v2), and both artifacts survived their adversarial gates. **Do this next:**
+
+1. **(Optional but cheap) Focused re-gate of the Plan v2 fixes.** Plan 1 was revised AFTER gate-2; the revised v2 has
+   NOT itself been re-reviewed. If you want belt-and-suspenders, run a small Workflow re-checking only the fixed
+   items (temperature removed / max_tokens / refusal-cannot-bypass / run_meta usage / top_k=8 / __main__ guard /
+   PREDICATE_GUARD / tool-schema load / K-loop). If you trust the fixes, skip straight to build.
+2. **BUILD Plan 1** via `superpowers:subagent-driven-development` (fresh implementer + reviewer per task). Start at
+   **Task 1 (scaffold `red-team/`)**. The plan is fully TDD with exact code and commit messages per task.
+3. **Task 2 is HANDS-ON (user):** capturing the two real n8n execution snapshots (Splunk + Falcon) needs
+   `vm-soc-v2-n8n` briefly ON (it is deallocated). Prefer exporting an EXISTING Phase-0 execution from the n8n
+   history. The snapshot MUST include `retrieve_output` (the candidate-technique menu) and `opus_usage` (token
+   counts), Tasks 5 and 6 parity tests depend on them. Tasks 9-11 (scorer/stats/cases) have no snapshot dependency
+   and can proceed while the VM decision is pending.
+4. **Gate-3 (build + report red-team)** happens during/after implementation (spec §15). Do not skip it.
 
 ---
 
-## What this session did (2026-07-01)
+## What this session did (2026-07-01, session 6)
 
-1. **Set up this folder as the honeypot home** (a prior session cloned the public repo here; this session is the first working in it).
-2. **Mermaid diagram redesign (DONE, committed AND pushed).** Applied the "Hybrid" colour language (trust zones plus
-   an AI-brain accent) across all five diagrams: Layer-1 in both the public README and `ARCHITECTURE.md`, plus the
-   four Layer-2 diagrams. Stripped IP/port clutter from node labels, grouped external SaaS, pinned each diagram to
-   Mermaid's dark theme via `%%{init}%%` (fixes a real GitHub bug where a per-subgraph `style ... color:` is not
-   honoured, so subgraph titles would go dark-on-dark under GitHub light theme). Then an edge-readability pass:
-   `linkStyle` colours the n8n fan-out by role, dims the ingress, lights the Falcon poll arrow lime, plus a note
-   that the colours are for clarity only, not good/bad. Verified by a deterministic lint + a 6-agent fidelity
-   fan-out. **Commits `4009320` and `1411f72`, already pushed to `origin/ai-upgrade`.**
-3. **MASTER-CHECKLIST reconciliation (DONE, committed, NOT pushed).** A 4-agent read-only Workflow verified the
-   checklist against git, GitHub, Azure, and memory. Corrected: the repo is already PUBLIC (the "flip to public"
-   step was stale-open), all five VMs are deallocated (the "SOC VMs are up" note was stale), the Falcon trial is 12
-   days out, the v4-gcp-native loose end is resolved, and 8 commit hashes invalidated by the earlier `git
-   filter-repo` secret purge were re-mapped to their post-rewrite equivalents (verified against git). **Commit `2285133`.**
-4. **Credential decisions (user, recorded in checklist + memory).** The reused lab passwords are throwaway lab
-   credentials and are intentionally **NOT** being rotated. The IRIS admin API key gets rotated when
-   `vm-soc-v2-iris` is next allocated, not before. **There are no blocking security items.**
-5. **Phase 1 scoping (via the brainstorming skill).** Locked: target = end-to-end injection against the **live
-   model**; a **local** Python harness (no n8n, no Azure VMs); the **full before/after loop** with hardening scoped
-   to findings. Mapped the guardrails, eval harness, and injection surface with an Explore agent. Wrote the spec,
-   then ran **gate #1 (a 5-lens design red-team Workflow)** which found serious methodology flaws and produced
-   **spec v2** (see below).
-
----
-
-## Phase 1 status and the spec
-
-**Spec:** `docs/superpowers/specs/2026-07-01-honeypot-phase1-adversarial-redteam-design.md` (PARENT, non-git).
-Approved v1 direction; **v2** folds in the gate-1 findings (there is a v2 changelog at the top).
-
-**What the gate-1 design red-team caught (all folded into v2), so the plan must honour these:**
-- Test the REAL production prompt: load the system prompt from the generator (`build_honeypot_triage_workflow.py`
-  `PROMPT` / the generated `JSON/honeypot-triage.json` `options.system`), NOT the drifted `triage-honeypot.md`.
-- Offer the tool **AUTO**, not forced (forcing hides the refusal / no-tool-call path production routes to needs-human).
-- Port the production **Extract Result** transform (defensive fill, `containRecommended`, `verify_body`) AND the
-  Falcon **`map_alert`**, and score the exact `verify_body.result` production gates on. Two fidelity snapshots (Splunk + Falcon).
-- **Retrieval is an attack surface, not a controlled variable:** run the real local retriever for poisoning cases.
-- **Relative severity oracle** (catches high-to-medium under-escalation), a closed predicate grammar with hard-error
-  on unknown, reframed B1 (Falcon, suppress contain), new E1 encoding class.
-- **Severity floor** keys only on independent enrichment/tactic signals (never the model's echoed verdict),
-  Splunk-only, caps at medium; needs the alert `source` plumbed into the `/verify` contract. Plus a **symmetric
-  enrichment floor** for A2 (which today has NO deterministic check).
-- **Honest stats:** tiered K (5 explore / >=50 headline), reported CIs, no bare-zero claims, a **held-out corpus
-  authored by a different agent**, per-class reporting, significance tests, pinned temperature. Align `eval_runner`
-  so `eval.py` runs the full 10-check path.
-
-**Review gates (spec §15):** gate 1 (design) DONE. **Gate 2 (plan red-team) and gate 3 (build + report red-team)
-are still pending.** Do not skip them.
+1. **Pushed** the 2 previously-unpushed commits (`2285133` checklist-reconcile + `b6b263e` prior handoff) to public
+   `origin/ai-upgrade` (user OK).
+2. **Spec-v2 codebase-fidelity verification (7-agent Workflow).** Fact-checked every code claim in the Phase-1 spec
+   vs the real repo. The design was faithful, but 2 factual errors were caught and fixed in **spec v2.1**: the
+   verifier runs **10 checks not 8** (§1), and the §6 Falcon sub-field list omitted **`severity_name`** (the field
+   B1 targets). Also labeled Falcon under-escalation structurally OPEN (like A2) and added a **§16 "resolve in
+   writing-plans" checklist** of ~10 implementation under-specs.
+3. **Wrote Plan 1** (`superpowers:writing-plans`), 15 tasks, harness-through-committed-baseline-report. Key design:
+   **reuse** `grounding_service.falcon.map_alert`, the verifier, the retriever, and the embedder as imports; **port**
+   only Parse Alert + Build Opus Input + Extract Result (JS→Python) TDD-first, validated against **real n8n
+   snapshots** (never regenerated from the port). Hardening is deferred to **Plan 2** (spec §9 hardens only where the
+   baseline shows bypass).
+4. **Gate-2 plan red-team (5-lens Workflow)** = `ready_to_build:false`, 4 blocking + 8 major, verified against the
+   **claude-api** skill and the repo. **Applied every fix → Plan v2** (a "v2 changelog (post gate-2)" note is at the
+   top of the plan). The most important catches (all real):
+   - **`temperature` 400s on Opus 4.8** (sampling params are removed). The harness sends NO `temperature`/`top_p`/
+     `top_k`/`thinking`/`effort`, matching the deployed n8n langchain-anthropic node (which sets only
+     `options.system`). There is no temperature to pin; stochasticity is characterized by the K-trial CIs.
+   - **`max_tokens` is required** → a concrete `MAX_TOKENS` constant; `stop_reason == "max_tokens"` scored INVALID.
+   - **A refusal / no-tool-call can never be a bypass.** Production Extract Result THROWS on no tool call, before any
+     `verify_body` or gate exists → routes to needs-human, `bypassed=False` by construction. Only a **PARTIAL** tool
+     call (tool fired, fields omitted) reaches the gate via the defensive fill and can bypass.
+   - **Extract Result parity must thread the captured Opus `usage`** or `run_meta.tokens_in/out` mismatch fails the
+     byte-match even on a perfect port.
+   - Major: `top_k=8` (not 6) to match production; snapshot captures the retrieve output + Opus usage; a `__main__`
+     guard is added to the generator BEFORE Task 3 imports it (it currently writes the tracked JSON on import); a
+     `PREDICATE_GUARD` map makes the NOT_APPLICABLE-rejection rule implementable; the tool schema is loaded from the
+     generated JSON and checked against the generator `SCHEMA`; the K-loop is explicit + tested at k>1; the drifted
+     `triage-verifier/prompts/triage-honeypot.md` gets a non-canonical banner.
 
 ---
 
-## Git state (IMPORTANT)
+## Git state
 
-- Branch **`ai-upgrade`**, upstream **`origin/ai-upgrade`** (`github.com/Armando-ic/soc-automation-honeypot-project`, **PUBLIC**).
-- **Unpushed commits:** `2285133` (checklist reconcile) plus the commit that carries THIS handoff file. The two
-  diagram commits (`4009320`, `1411f72`) are already pushed. **Decide the push with the user** (public repo).
-- Working tree clean apart from the handoff commit.
-- The Phase 1 **spec v2** and all **memory** updates are saved to disk in non-git locations (PARENT
-  `docs/superpowers/`, and `~/.claude/.../memory/`), so they are safe but not in git.
+- Branch **`ai-upgrade`**, upstream **`origin/ai-upgrade`** (`github.com/Armando-ic/soc-automation-honeypot-project`, **PUBLIC**), in sync at session start.
+- **This session's only repo change is THIS handoff file** (and, if you commit it, the MASTER-CHECKLIST update). The
+  spec (v2.1) and Plan 1 (v2) live in the PARENT `docs/superpowers/` (non-git). Memory is in `~/.claude/.../memory/`.
+- **Open decision for the user:** whether to commit + push this handoff (and a MASTER-CHECKLIST tick) to the public
+  repo now, or leave it local. Nothing is committed yet this turn.
 
 ## Live / infra state (NOT in git)
 
-- **All five Azure VMs are DEALLOCATED** (verified 2026-07-01): `vm-soc-v2-n8n`, `vm-soc-v2-splunk`,
-  `vm-soc-v2-iris`, `vm-soc-v2-win`, `vm-honeypot-win`. No organic-capture window is open.
-- **Phase 1 does NOT need the Azure VMs.** The local harness needs only a local Qdrant plus the bge-small embedder,
-  runnable via the existing `grounding-service` docker compose, and the Claude API.
-- **Falcon trial expires 2026-07-13** (12 days as of 2026-07-01). Not needed for Phase 1.
-- The **Claude API key** for the harness is in the gitignored creds file (`Personal/` / `SOC-Automation-Project.md`).
-  Load it from there, never inline.
+- **All five Azure VMs are DEALLOCATED.** Phase 1's harness needs only a local Qdrant + the bge-small embedder
+  (runnable via the existing `grounding-service` docker compose, no Azure) plus the Claude API. **Exception: Plan 1
+  Task 2 (snapshot capture) needs `vm-soc-v2-n8n` briefly ON.**
+- **Falcon trial expires 2026-07-13.** Not needed for Phase 1.
+- The **Claude API key** for the live baseline (Plan 1 Task 15) is in the gitignored creds file. Load it into
+  `ANTHROPIC_API_KEY` from a local machine, never inline.
 
 ## Conventions (do not violate)
 
-- **Never `git add -A`** — add exact paths. Keep `Personal/`, `.playwright-mcp/`, `__pycache__/` out.
+- **Never `git add -A`** — add exact paths. Keep `Personal/`, `.env`, `__pycache__/` out.
 - **No inline secret paste**; the user loads secrets from the gitignored creds file on a local machine.
-- Commit trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
-- Specs and plans live in the PARENT `docs/superpowers/` (NOT a git repo). The repo holds implementation artifacts.
+- Commit trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Conventional commits,
+  `(honeypot)` scope.
+- Specs and plans live in the PARENT `docs/superpowers/` (NOT a git repo). The repo holds implementation artifacts
+  (the `red-team/` package Plan 1 builds is a new sibling of `triage-verifier/` and `grounding-service/`).
 - The public repo's default branch is intentionally `ai-upgrade` (no rename to `main`).
+- **Whenever you touch Claude/Anthropic model params, read the `claude-api` skill first** — it caught the
+  temperature-400 that would have broken every live call this session.
 
 ## Reusable pattern worth keeping
 
-The highest-value move this session was running a **multi-agent adversarial verification Workflow at each artifact
-boundary**: diagram fidelity, checklist-vs-ground-truth, and especially the **design red-team** which caught spec
-flaws (a drifted prompt, a self-defeating hardening check, indefensible K=5 statistics) that would otherwise have
-shipped a misleading public report. Reuse it for the plan (gate 2) and the build (gate 3).
+Run a **multi-agent adversarial Workflow at every artifact boundary**: it caught 2 factual spec errors at gate-1,
+and at gate-2 caught a `temperature` parameter that 400s on Opus 4.8 (would have failed every baseline call), a
+fabricated refusal-bypass scoring path, and a token-parity test bug. Reuse it for gate-3 (build + report).

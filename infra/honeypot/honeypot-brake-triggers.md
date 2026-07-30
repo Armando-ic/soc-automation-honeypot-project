@@ -502,17 +502,20 @@ saved-search name and the workflow constant must match. This is the search NAME,
 `<weak-account>` (the account it *filters on*, which B7 plants).
 
 The precise tripwire. Filters on the ACCOUNT, not the logon type, so it is immune to the whole
-Type 3/7/10 problem. Zero noise: nothing else ever logs in as this account. `<weak-account>` is the
-name B7 plants.
+Type 3/7/10 problem. Zero noise: nothing legitimately logs in as the planted account(s). `<weak-account>`
+is what B7 plants — one account, or several via `user IN (...)` when more than one weak cred is planted to
+widen spray coverage (each still zero-noise, since none is used legitimately).
 
 ```spl
-index=honeypot source="WinEventLog:Security" EventCode=4624 user="<weak-account>" earliest=-5m
+index=honeypot source="WinEventLog:Security" EventCode=4624 user IN ("<weak-account>", ...) earliest=-5m
 | eval src_ip=coalesce(src_ip, Source_Network_Address)
 | table _time, src_ip, user, Logon_Type, ComputerName
 ```
 
-**No `Logon_Type` filter at all, deliberately.** Any successful logon as that account means the box
-fell, however Windows classifies it.
+**No `Logon_Type` filter at all, deliberately.** Any successful logon as one of those accounts means the
+box fell, however Windows classifies it. **Which account(s) to plant is a B7 decision** — favor the ones
+the local farm sprays hardest (from the 4625 `stats count by user`); the current live choice lives in the
+session ledger, not here.
 
 ### (a) BACKSTOP — "somebody logged in"
 
