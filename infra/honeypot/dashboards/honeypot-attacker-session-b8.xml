@@ -1,6 +1,6 @@
 <dashboard version="1.1" theme="dark">
   <label>Honeypot - Attacker Session (B8)</label>
-  <description>Post-exploitation capture for a real landing on any planted weak-cred account. When a RED honeypot-weak-cred-logon alert fires from an unfamiliar IP, set the Incident Window from the alert timestamp to now and read down. Your own proof logons are the baseline, but judge by whether you were actually logged in at that moment rather than by address alone: the home IP is stable while the cellular one rotates (two distinct addresses observed on 2026-07-24). Field names are the Splunk Sysmon TA convention (verified live 2026-07-24).</description>
+  <description>Post-exploitation capture for a real landing on any planted weak-cred account. When a RED honeypot-weak-cred-logon alert fires from an unfamiliar IP, set the Incident Window from the alert timestamp to now and read down. Your own proof logons are the baseline, but judge by whether you were actually logged in at that moment rather than by address alone: the home IP is stable while the cellular one rotates (two distinct addresses observed on 2026-07-24). Field names are the Splunk Sysmon TA convention (verified live 2026-07-24). The two failed-logon panels read 4625 Sub_Status, verified live 2026-08-05 (values are uppercase hex); they group on lower(user) because Windows auth is case-insensitive, so Administrator and administrator are one account and must not be counted as two.</description>
   <fieldset submitButton="false" autoRun="true">
     <input type="time" token="tr">
       <label>Incident window</label>
@@ -51,6 +51,33 @@
           <latest>$tr.latest$</latest>
         </search>
         <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Failed logons with an INCORRECT PASSWORD (the account exists): who is being guessed</title>
+      <table>
+        <search>
+          <query>index=honeypot source="WinEventLog:Security" EventCode=4625 Sub_Status="0xC000006A" | eval src_ip=coalesce(src_ip, Source_Network_Address) | eval account=lower(user) | eval planted=if(account IN ("backup","administrator"),"** PLANTED **","") | stats count AS attempts, min(_time) AS first_seen, max(_time) AS last_seen BY account, src_ip, planted | eval first_seen=strftime(first_seen,"%F %T"), last_seen=strftime(last_seen,"%F %T") | sort - attempts</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">30</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Why each failed logon failed (spray noise vs real guesses vs a lockout wall)</title>
+      <table>
+        <search>
+          <query>index=honeypot source="WinEventLog:Security" EventCode=4625 | eval ss=upper(Sub_Status) | eval reason=case(ss=="0XC0000064","user does not exist (spray noise)", ss=="0XC000006A","WRONG PASSWORD - the account exists", ss=="0XC0000234","ACCOUNT LOCKED OUT - guesses are being refused", ss=="0XC0000072","account disabled", ss=="0XC0000070","workstation restriction", ss=="0XC0000193","account expired", ss=="0XC0000071","password expired", 1==1,"other: ".ss) | stats count BY reason | sort - count</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">10</option>
         <option name="drilldown">none</option>
       </table>
     </panel>
