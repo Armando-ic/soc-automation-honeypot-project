@@ -29,9 +29,16 @@ What a restore actually undoes (verified on-box 2026-07-27, do not assume the ea
 - **`Administrator` here is not the built-in RID-500 account.** Azure provisioning renamed RID-500 to the
   admin username, so on this box **`mandoaic` is RID-500** and survives the restore as the operator login.
   The planted `Administrator` is an ordinary RID-1001 account that merely wears the name.
-- **The account lockout threshold reverts.** `net accounts /lockoutthreshold:0` was applied live on
-  2026-07-27; the snapshot predates it, so a restored box is back to `Lockout threshold: 10`. Re-apply it
-  if you reopen (see the opening runbook's B7.3 pre-check, where the reasoning lives).
+- **Every password-policy weakening reverts too, because the snapshot predates all of it.** A restored box
+  comes back with:
+  - `Lockout threshold: 10` (cleared to `Never` live on 2026-07-27 via `net accounts /lockoutthreshold:0`)
+  - `Password must meet complexity requirements: Enabled` (disabled live on 2026-08-05)
+  - `Minimum password length` back to its shipped value (was set to 0 on 2026-08-05)
+
+  That is the correct and safe direction for a restore, but it means **reopening is not just replanting the
+  accounts** - you have to redo the policy work as well or the new decoys are decorative again. The
+  reasoning for each change lives in the opening runbook's B7.3, and it is worth re-reading rather than
+  re-deriving: the lockout wall alone silently refused ~87% of real password guesses for three days.
 
 **Where:** all steps in local PowerShell (`az`, logged in as yourself). USER drives hands-on. Substitute
 `<...>` placeholders from the command outputs; use `<YYYYMMDD>` = today.

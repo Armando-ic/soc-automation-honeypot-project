@@ -4,7 +4,7 @@
 finish something we check it off here, and when either of us needs to remember where we are, we read the
 "Where we are right now" pointer and scan the phase we're in. Keep it current as work lands.
 
-**Last updated:** 2026-07-30
+**Last updated:** 2026-08-05
 
 **Companion docs (read these for detail, this file is the index):**
 - Build state: [`HANDOFF.md`](HANDOFF.md) (canonical 🟢 0D-2 block)
@@ -27,6 +27,20 @@ NO LANDING YET (as of 2026-07-30, session 46).** B7 complete and the catch-both 
 **Still B8** — attended watch + capture the post-exploitation telemetry (Sysmon EID1/3/22 in
 `index=honeypot`) as Phase-5 fixtures. Then **B9** teardown (restore path already dry-run proven from
 `honeypot-preopen-20260717`).
+
+**2026-08-05 — THE PASSWORD WAS THE BLOCKER, and it has been changed.** Six days of running the box 24/7
+under the new Decision 1 produced **zero landings** against roughly **15,000 real password guesses** on
+the planted `Administrator` (4625 `Sub_Status=0xC000006A`, ~110-120/hour, all genuinely tested since
+lockout is `Never`). Nothing was broken; every gate stayed green. The original password simply was not in
+the wordlists in play — exactly the risk session 42 flagged when the account was picked. Actions taken:
+complexity policy **Disabled** and minimum length **0** in `secpol.msc`, then both decoys repointed at
+top-ranked RDP-spray base terms sourced from published honeypot research (the Specops 4.6M-password
+dataset). Which term went on which account stays in the gitignored creds file and the session ledger, out
+of every published doc. Both verified `Enabled`, in Administrators, with `PasswordExpires` blank. Two new B8 dashboard panels ship the evidence: wrong-password guesses by account
+and source IP, and a Sub_Status failure-reason breakdown that makes a returning lockout wall visible at a
+glance. Full reasoning + the source rankings live in the opening runbook's B7.3. **Expect a fast answer:
+at that guess rate a top-of-list password gets tried early, so hours not days — and 24-48 hours of silence
+would itself indicate hash-based or credential-stuffing tooling rather than a dictionary.**
 
 **Full re-arm re-proven live 2026-07-30 (session 46), every gate green:**
 - **Phase A** — A1 ok · A2 `configured:true/unknown/error` · A3 all 8 keys SET · A5 `stale:false`, exactly

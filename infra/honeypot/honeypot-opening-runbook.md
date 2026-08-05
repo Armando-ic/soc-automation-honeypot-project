@@ -277,8 +277,35 @@ Adopted 2026-07-24 unless noted. Do not re-litigate the ones still standing.
     Phase-5 fixture. That publishes your own honeypot credential. The safe PowerShell form is
     `Set-LocalUser -Name <acct> -Password (Read-Host -AsSecureString)`.
   - **The password, not the account name, decides whether the box falls.** A hot account with a
-    non-dictionary password absorbs thousands of attempts and never opens. Pick from the top of a real RDP
-    spray list. If the complexity policy rejects it, disable it in `secpol.msc` -> Password Policy.
+    non-dictionary password absorbs thousands of attempts and never opens. **This was measured, not
+    theorized:** between 2026-07-30 and 2026-08-05 the planted `Administrator` took roughly **15,000 real
+    password guesses** (4625 `Sub_Status=0xC000006A`, ~110-120/hour, every one actually tested because
+    lockout was already cleared) and **never fell**. Nothing was broken - every gate was green the whole
+    time. The original password simply was not in the wordlists in play.
+  - **Source the password from RDP-specific spray research, not from a generic leaked-password list.**
+    `rockyou.txt` and SecLists' "10-million" lists are ranked by what humans *chose* in breaches, which is
+    a different distribution from what bots *send at port 3389*. Use published RDP honeypot studies
+    instead. Specops (4.6M passwords captured against 3389) ranks the base terms: **1 `Password`,
+    2 `p@ssw0rd`, 3 `Welcome`, 4 `admin`, 5 `Passw0rd`, 6 `p@ssword`, 7 `pa$$w0rd`, 8 `qwerty`, 9 `User`,
+    10 `test`**. Rapid7's honeypot top literals were the empty string, `123`, `password`, `123qwe`,
+    `admin`. **8 characters is the most-attempted length** (~24%); 88% are 12 characters or fewer.
+  - **Mind the complexity policy, and decide deliberately whether to disable it.** Server 2022 ships with
+    "Password must meet complexity requirements" Enabled, which rejects most of that top ten. Two options:
+    keep the policy and pick something that satisfies it while still ranking high (`P@ssw0rd` is the sweet
+    spot - #2 term, 8 chars, all four character classes), or disable it in `secpol.msc` -> Account Policies
+    -> Password Policy and take the #1 outright. **Chosen 2026-08-05: disable it.** The goal is
+    post-exploitation telemetry, not demonstrating that a password held.
+  - **Live choice as of 2026-08-05: both decoys were repointed at high-ranking terms from the research
+    above.** Which term went on which account, and the values themselves, live **only** in the gitignored
+    creds file and the session ledger - deliberately not here. **Do not record the rank-to-account mapping
+    in any published doc:** publishing the ranking table and "account X got rank N" in the same document
+    hands a reader the live credential just as effectively as writing it out, and no secret scanner will
+    flag it because there is no secret-shaped string to match. Resulting policy state: complexity
+    **Disabled**, minimum length **0**, lockout threshold **Never**, and both decoys verified `Enabled`
+    with `PasswordExpires` blank so the 42-day maximum password age cannot silently close the door.
+  - **Expect a fast answer.** At 110+ tested guesses per hour a top-of-list password gets tried early, so a
+    landing should arrive in hours rather than days. If 24-48 hours pass with nothing, that is itself a
+    finding: it points at credential-stuffing or hash-based tooling rather than a classic dictionary.
 - **B7.4 prove the REAL RED.** RDP in as `backup` from an **external** network (phone hotspot / RD client on
   cellular - PC network untouched). Expect the real 🔴 RED embed (Type 3 and/or Type 10). **Note that logon
   as YOUR baseline** so a real attacker (a third IP) is not confused with it.
