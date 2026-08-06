@@ -306,6 +306,40 @@ Adopted 2026-07-24 unless noted. Do not re-litigate the ones still standing.
   - **Expect a fast answer.** At 110+ tested guesses per hour a top-of-list password gets tried early, so a
     landing should arrive in hours rather than days. If 24-48 hours pass with nothing, that is itself a
     finding: it points at credential-stuffing or hash-based tooling rather than a classic dictionary.
+  - **VERIFY THE CREDENTIAL ACTUALLY TOOK. `Set-LocalUser` succeeding proves nothing.** It returns silently
+    on success, and both the set and any later re-type happen behind a masked or unechoed prompt, so a
+    typo is invisible. This bit hard on 2026-08-06: the box absorbed **5,599 real guesses in 24 hours**
+    against an account whose password **nobody actually knew**, because the set had not produced the value
+    we thought. Every other check was green the whole time. Validate, do not assume:
+    ```powershell
+    Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+    $ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext('Machine')
+    $ctx.ValidateCredentials('<account>', (Read-Host))
+    ```
+    Expect `True`. **Keep the `(Read-Host)` form** - a literal password argument lands in PSReadline
+    history and in Sysmon EID1 `CommandLine`, ships to `index=honeypot`, and would ride along in a
+    published fixture. `Read-Host` input never touches the command line.
+  - **⚠️ `ValidateCredentials` FIRES BOTH TRIPWIRES, and it looks exactly like a compromise.** It does not
+    merely compare a hash - it performs a real **Logon Type 3** (network) logon to prove the credential,
+    which writes a genuine successful **4624** for a planted account. Both the 🔴 RED
+    `honeypot-weak-cred-logon` and the ⚠️ amber `honeypot-any-logon` fire within seconds. **The tell is the
+    source address: it arrives from a link-local IPv6 address (`fe80::/10`), which is not routable and can
+    never come from the internet.** Combined with a timestamp matching the moment you ran the command, that
+    is conclusive. Confirm with:
+    ```spl
+    index=honeypot source="WinEventLog:Security" EventCode=4624 user IN ("backup","Administrator") earliest=-24h
+    | eval src_ip=coalesce(src_ip, Source_Network_Address)
+    | table _time, src_ip, user, Logon_Type, Logon_Process, Authentication_Package, Process_Name | sort - _time
+    ```
+    **Only a routable public IPv4 source is a real landing.** (Note the Security TA field names use
+    underscores - `Logon_Process`, `Authentication_Package`, `Process_Name`. The Sysmon-style
+    `LogonProcessName` / `ProcessName` spellings silently return blank on this sourcetype.) A local API
+    validation shows `Logon_Process` = `Advapi`; a real RDP landing shows `NtLmSsp` or `User32`.
+  - **Do NOT "fix" this by filtering link-local or local sources out of the tripwire.** Same reasoning as
+    never allowlisting logon types: an attacker who has landed can produce a locally-sourced logon during
+    privilege escalation or lateral movement, and filtering it would blind you to genuine post-compromise
+    activity. The false-positive rate is once per manual credential check and is always operator-initiated.
+    **Record each validation as an operator baseline instead.**
 - **B7.4 prove the REAL RED.** RDP in as `backup` from an **external** network (phone hotspot / RD client on
   cellular - PC network untouched). Expect the real 🔴 RED embed (Type 3 and/or Type 10). **Note that logon
   as YOUR baseline** so a real attacker (a third IP) is not confused with it.
