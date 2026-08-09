@@ -20,8 +20,29 @@ finish something we check it off here, and when either of us needs to remember w
 
 ## ▶ Where we are right now
 
-**Phase 5 — honeypot-opening (Part B, live op). THE BOX IS OPEN, FULLY RE-ARMED, AND UNDER ACTIVE SPRAY.
-NO LANDING YET (as of 2026-07-30, session 46).** B7 complete and the catch-both expansion is fully live:
+## 🔴 THE BOX WAS BROKEN INTO — 2026-08-08 02:03:32 UTC. B8 CAPTURE ACHIEVED.
+
+**A human operator established an interactive RDP session (Logon Type 10) from `113.203.61.61`, stayed
+54 seconds, opened Task Manager twice, and disconnected.** That is the first genuine hands-on-keyboard
+compromise of the operation and the event this whole build existed to capture. Full write-up:
+[`incidents/INC-2026-001-first-interactive-intrusion.md`](../incidents/INC-2026-001-first-interactive-intrusion.md).
+
+- **Four distinct external actors** used the credential inside ~30 hours. The other three did nothing but
+  **Type 3 validations lasting 0.0s** — automated brute-forcers confirming a hit, not using it. One
+  re-validated on a **~15-hour** schedule.
+- **The credential went live 2026-08-06 ~17:04; first compromise came 3h48m later.**
+- **Zero impact.** No accounts created, no persistence, no files, no C2, no fan-out. The auto-brake
+  correctly never fired. The human triaged the box, judged an empty server not worth deploying on, and left
+  — direct evidence for a hypothesis we had only been able to speculate about.
+- **This landed at 02:03 UTC while nobody was watching.** Superseding Decision 1 (leave the box up
+  unattended) is what made the capture possible at all; under the old rule the box would have been off.
+- **Residual:** the session was **disconnected, not logged off**, so it is resident and reconnectable, and
+  the credential is burned across at least four actors.
+- **Still open:** the B9 decision — snapshot and tear down, or raise the box's apparent value and run
+  another window. Deliberately not decided.
+
+**Phase 5 — honeypot-opening (Part B, live op). Prior state before the intrusion, kept for continuity:
+THE BOX IS OPEN, FULLY RE-ARMED, AND UNDER ACTIVE SPRAY (as of 2026-07-30, session 46).** B7 complete and the catch-both expansion is fully live:
 **two** weak local admins are planted (`backup` + a decoy named `Administrator`), the 🔴 RED
 `honeypot-weak-cred-logon` tripwire has fired live on both, and the account-lockout wall is cleared.
 **Still B8** — attended watch + capture the post-exploitation telemetry (Sysmon EID1/3/22 in

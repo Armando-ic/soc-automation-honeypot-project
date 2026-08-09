@@ -64,6 +64,11 @@ awk -F= '/^(BRAKE_ENABLED|AZURE_TENANT_ID|AZURE_CLIENT_ID|AZURE_CLIENT_SECRET|HO
 
 # A5 feeder liveness (run TWICE, ~90s apart) -> stale:false BOTH times, total_posts HIGHER the 2nd time
 docker exec grounding-service curl -s localhost:8000/brake/feed-status
+#    NOTE (corrected 2026-08-08): `samples` CAPS AT 2000, so `trips` and `max_distinct_dst` describe only
+#    the recent buffer, NOT lifetime. The old `samples == total_posts` invariant held only while total was
+#    under 2000 - do not treat its absence as a fault. `trips:0` means no trip inside the current window,
+#    not state loss. Gate on `stale` and a climbing `total_posts`, nothing else.
+#    Also seen once: an EMPTY response body, with the next call returning normally. Transient; re-run.
 ```
 
 **A6 (n8n browser UI):** confirm the **Active** toggle is ON for BOTH `honeypot-brake` and
@@ -350,6 +355,46 @@ Adopted 2026-07-24 unless noted. Do not re-litigate the ones still standing.
   dashboard in Splunk ("Honeypot - Attacker Session (B8)").
 - **Loop:** a 🔴 RED from an UNFAMILIAR external IP = a real landing -> set the dashboard **Incident Window**
   to `[alert time -> now]` -> read the process / network / DNS panels. That's the Phase-5 fixture capture.
+
+### Triaging a RED: the two questions, in order (validated live 2026-08-08)
+
+**Q1 - is it even external?** A **link-local IPv6 source (`fe80::/10`)** is not routable and can never
+originate on the internet. That is your own on-box activity, most commonly a `ValidateCredentials` check
+(see B7.3). **Only a routable public IPv4 source is a real landing.**
+
+**Q2 - bot or human? `Logon_Type` is the discriminator.**
+
+| Signal | Read |
+|---|---|
+| **Type 3**, duration ~0.0s, nothing executed | **Automated credential validation.** A brute-forcer confirming a hit and recording it. Expect repeats, sometimes on a fixed schedule |
+| **Type 10 (RemoteInteractive)** | **A human has a desktop.** This is the real thing - go to the process panel immediately |
+
+Measured 2026-08-08: four distinct external actors used the same credential inside 30 hours. Three did
+nothing but Type 3 validations lasting 0.0s; one escalated to Type 10, stayed **54 seconds**, opened Task
+Manager twice, and left. Full write-up in [`incidents/INC-2026-001-first-interactive-intrusion.md`](incidents/INC-2026-001-first-interactive-intrusion.md).
+
+**`4779` IS A DISCONNECT, NOT A LOGOFF.** Closing an RDP window leaves the session **resident and
+reconnectable**, and a logon/logoff correlation will report it as `OPEN` indefinitely - the 54-second visit
+above read as `OPEN` for about 15 hours. **Always check 4778/4779 before concluding a session is live:**
+```spl
+index=honeypot source="WinEventLog:Security" (EventCode=4778 OR EventCode=4779 OR EventCode=4634 OR EventCode=4647) earliest=-24h
+| table _time, EventCode, user, Logon_ID, src_ip, Session_Name | sort _time
+```
+
+**Three `Logon_ID` extraction traps** - a session-correlation query is wrong without all three:
+- **`0x0`** is the *Subject* logon ID on a network logon, not a session. Filter it: `| where Logon_ID!="0x0"`.
+- **`0x3E7`** is the well-known **LOCAL SYSTEM** logon ID. Also not a session.
+- **A single RDP logon emits TWO adjacent real Logon_IDs differing by `0x20`** (e.g. `...1CF` / `...1EF`) -
+  the standard/elevated linked-token pair. **One session, two IDs. Do not count it twice.**
+
+**When hunting, do NOT blanket-filter `NT AUTHORITY\SYSTEM`.** Privilege escalation and service installs
+*run as* SYSTEM, so filtering it hides the thing you are looking for. Split first, filter never:
+```spl
+index=honeypot sourcetype=XmlWinEventLog EventCode=1 earliest=<alert-time> | stats count BY User
+```
+That one line tells you instantly whether any non-system principal ran anything at all. Then pivot on
+`ParentImage="*explorer.exe"` - shell parentage means a **person clicked it**, as opposed to a script or
+service spawning it.
 - No landing by the end of an attended window -> **leave the box running** and pick the watch back up next
   session (Decision 1 superseded 2026-07-30). Deallocating is now a deliberate act, not the default: if you
   do park it, you re-run Phase A+B+C on the way back up and you eat the rediscovery lag below.
