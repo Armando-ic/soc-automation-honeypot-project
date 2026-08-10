@@ -1,16 +1,19 @@
 # Honeypot Agentic-SOC — Master Project Checklist
 
-**What this is:** the single living tracker for the whole honeypot project. It's for both of us. When we
-finish something we check it off here, and when either of us needs to remember where we are, we read the
-"Where we are right now" pointer and scan the phase we're in. Keep it current as work lands.
+**What this is:** the **phase index** for the whole honeypot project — the deliverable checklist across
+Phases 0-5. It's for both of us. When we finish something we check it off here. For "where are we right
+now", read [`CURRENT-STATE.md`](CURRENT-STATE.md) instead; this file holds the durable phase record and
+should change slowly. Keep it current as work lands.
 
-**Last updated:** 2026-08-05
+**Last updated:** 2026-08-10
 
 **Companion docs (read these for detail, this file is the index):**
+- ▶ **Live state: [`CURRENT-STATE.md`](CURRENT-STATE.md)** — the situational snapshot, start here each session
+- ▶ **Active experiment: [`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md)** — Tier-1 plan + ⬜ execution tracker
 - Build state: [`HANDOFF.md`](HANDOFF.md) (canonical 🟢 0D-2 block)
 - Plain-language walkthrough: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- Latest session handoff: [`2026-08-05-SESSION46-REARM-PUBLISHED-PASSWORD-BLOCKER-FIXED-AWAITING-LANDING-HANDOFF.md`](2026-08-05-SESSION46-REARM-PUBLISHED-PASSWORD-BLOCKER-FIXED-AWAITING-LANDING-HANDOFF.md) (honeypot: re-armed + published, password blocker fixed, awaiting a landing) · [`2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md`](2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md) (/lint track)
-- Next-instance kickoff prompts (two independent tracks): [`2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md`](2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md) (`/lint` SHIPPED public + 2 triage buckets done; 2 buckets remain) · [`2026-08-05-SESSION47-HANDOFF-PROMPT.md`](2026-08-05-SESSION47-HANDOFF-PROMPT.md) (honeypot live op: watch → B8 capture → B9 teardown; starts by checking whether the box fell)
+- Latest session handoff: [`2026-08-08-SESSION47-FIRST-INTRUSION-CAPTURED-DOCUMENTED-TIER1-NEXT-HANDOFF.md`](2026-08-08-SESSION47-FIRST-INTRUSION-CAPTURED-DOCUMENTED-TIER1-NEXT-HANDOFF.md) (honeypot: **the box was broken into**, incident documented, Tier-1 concealment queued) · [`2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md`](2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md) (/lint track)
+- Next-instance kickoff prompts (two independent tracks): [`2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md`](2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md) (`/lint` SHIPPED public + 2 triage buckets done; 2 buckets remain) · [`2026-08-08-SESSION48-HANDOFF-PROMPT.md`](2026-08-08-SESSION48-HANDOFF-PROMPT.md) (honeypot live op: Tier-1 concealment, then resume the watch)
 - Live-op runbooks (hands-on, copy-paste): [`honeypot-opening-runbook.md`](../honeypot-opening-runbook.md) (re-arm → open → monitor) + [`b9-teardown-runbook.md`](../b9-teardown-runbook.md) (teardown)
 - Spec + plans live in the PARENT workspace `docs/superpowers/` (not a git repo)
 
@@ -20,91 +23,22 @@ finish something we check it off here, and when either of us needs to remember w
 
 ## ▶ Where we are right now
 
-## 🔴 THE BOX WAS BROKEN INTO — 2026-08-08 02:03:32 UTC. B8 CAPTURE ACHIEVED.
+**Live state moved out of this file 2026-08-10.** It changed every session and churned the phase index
+underneath it. Two dedicated files now own it:
 
-**A human operator established an interactive RDP session (Logon Type 10) from `113.203.61.61`, stayed
-54 seconds, opened Task Manager twice, and disconnected.** That is the first genuine hands-on-keyboard
-compromise of the operation and the event this whole build existed to capture. Full write-up:
-[`incidents/INC-2026-001-first-interactive-intrusion.md`](../incidents/INC-2026-001-first-interactive-intrusion.md).
+| Read this | For |
+|---|---|
+| **[`CURRENT-STATE.md`](CURRENT-STATE.md)** | **The situational snapshot — start here.** What just happened, what's live, what's residual |
+| **[`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md)** | The **active experiment** — Tier-1 plan, ripple-check evidence, and the ⬜ execution tracker |
 
-- **Four distinct external actors** used the credential inside ~30 hours. The other three did nothing but
-  **Type 3 validations lasting 0.0s** — automated brute-forcers confirming a hit, not using it. One
-  re-validated on a **~15-hour** schedule.
-- **The credential went live 2026-08-06 ~17:04; first compromise came 3h48m later.**
-- **Zero impact.** No accounts created, no persistence, no files, no C2, no fan-out. The auto-brake
-  correctly never fired. The human triaged the box, judged an empty server not worth deploying on, and left
-  — direct evidence for a hypothesis we had only been able to speculate about.
-- **This landed at 02:03 UTC while nobody was watching.** Superseding Decision 1 (leave the box up
-  unattended) is what made the capture possible at all; under the old rule the box would have been off.
-- **Residual:** the session was **disconnected, not logged off**, so it is resident and reconnectable, and
-  the credential is burned across at least four actors.
-- **Persistence evidence was incomplete and re-verification caught it.** The first pass omitted
-  `EventCode=4697`; adding it surfaced **14 service installs** in the window. All 14 investigated and
-  benign — Windows **per-user service instances** created on every interactive logon. The conclusion held,
-  the evidence didn't. **Output is a baseline: this host emits exactly 14 × 4697 per interactive logon**,
-  so real signals are a count above 14, a binary outside `System32`, or a random-looking name.
+**One-line status (2026-08-10):** 🔴 **the box was broken into** on 2026-08-08 (Logon Type 10 from
+`113.203.61.61`, 54 seconds, **zero impact**) — see
+[`INC-2026-001`](../incidents/INC-2026-001-first-interactive-intrusion.md), now **public** at tip
+`fd039a7`. ▶ **Next move: Tier-1 concealment, execution in progress.** B9 teardown deliberately undecided.
 
-**▶ NEXT MOVE — TIER-1 CONCEALMENT (USER-approved 2026-08-08, NOT yet executed).** The operator opened
-**Task Manager twice**, which lists `Sysmon64.exe` and `splunkd.exe`, and the host is named
-**`vm-honeypot-win`**. "They saw the instrumentation" competes with "the box was empty" and is at least as
-well supported. Approved scope is **concealment only, no furnishing** — rename the Windows host, the
-Sysmon service/driver/binary, and the Splunk forwarder service, so exactly one variable changes and the
-next result stays comparable. **Re-run Phase B afterwards.** Full plan in the opening runbook's B8.
-
-- **Still open:** the B9 decision — snapshot and tear down, or keep running. Deliberately not decided;
-  Tier 1 assumes the box stays up.
-
-**Phase 5 — honeypot-opening (Part B, live op). Prior state before the intrusion, kept for continuity:
-THE BOX IS OPEN, FULLY RE-ARMED, AND UNDER ACTIVE SPRAY (as of 2026-07-30, session 46).** B7 complete and the catch-both expansion is fully live:
-**two** weak local admins are planted (`backup` + a decoy named `Administrator`), the 🔴 RED
-`honeypot-weak-cred-logon` tripwire has fired live on both, and the account-lockout wall is cleared.
-**Still B8** — attended watch + capture the post-exploitation telemetry (Sysmon EID1/3/22 in
-`index=honeypot`) as Phase-5 fixtures. Then **B9** teardown (restore path already dry-run proven from
-`honeypot-preopen-20260717`).
-
-**2026-08-05 — THE PASSWORD WAS THE BLOCKER, and it has been changed.** Six days of running the box 24/7
-under the new Decision 1 produced **zero landings** against roughly **15,000 real password guesses** on
-the planted `Administrator` (4625 `Sub_Status=0xC000006A`, ~110-120/hour, all genuinely tested since
-lockout is `Never`). Nothing was broken; every gate stayed green. The original password simply was not in
-the wordlists in play — exactly the risk session 42 flagged when the account was picked. Actions taken:
-complexity policy **Disabled** and minimum length **0** in `secpol.msc`, then both decoys repointed at
-top-ranked RDP-spray base terms sourced from published honeypot research (the Specops 4.6M-password
-dataset). Which term went on which account stays in the gitignored creds file and the session ledger, out
-of every published doc. Both verified `Enabled`, in Administrators, with `PasswordExpires` blank. Two new B8 dashboard panels ship the evidence: wrong-password guesses by account
-and source IP, and a Sub_Status failure-reason breakdown that makes a returning lockout wall visible at a
-glance. Full reasoning + the source rankings live in the opening runbook's B7.3. **Expect a fast answer:
-at that guess rate a top-of-list password gets tried early, so hours not days — and 24-48 hours of silence
-would itself indicate hash-based or credential-stuffing tooling rather than a dictionary.**
-
-**Full re-arm re-proven live 2026-07-30 (session 46), every gate green:**
-- **Phase A** — A1 ok · A2 `configured:true/unknown/error` · A3 all 8 keys SET · A5 `stale:false`, exactly
-  +1 post/min · A6 both honeypot workflows Active · A7 clean 5-rule NSG baseline. **A4 retired** with Falcon.
-- **Phase B** — B1 **135** /15m · B2 **193** EID3 /24h · B3 **37** failed logons /15m (no rediscovery lag
-  this power-on, see the runbook's corrected B8 note).
-- **B4 tripwire liveness — NEW GATE, authored this session.** Nothing previously proved the *alarm*, only
-  the brake and the data plane. Both saved searches Enabled with a populated Next Scheduled Time, the
-  Splunk webhook action verified pointing at `/webhook/honeypot-logon-alert`, and the full
-  `4624 → UF → Splunk → saved search → n8n → Discord` chain proven by a real operator logon firing the
-  amber backstop (Type 10, which also re-vindicates "never allowlist logon types").
-- **Phase C** — the dry-run flipped the **real** NSG (`access:Deny, state:Succeeded`) and reverted clean;
-  the SP secret still authenticates. `trips` incremented exactly +1 (4 → 5), confirming the counter is
-  per-trip. The one historically unexplained trip left no NSG residue, so it was attended and reverted
-  (session-45 bookkeeping), not an unattended real fire.
-
-**Both live decisions are now SETTLED (USER, 2026-07-30):**
-1. ✅ **Overnight posture — Decision 1 SUPERSEDED. The box stays running between sessions.** Session 45
-   measured that a multi-day gap prunes the box off botnet target lists (first external touch ~80 min
-   after boot, 4625 down to 2 in 24h vs a historical ~8,000/day), so deallocate-when-unattended worked
-   directly against ever catching a landing. Accepted in exchange: containment no longer waits on a human,
-   which is fine because both layers are automated and fail closed. Cost is continuous credit burn.
-2. ✅ **Sign-off 2 RE-SIGNED without Falcon.** Bounds are now the static NSG envelope + the auto-brake's
-   NSG egress-deny + attended monitoring. The trial ended 2026-07-28; what was lost is the fast-contain
-   layer and the EDR feed, not the floor (brake survival verified in code).
-
-Both are written up in [`honeypot-opening-runbook.md`](../honeypot-opening-runbook.md) under **Standing
-decisions + sign-offs**, which is the source of truth.
-
-This file is the checklist. Per-session narrative and every live-measured fact live in `infra/honeypot/session-logs/` (dated handoffs) + `.superpowers/sdd/progress.md` (SDD ledger) — read the latest handoff for "what happened last."
+**This file is the phase index** — the deliverable checklist across Phases 0-5. Per-session narrative and
+every live-measured fact live in `session-logs/` (dated handoffs) + `.superpowers/sdd/progress.md` (SDD
+ledger); read the latest handoff for "what happened last."
 
 ---
 
@@ -120,9 +54,12 @@ This file is the checklist. Per-session narrative and every live-measured fact l
   - ✅ Runbook no-ops landed 2026-07-30: opening-runbook **A4** retired, **C2** Falcon embed line marked
     cosmetic, **C5** revert is now the NSG delete alone. There was never a Falcon step in the B9 runbook
     (the session-45 handoff claimed one; checked firsthand, it does not exist).
-  - ⬜ Public-repo honesty pass still owed on README + ARCHITECTURE (they present Falcon as live; add a
-    dated note that it was validated against a trial that ended 2026-07-28 and that the brake is
-    deliberately EDR-independent). Keep the integration documented — the independence is the better story.
+  - ✅ **Public-repo honesty pass DONE** (landed 2026-07-30, checkbox corrected 2026-08-10 after verifying
+    firsthand — it had been sitting `⬜` while already complete). The dated "validated against a trial that
+    ended 2026-07-28 / the brake is deliberately EDR-independent" note is present in root
+    [`README.md`](../../../README.md), [`ARCHITECTURE.md`](../ARCHITECTURE.md) and
+    [`infra/honeypot/README.md`](../README.md). The integration stays documented — the independence is the
+    better story.
   - Also gone: the human-fired `falcon-contain`, the fast-contain layer, the EDR detections feed, and the
     3 never-captured live-Falcon clips.
 - 🖥️ **VM power — the standing posture is now RUNNING, not parked** (Decision 1 superseded 2026-07-30).
