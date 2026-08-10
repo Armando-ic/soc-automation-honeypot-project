@@ -338,8 +338,17 @@ Adopted 2026-07-24 unless noted. Do not re-litigate the ones still standing.
     ```
     **Only a routable public IPv4 source is a real landing.** (Note the Security TA field names use
     underscores - `Logon_Process`, `Authentication_Package`, `Process_Name`. The Sysmon-style
-    `LogonProcessName` / `ProcessName` spellings silently return blank on this sourcetype.) A local API
-    validation shows `Logon_Process` = `Advapi`; a real RDP landing shows `NtLmSsp` or `User32`.
+    `LogonProcessName` / `ProcessName` spellings silently return blank on this sourcetype.)
+
+    **⚠️ CORRECTED 2026-08-10 - `Logon_Process` does NOT identify your own validations.** This runbook
+    previously claimed a local API validation shows `Logon_Process` = `Advapi`. **It does not.** Measured
+    live over 7 days: both operator `ValidateCredentials` checks (`2026-08-06 17:04:22.702` on
+    `Administrator` and `17:12:31.154` on `backup`, both from `fe80::9974:b38d:5108:1595`) show
+    **`NtLmSsp`** - identical to all nine external attacker validations. `Advapi` never appeared once.
+    `PrincipalContext.ValidateCredentials` performs a real *network* logon, so it authenticates through the
+    same NTLM path an attacker does. **The ONLY reliable discriminator is the link-local source address.**
+    What `Logon_Process` does separate cleanly is Type 3 (`NtLmSsp`) from an interactive Type 10 desktop
+    (`User32`) - useful, but it is a restatement of `Logon_Type`, not an independent signal.
   - **Do NOT "fix" this by filtering link-local or local sources out of the tripwire.** Same reasoning as
     never allowlisting logon types: an attacker who has landed can produce a locally-sourced logon during
     privilege escalation or lateral movement, and filtering it would blind you to genuine post-compromise
@@ -386,6 +395,27 @@ index=honeypot source="WinEventLog:Security" (EventCode=4778 OR EventCode=4779 O
 - **`0x3E7`** is the well-known **LOCAL SYSTEM** logon ID. Also not a session.
 - **A single RDP logon emits TWO adjacent real Logon_IDs differing by `0x20`** (e.g. `...1CF` / `...1EF`) -
   the standard/elevated linked-token pair. **One session, two IDs. Do not count it twice.**
+  Confirmed live 2026-08-10: the INC-2026-001 session shows `0x3089421CF` and `0x3089421EF`, exactly `0x20`
+  apart, at the identical timestamp `02:03:32.510`.
+
+> **🚨 `| where Logon_ID!="0x0"` BELONGS ONLY IN A SESSION-CORRELATION QUERY. IT SILENTLY DELETES EVERY
+> TYPE 3 LANDING.** Found the hard way 2026-08-10: that filter was lifted out of the INC-2026-001 appendix
+> (where it is correct - it feeds `stats ... BY Logon_ID`, and `0x0` is not a session) and dropped into a
+> *landing-detection* query. The result reported **2 events over 7 days** while a real external validation
+> was landing that same hour.
+>
+> **Mechanism: `Logon_ID` is a MULTIVALUE field.** Each row carries the Subject ID *and* the New Logon ID.
+> A Type 3 row is `{0x0, 0x3F450927D}`, so `!= "0x0"` throws the whole row away. A Type 10 row is
+> `{0x3E7, 0x3089421EF}` - no `0x0` - so it survives. That asymmetry is why the broken query still returned
+> the interactive session and looked like it was working.
+>
+> **For "did anyone get in", filter NOTHING and read `Logon_Type` instead:**
+> ```spl
+> index=honeypot source="WinEventLog:Security" EventCode=4624 user IN ("backup","Administrator") earliest=-7d
+> | eval src_ip=coalesce(src_ip, Source_Network_Address)
+> | table _time, src_ip, user, Logon_Type, Logon_ID, Logon_Process | sort - _time
+> ```
+> Live receipt: the filtered form returned **2** rows, this form returned **11** on identical data.
 
 **`4697` HAS A NOISE FLOOR OF 14 ON THIS HOST - do not read it as persistence.** Every interactive logon
 makes Windows create **14 per-user service instances** in a ~40ms burst (suffix `_<session-LUID>`):
@@ -409,7 +439,7 @@ service spawning it.
   session (Decision 1 superseded 2026-07-30). Deallocating is now a deliberate act, not the default: if you
   do park it, you re-run Phase A+B+C on the way back up and you eat the rediscovery lag below.
 
-### NEXT: Tier-1 concealment (USER-approved 2026-08-08, not yet executed)
+### NEXT: Tier-1 concealment (USER-approved 2026-08-08, plan refined + execution started 2026-08-10)
 
 **The hypothesis this tests.** INC-2026-001's operator opened **Task Manager twice** and left after 54
 seconds. Task Manager's process list shows **`Sysmon64.exe` and `splunkd.exe`** - a competent operator
@@ -423,19 +453,61 @@ second is at least as well supported by what they actually did.
 line-of-business software). Changing one variable keeps the next result comparable with INC-2026-001;
 changing several at once tells you nothing about which mattered.
 
-1. **Rename the Windows host** to something production-shaped (e.g. `FS-ACCT-01`, `TS-APP02`). Requires a
-   reboot. The Azure VM name is separate and can stay. **Ripple check before doing it:** `ComputerName` is
-   display-only in the B8 dashboard and in the Discord embed title, and the saved searches filter on
-   account not hostname, so nothing should break - but verify, do not assume.
-2. **Rename the Sysmon service, driver and binary** (Sysmon accepts custom service/driver names at
-   install). No loss of telemetry fidelity; removes the loudest tell in Task Manager.
-3. **Rename the Splunk forwarder service display name.**
+**Order matters — Sysmon first, host+reboot last.** Do them one at a time with a Phase B check in between,
+so a broken data plane is caught the moment it happens and attributed to the right change. The reboot at
+the end also re-validates that the renamed Sysmon service survives a boot.
 
-**AFTER any of this, re-run Phase B.** Renaming the agents is exactly the kind of change that can silently
-break the data plane, and a concealed honeypot that has stopped reporting is worse than an obvious one.
+**The plan, the ripple-check evidence and the checkbox tracker live in
+[`session-logs/TIER1-CONCEALMENT.md`](session-logs/TIER1-CONCEALMENT.md).** This section is the procedure.
+
+**Step 0 — Phase B baseline (before touching anything).** Run Phase B (B1 liveness + B2 capability). Both
+must be green. This is the control: if Phase B is red *after* a rename, this proves it was the rename and
+not a pre-existing fault.
+
+**Step 1 — rename the Sysmon service, driver and binary** to neutral names (Sysmon accepts custom
+service/driver names at install). No loss of telemetry fidelity, and it removes the loudest tell in Task
+Manager. **The event log channel does NOT change** — it stays `Microsoft-Windows-Sysmon/Operational`
+regardless of the binary/service/driver name, so `splunk-inputs.conf` still binds and no forwarder change
+is needed. ⚠️ **There is a brief telemetry-blind window** while you uninstall (`-u`) the old service and
+reinstall (`-i`) under the new name — on a live, actively-sprayed box the brake is blind for those seconds,
+so do this attended and move fast.
+
+**Step 2 — Phase B re-verify.** B1 + B2 green, the channel is still `Microsoft-Windows-Sysmon/Operational`,
+and events are flowing to `index=honeypot` under the new service name. A RED here means the reinstall broke
+the data plane: **STOP and fix it before going further.** Measured failure mode (2026-08-10): B1 read **0**
+while Security (4625) kept flowing, because the `-u`/`-i` dropped the **Splunk UF's per-channel subscription
+to the Sysmon channel** — its bookmark froze at the rename moment even though Sysmon kept logging and the
+channel persisted. **Fix: `Restart-Service SplunkForwarder` on the honeypot, then re-run B1** — the UF
+resumes from its bookmark and backfills the gap. (The Step-3 reboot also clears this, so it will not recur
+past that point.)
+
+**Step 3 — rename the Windows host to a value-neutral, production-shaped name (e.g. `FS-ACCT-01`,
+`APP-SRV-07`) + reboot.** The actual name chosen for this box is kept in the dated session handoff, out of
+this published runbook. Value-neutral advertises nothing, so a longer next visit isolates cleanly to "the
+instrumentation was hidden" rather than "the name looked valuable." **The Azure VM name stays `vm-honeypot-win`** — only the in-guest Windows
+computer name changes. **Ripple check (verified firsthand 2026-08-10, re-verify if the pipeline changed):**
+nothing in the live path filters on hostname. The brake feeder (`host_feed_spl`), both saved searches, all
+of Phase B, and the NSG deny rule are host-agnostic; `ComputerName` is a display-only `| table` column in
+the B8 dashboard and a fallback value in the Discord embed title. The Splunk `host` field *will* change
+(inputs.conf sets no `host =` stanza), and nothing filters on it. **Bonus:** the reboot terminates the
+resident disconnected intruder session (INC-2026-001 residual #1) and cleanly restarts the renamed Sysmon
+service.
+
+**Step 4 — Phase B re-verify + B4 tripwire liveness.** Phase B green again; both saved searches
+(`honeypot-weak-cred-logon`, `honeypot-any-logon`) Enabled with a populated Next Scheduled Time; and the
+Discord embed title now shows the new hostname.
+
+**NOT doing: the Splunk forwarder rename.** A display-name rename does not hide `splunkd.exe` from Task
+Manager's Processes/Details tabs (it only changes the Services-tab Description), and renaming the binary
+itself would break the UF's service path, recovery and upgrades. A Splunk UF is also unremarkable on a real
+production Windows server and arguably supports the cover story, so it is deliberately left alone.
 
 **Success criterion:** if the next operator stays materially longer with the box otherwise unchanged, the
 instrumentation was the tell and that is a publishable, properly-isolated finding.
+
+**Honest scope of what this buys.** Renaming Sysmon defeats a 54-second Task Manager glance — exactly the
+behaviour INC-2026-001 observed. It does **not** defeat `services.msc`, `fltmc` (the driver's altitude is
+still visible), or Event Viewer. Do not let the finding get overstated later.
 
 ### Expect a rediscovery lag on every power-on (measured 2026-07-27)
 
