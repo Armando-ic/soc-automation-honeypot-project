@@ -38,8 +38,21 @@ compromise of the operation and the event this whole build existed to capture. F
   unattended) is what made the capture possible at all; under the old rule the box would have been off.
 - **Residual:** the session was **disconnected, not logged off**, so it is resident and reconnectable, and
   the credential is burned across at least four actors.
-- **Still open:** the B9 decision — snapshot and tear down, or raise the box's apparent value and run
-  another window. Deliberately not decided.
+- **Persistence evidence was incomplete and re-verification caught it.** The first pass omitted
+  `EventCode=4697`; adding it surfaced **14 service installs** in the window. All 14 investigated and
+  benign — Windows **per-user service instances** created on every interactive logon. The conclusion held,
+  the evidence didn't. **Output is a baseline: this host emits exactly 14 × 4697 per interactive logon**,
+  so real signals are a count above 14, a binary outside `System32`, or a random-looking name.
+
+**▶ NEXT MOVE — TIER-1 CONCEALMENT (USER-approved 2026-08-08, NOT yet executed).** The operator opened
+**Task Manager twice**, which lists `Sysmon64.exe` and `splunkd.exe`, and the host is named
+**`vm-honeypot-win`**. "They saw the instrumentation" competes with "the box was empty" and is at least as
+well supported. Approved scope is **concealment only, no furnishing** — rename the Windows host, the
+Sysmon service/driver/binary, and the Splunk forwarder service, so exactly one variable changes and the
+next result stays comparable. **Re-run Phase B afterwards.** Full plan in the opening runbook's B8.
+
+- **Still open:** the B9 decision — snapshot and tear down, or keep running. Deliberately not decided;
+  Tier 1 assumes the box stays up.
 
 **Phase 5 — honeypot-opening (Part B, live op). Prior state before the intrusion, kept for continuity:
 THE BOX IS OPEN, FULLY RE-ARMED, AND UNDER ACTIVE SPRAY (as of 2026-07-30, session 46).** B7 complete and the catch-both expansion is fully live:
