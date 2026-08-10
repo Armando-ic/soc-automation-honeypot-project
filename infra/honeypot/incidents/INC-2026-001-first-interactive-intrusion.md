@@ -115,7 +115,9 @@ authentication, ahead of the interactive session being established.
 **Confirmed impact: none.** Every post-exploitation check returned zero.
 
 - **No account manipulation** — `4720 / 4722 / 4726 / 4728 / 4732` returned 0 events
-- **No persistence** — no scheduled tasks (`4698`), no service installs (`4697`)
+- **No persistence** — no scheduled tasks (`4698`). **`4697` returned 14 service installations and every
+  one was investigated and cleared**, see the note below. This is a correction: an earlier pass omitted
+  `4697` from the persistence query entirely and reported zero
 - **No file writes** attributable to the actor
 - **No outbound C2 or tool retrieval** — `/brake/feed-status` reported `max_distinct_dst: 0` across the window
 - **No data accessed** — the host holds none
@@ -199,9 +201,34 @@ index=honeypot sourcetype=XmlWinEventLog EventCode=1 earliest="08/08/2026:02:03:
 index=honeypot sourcetype=XmlWinEventLog EventCode=1 earliest="08/08/2026:02:03:00" latest=now ParentImage="*explorer.exe"
 | table _time, User, Image, CommandLine, ParentImage | sort _time
 
-# Persistence check - returned 0 events.
+# Persistence check. Account events and 4698 returned 0. 4697 returned 14 - see below.
 index=honeypot source="WinEventLog:Security" (EventCode=4720 OR EventCode=4722 OR EventCode=4726 OR EventCode=4728 OR EventCode=4732 OR EventCode=4697 OR EventCode=4698) earliest="08/08/2026:02:00:00"
+
+# Characterising the 14. Service_Name / Service_File_Name are the fields that matter here;
+# Target_Account_Name is empty on 4697 and tells you nothing.
+index=honeypot source="WinEventLog:Security" EventCode=4697 earliest="08/08/2026:02:00:00" latest="08/08/2026:02:10:00"
+| stats count BY Service_Name, Service_File_Name, Service_Start_Type
 ```
+
+### ⚠️ BASELINE: this host emits 14 × `4697` on EVERY interactive logon
+
+All 14 service installations in this incident fired in a **40-millisecond burst at 02:03:34**, between the
+Type 10 logon and `explorer.exe` loading. They are **Windows per-user service instances**, which the OS
+creates automatically for each interactive session. The `_308948f13` suffix is the session LUID:
+
+`CDPUserSvc` · `CaptureService` · `ConsentUxUserSvc` · `CredentialEnrollmentManagerUserSvc` ·
+`DeviceAssociationBrokerSvc` · `DevicePickerUserSvc` · `DevicesFlowUserSvc` · `PimIndexMaintenanceSvc` ·
+`PrintWorkflowUserSvc` · `UdkUserSvc` · `UnistoreSvc` · `UserDataSvc` · `WpnUserService` · `cbdhsvc`
+
+**Every one is benign, and here is how that was established rather than assumed:** each `Service_File_Name`
+is `C:\Windows\system32\svchost.exe` (or `CredentialEnrollmentManager.exe`), the Subject is `S-1-5-18`
+(LOCAL SYSTEM) with Logon ID `0x3E7`, `Service Account` is `LocalSystem`, and start types are demand or
+auto. `cbdhsvc` is the Clipboard User Service, consistent with the client-side clipboard redirection
+already evidenced by `rdpclip.exe`.
+
+**Treat 14 as the noise floor.** A persistence hunt on this host must compare against that baseline. The
+real signals are a **count above 14**, a **`Service_File_Name` outside `System32`**, or a
+**random-looking service name**. A hunt that flags all 14 will cry wolf on every single logon.
 
 **Scale context for the same period:** 5,599 wrong-password attempts against the bait account in 24 hours
 (~233/hour), plus 566 attempts against usernames that do not exist. Account lockout was disabled

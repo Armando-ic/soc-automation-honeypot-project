@@ -387,6 +387,16 @@ index=honeypot source="WinEventLog:Security" (EventCode=4778 OR EventCode=4779 O
 - **A single RDP logon emits TWO adjacent real Logon_IDs differing by `0x20`** (e.g. `...1CF` / `...1EF`) -
   the standard/elevated linked-token pair. **One session, two IDs. Do not count it twice.**
 
+**`4697` HAS A NOISE FLOOR OF 14 ON THIS HOST - do not read it as persistence.** Every interactive logon
+makes Windows create **14 per-user service instances** in a ~40ms burst (suffix `_<session-LUID>`):
+`CDPUserSvc`, `cbdhsvc` (clipboard), `WpnUserService`, `UnistoreSvc`, `DevicesFlowUserSvc`,
+`PrintWorkflowUserSvc` and the rest. All are `svchost.exe` under `System32`, Subject `S-1-5-18`, Logon ID
+`0x3E7`. **The real signals are a count ABOVE 14, a `Service_File_Name` outside `System32`, or a
+random-looking service name.** Characterise with `Service_Name`/`Service_File_Name` - `Target_Account_Name`
+is empty on 4697 and tells you nothing. **Also: include `4697` in persistence hunts at all.** The first
+pass over INC-2026-001 omitted it and reported zero persistence; the conclusion happened to be right, but
+the evidence was not.
+
 **When hunting, do NOT blanket-filter `NT AUTHORITY\SYSTEM`.** Privilege escalation and service installs
 *run as* SYSTEM, so filtering it hides the thing you are looking for. Split first, filter never:
 ```spl
@@ -398,6 +408,34 @@ service spawning it.
 - No landing by the end of an attended window -> **leave the box running** and pick the watch back up next
   session (Decision 1 superseded 2026-07-30). Deallocating is now a deliberate act, not the default: if you
   do park it, you re-run Phase A+B+C on the way back up and you eat the rediscovery lag below.
+
+### NEXT: Tier-1 concealment (USER-approved 2026-08-08, not yet executed)
+
+**The hypothesis this tests.** INC-2026-001's operator opened **Task Manager twice** and left after 54
+seconds. Task Manager's process list shows **`Sysmon64.exe` and `splunkd.exe`** - a competent operator
+seeing a Sysmon driver plus a Splunk forwarder knows the host is monitored and quite possibly a honeypot.
+On top of that the machine is literally named **`vm-honeypot-win`**, which appears in every process-owner
+string, in `This PC`, and in the RDP client title bar. **"They left because the box was empty" and "they
+left because they saw the instrumentation" are different explanations with different fixes**, and the
+second is at least as well supported by what they actually did.
+
+**Scope: concealment ONLY. Do not furnish the box** (no planted documents, no fake RDP history, no
+line-of-business software). Changing one variable keeps the next result comparable with INC-2026-001;
+changing several at once tells you nothing about which mattered.
+
+1. **Rename the Windows host** to something production-shaped (e.g. `FS-ACCT-01`, `TS-APP02`). Requires a
+   reboot. The Azure VM name is separate and can stay. **Ripple check before doing it:** `ComputerName` is
+   display-only in the B8 dashboard and in the Discord embed title, and the saved searches filter on
+   account not hostname, so nothing should break - but verify, do not assume.
+2. **Rename the Sysmon service, driver and binary** (Sysmon accepts custom service/driver names at
+   install). No loss of telemetry fidelity; removes the loudest tell in Task Manager.
+3. **Rename the Splunk forwarder service display name.**
+
+**AFTER any of this, re-run Phase B.** Renaming the agents is exactly the kind of change that can silently
+break the data plane, and a concealed honeypot that has stopped reporting is worse than an obvious one.
+
+**Success criterion:** if the next operator stays materially longer with the box otherwise unchanged, the
+instrumentation was the tell and that is a publishable, properly-isolated finding.
 
 ### Expect a rediscovery lag on every power-on (measured 2026-07-27)
 
