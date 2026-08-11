@@ -189,6 +189,15 @@ reset` for `honeypot-brake-sp`, update `AZURE_CLIENT_SECRET` in the box `.env`, 
 
 Adopted 2026-07-24 unless noted. Do not re-litigate the ones still standing.
 
+- **B9 teardown - DECIDED 2026-08-11: NO snapshot-and-teardown. The box stays live.** This question had been
+  deliberately left open since B8 was achieved, through two confirmed interactive intrusions
+  ([INC-2026-001](incidents/INC-2026-001-first-interactive-intrusion.md),
+  [INC-2026-002](incidents/INC-2026-002-credential-handoff-intrusion.md)), both zero-impact. The operation
+  continues with the credential burned, the concealment in place and the watch running. **The B9 runbook
+  stays maintained as a rehearsed capability, not a queued task** - see
+  [`b9-teardown-runbook.md`](b9-teardown-runbook.md). Consequence to keep in view: the SOC boxes'
+  auto-shutdown schedules must stay OFF and the credit burn is continuous, both unchanged from Decision 1.
+
 - **Decision 1 - deallocate-when-unattended: SUPERSEDED 2026-07-30.** The honeypot now **stays running
   between sessions**. The original rule (deallocate whenever nobody is attending) turned out to work
   directly against the goal: a multi-day gap prunes the box off the botnet target lists, so every power-on
@@ -382,6 +391,26 @@ Measured 2026-08-08: four distinct external actors used the same credential insi
 nothing but Type 3 validations lasting 0.0s; one escalated to Type 10, stayed **54 seconds**, opened Task
 Manager twice, and left. Full write-up in [`incidents/INC-2026-001-first-interactive-intrusion.md`](incidents/INC-2026-001-first-interactive-intrusion.md).
 
+Measured again 2026-08-11: a fifth actor, **38.9 seconds**, Task Manager twice, same disconnect-not-logoff
+ending - see [`incidents/INC-2026-002-credential-handoff-intrusion.md`](incidents/INC-2026-002-credential-handoff-intrusion.md).
+**The two entry sequences are near-identical** (2× Type 3 seconds apart → Type 10 six to seven seconds
+later → clipboard redirection on → shell in <4s → Task Manager ×2 via `explorer.exe` → `4779`). Treat that
+shape as the standing signature of a hands-on access triage.
+
+**`4648` fires once per interactive intrusion**, at the same instant as the Type 10 - the RDP client
+supplying explicit credentials. Present in both incidents and worth carrying in the landing query as a
+confirmatory signal:
+```spl
+index=honeypot source="WinEventLog:Security" (EventCode=4624 OR EventCode=4648) user IN ("backup","Administrator") earliest=-24h
+| eval src_ip=coalesce(src_ip, Source_Network_Address)
+| table _time, EventCode, src_ip, user, Logon_Type, Logon_ID, Logon_Process | sort - _time
+```
+
+**Neither interactive actor ever guessed a password on this host** (30-day `4625` check: zero for
+INC-2026-002's address; one for INC-2026-001's, dated *after* its session). **Access addresses are separate
+from spray addresses** - so "this IP never sprayed" is NOT evidence that a logon is benign. Check
+`Logon_Type`, not spray history.
+
 **`4779` IS A DISCONNECT, NOT A LOGOFF.** Closing an RDP window leaves the session **resident and
 reconnectable**, and a logon/logoff correlation will report it as `OPEN` indefinitely - the 54-second visit
 above read as `OPEN` for about 15 hours. **Always check 4778/4779 before concluding a session is live:**
@@ -393,10 +422,13 @@ index=honeypot source="WinEventLog:Security" (EventCode=4778 OR EventCode=4779 O
 **Three `Logon_ID` extraction traps** - a session-correlation query is wrong without all three:
 - **`0x0`** is the *Subject* logon ID on a network logon, not a session. Filter it: `| where Logon_ID!="0x0"`.
 - **`0x3E7`** is the well-known **LOCAL SYSTEM** logon ID. Also not a session.
-- **A single RDP logon emits TWO adjacent real Logon_IDs differing by `0x20`** (e.g. `...1CF` / `...1EF`) -
-  the standard/elevated linked-token pair. **One session, two IDs. Do not count it twice.**
-  Confirmed live 2026-08-10: the INC-2026-001 session shows `0x3089421CF` and `0x3089421EF`, exactly `0x20`
-  apart, at the identical timestamp `02:03:32.510`.
+- **A single RDP logon emits TWO adjacent real Logon_IDs** - the standard/elevated linked-token pair.
+  **One session, two IDs. Do not count it twice.**
+  > ⚠️ **CORRECTED 2026-08-11: the delta is NOT a fixed `0x20`.** INC-2026-001 showed `0x3089421CF` /
+  > `0x3089421EF`, exactly `0x20` apart, and that got written down as a rule. INC-2026-002 shows
+  > `0x39283A55` / `0x39283A36` - **`0x1F` apart**. One sample is not a constant.
+  > **The reliable test is: two adjacent Logon_IDs at an IDENTICAL timestamp with identical source, account,
+  > `Logon_Type` and `Logon_Process`.** Match on the timestamp, not on arithmetic.
 
 > **🚨 `| where Logon_ID!="0x0"` BELONGS ONLY IN A SESSION-CORRELATION QUERY. IT SILENTLY DELETES EVERY
 > TYPE 3 LANDING.** Found the hard way 2026-08-10: that filter was lifted out of the INC-2026-001 appendix
@@ -416,6 +448,34 @@ index=honeypot source="WinEventLog:Security" (EventCode=4778 OR EventCode=4779 O
 > | table _time, src_ip, user, Logon_Type, Logon_ID, Logon_Process | sort - _time
 > ```
 > Live receipt: the filtered form returned **2** rows, this form returned **11** on identical data.
+
+> **🚨 DO NOT FILTER SYSMON EVENT CODES ON `user`. IT RETURNS A CONFIDENT ZERO.** Found the hard way
+> 2026-08-11. There are **two distinct fields** on Sysmon data: lowercase **`user`** (normalised, bare
+> account name) and capital **`User`** (raw Sysmon, `HOST\account`). The lowercase alias is populated on
+> **`EventCode=1`** but **NOT on `3` / `11` / `22`**, so a filter like `user="*Administrator"` on the
+> network/file/DNS codes matches nothing and Splunk reports **`0 events`** with no error.
+>
+> Live receipt: `(EventCode=3 OR 11 OR 22) user="*Administrator"` over 24h returned **0**. The same window
+> unfiltered returned **7,964** (EID3 7,853 / EID22 72 / EID11 39).
+>
+> **Procedure: run an unfiltered `| stats count BY EventCode` control FIRST** to prove the events exist,
+> then window by time and put `User` in the `| table` as a **displayed column** rather than filtering on it:
+> ```spl
+> index=honeypot sourcetype=XmlWinEventLog (EventCode=3 OR EventCode=11 OR EventCode=22) earliest=-24h
+> | stats count BY EventCode
+> index=honeypot sourcetype=XmlWinEventLog (EventCode=3 OR EventCode=11 OR EventCode=22) earliest="<start>" latest="<end>"
+> | table _time, EventCode, User, Image, DestinationIp, DestinationPort, TargetFilename, QueryName | sort _time
+> ```
+> **This is the same failure family as the `Logon_ID` trap above and the Security-TA underscore trap: a
+> filter built on an assumed field name deletes the evidence and looks like a clean result.** Filter nothing
+> until you have seen the field.
+
+> **⚠️ LOW-RATE EVENT CODES CANNOT CARRY A NEGATIVE OVER A SHORT WINDOW.** This host emits roughly **39 ×
+> `EventCode=11`** and **72 × `EventCode=22`** per 24 hours, so the *expected* count inside a 2-minute
+> intrusion window is **0.05 and 0.10**. Zero there is what an idle box looks like and proves close to
+> nothing - say "no file or DNS activity in a window too short to be evidence", never "they touched no
+> files". `EventCode=3` at ~7,850/24h **is** dense enough to carry the negative, and the brake's
+> `max_distinct_dst` corroborates it independently.
 
 **`4697` HAS A NOISE FLOOR OF 14 ON THIS HOST - do not read it as persistence.** Every interactive logon
 makes Windows create **14 per-user service instances** in a ~40ms burst (suffix `_<session-LUID>`):
@@ -439,7 +499,7 @@ service spawning it.
   session (Decision 1 superseded 2026-07-30). Deallocating is now a deliberate act, not the default: if you
   do park it, you re-run Phase A+B+C on the way back up and you eat the rediscovery lag below.
 
-### NEXT: Tier-1 concealment (USER-approved 2026-08-08, plan refined + execution started 2026-08-10)
+### Tier-1 concealment (USER-approved 2026-08-08, executed + verified 2026-08-10) — the procedure
 
 **The hypothesis this tests.** INC-2026-001's operator opened **Task Manager twice** and left after 54
 seconds. Task Manager's process list shows **`Sysmon64.exe` and `splunkd.exe`** - a competent operator

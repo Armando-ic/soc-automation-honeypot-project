@@ -7,11 +7,55 @@ checklist so that the "read this first" page can change every session without ch
 - Active Tier-1 concealment plan + tracker: [`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md)
 - Per-session narrative + every live-measured fact: `session-logs/` dated handoffs + `.superpowers/sdd/progress.md`
 
-**Last updated:** 2026-08-10
+**Last updated:** 2026-08-11
 
 ---
 
-## 🔴 THE BOX WAS BROKEN INTO — 2026-08-08 02:03:32 UTC. B8 CAPTURE ACHIEVED.
+## 🔴 SECOND INTERACTIVE INTRUSION — 2026-08-11 08:55:10 UTC. THE CREDENTIAL WAS HANDED OFF.
+
+**A fifth external actor (`185.180.222.178`) opened a Logon Type 10 desktop session, stayed 38.9 seconds,
+opened Task Manager twice, and disconnected. Zero impact.** Full write-up:
+[`INC-2026-002`](../incidents/INC-2026-002-credential-handoff-intrusion.md).
+
+**The headline is not the intrusion, it is where the credential came from.** `45.142.193.145` — the actor
+that originally cracked this password on 2026-08-06 — re-validated it at 08:51:27, and **3m34s later a
+completely different address logged in**. That address has **zero failed logons across 30 days**; it arrived
+already holding the credential. Neither interactive actor across both incidents ever guessed a password
+here. **The ~15,000 guesses this host absorbed came from entirely separate infrastructure.** Mapped as
+**T1650 Acquire Access**.
+
+- **The two sessions replicate each other almost exactly** — 2× Type 3 validation seconds apart → Type 10 →
+  clipboard redirection on → shell in <4s → Task Manager twice via `explorer.exe` → disconnect without
+  logging off. Two independent actors, three days apart, same ~40-second routine. That indicates a
+  **standardised access-triage procedure and probably shared tooling**, and it is a stronger finding than
+  either session alone.
+- **Zero impact, verified:** 0 events across `4720/4722/4726/4728/4732`; `4697` exactly **14** (the
+  documented noise floor) in a 32 ms burst; the lone `4698` characterised as a Windows Defender scan task
+  from operator maintenance on 08-10; **no outbound network at all** (8 × `EventCode=3`, all inbound RDP,
+  corroborated by the brake's `max_distinct_dst:1`); NSG verified afterwards still clean 5-rule baseline,
+  **no deny residue — the brake correctly never fired.**
+- **Residual:** disconnected, not logged off, so **resident and reconnectable**. Credential now burned
+  across **at least five actors** and being actively re-validated and traded.
+
+**▶ TIER-1 RESULT: NULL.** This was the first landing since the instrumentation was disguised, and dwell went
+**down** (38.9s vs 54.1s). "They left because they saw the instrumentation" is **not supported**. Honest
+limit: n=1 vs n=1, so the defensible claim is the *absence of lengthening*, not that concealment hurt. Full
+analysis + the phase-by-phase table: [`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md).
+
+**▶ NEXT LEVER (USER's call, not started): Tier 2 — furnishing.** The session surfaced a better candidate for
+the real tell: **Server Manager auto-launches and shows a server with no roles**, at +7.6s, before Task
+Manager was ever opened. That says "worthless box" far louder than a process list. Tier 2 stays out of scope
+until explicitly chosen.
+
+### ✅ B9 DECIDED (USER, 2026-08-11): NO snapshot-and-teardown. The box stays live.
+
+The long-open B9 question is **closed**. The host keeps running with the burned credential, the concealment
+in place, and the watch continuing. Every prior "if the box is ever parked" caveat is now conditional on a
+future decision rather than a pending one.
+
+---
+
+## 🔴 FIRST INTRUSION — 2026-08-08 02:03:32 UTC. B8 CAPTURE ACHIEVED.
 
 **A human operator established an interactive RDP session (Logon Type 10) from `113.203.61.61`, stayed
 54 seconds, opened Task Manager twice, and disconnected.** That is the first genuine hands-on-keyboard
@@ -39,14 +83,14 @@ in `5634d1b..fd039a7` (fast-forward, no force, scrub-clean at both layers). **Pu
   the evidence didn't. **Output is a baseline: this host emits exactly 14 × 4697 per interactive logon**,
   so real signals are a count above 14, a binary outside `System32`, or a random-looking name.
 
-**▶ NEXT MOVE — Tier-1 concealment (execution IN PROGRESS 2026-08-10, USER-approved 2026-08-08).** The
-operator opened Task Manager twice, which lists `Sysmon64.exe` and `splunkd.exe`, and the host is named
-`vm-honeypot-win`. "They saw the instrumentation" competes with "the box was empty" and is at least as well
-supported, so we conceal the instrumentation and re-run the experiment. **Full plan + checkbox tracker:
+**✅ TIER-1 CONCEALMENT EXECUTED AND VERIFIED 2026-08-10 (USER-approved 2026-08-08) — and its result is
+now in (NULL, see the 2026-08-11 section above).** This operator opened Task Manager twice, which listed
+`Sysmon64.exe` and `splunkd.exe`, and the host was named `vm-honeypot-win`. "They saw the instrumentation"
+competed with "the box was empty" and was at least as well supported, so we concealed the instrumentation
+and re-ran the experiment. Sysmon (service, driver and binary) and the Windows host were renamed, the data
+plane was verified intact end-to-end, and the reboot cleared this intruder's resident session. **Exactly one
+variable changed. Full plan, ripple-check evidence, the ✅ execution tracker and the result:
 [`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md).**
-
-- **Still open:** the B9 decision — snapshot and tear down, or keep running. Deliberately not decided;
-  Tier 1 assumes the box stays up.
 
 ---
 

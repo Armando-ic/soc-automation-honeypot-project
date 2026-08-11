@@ -5,15 +5,15 @@ Phases 0-5. It's for both of us. When we finish something we check it off here. 
 now", read [`CURRENT-STATE.md`](CURRENT-STATE.md) instead; this file holds the durable phase record and
 should change slowly. Keep it current as work lands.
 
-**Last updated:** 2026-08-10
+**Last updated:** 2026-08-11
 
 **Companion docs (read these for detail, this file is the index):**
 - ▶ **Live state: [`CURRENT-STATE.md`](CURRENT-STATE.md)** — the situational snapshot, start here each session
-- ▶ **Active experiment: [`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md)** — Tier-1 plan + ⬜ execution tracker
+- ▶ **Active experiment: [`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md)** — Tier-1 plan + ✅ execution tracker (executed 2026-08-10; now a passive watch)
 - Build state: [`HANDOFF.md`](HANDOFF.md) (canonical 🟢 0D-2 block)
 - Plain-language walkthrough: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- Latest session handoff: [`2026-08-08-SESSION47-FIRST-INTRUSION-CAPTURED-DOCUMENTED-TIER1-NEXT-HANDOFF.md`](2026-08-08-SESSION47-FIRST-INTRUSION-CAPTURED-DOCUMENTED-TIER1-NEXT-HANDOFF.md) (honeypot: **the box was broken into**, incident documented, Tier-1 concealment queued) · [`2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md`](2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md) (/lint track)
-- Next-instance kickoff prompts (two independent tracks): [`2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md`](2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md) (`/lint` SHIPPED public + 2 triage buckets done; 2 buckets remain) · [`2026-08-08-SESSION48-HANDOFF-PROMPT.md`](2026-08-08-SESSION48-HANDOFF-PROMPT.md) (honeypot live op: Tier-1 concealment, then resume the watch)
+- Latest session handoff: [`2026-08-10-SESSION48-TIER1-CONCEALMENT-COMPLETE-WATCHING-HANDOFF.md`](2026-08-10-SESSION48-TIER1-CONCEALMENT-COMPLETE-WATCHING-HANDOFF.md) (honeypot: **Tier-1 concealment executed + verified**, now a passive dwell-time watch) · [`2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md`](2026-07-22-DOC-LINT-SHIPPED-TRIAGE-B1-DONE-HANDOFF.md) (/lint track)
+- Next-instance kickoff prompts (two independent tracks): [`2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md`](2026-07-22-DOC-LINT-TRIAGE-CONTINUE-KICKOFF-PROMPT.md) (`/lint` SHIPPED public + 2 triage buckets done; 2 buckets remain) · [`2026-08-10-SESSION49-HANDOFF-PROMPT.md`](2026-08-10-SESSION49-HANDOFF-PROMPT.md) (honeypot live op: the passive dwell-time watch)
 - Live-op runbooks (hands-on, copy-paste): [`honeypot-opening-runbook.md`](../honeypot-opening-runbook.md) (re-arm → open → monitor) + [`b9-teardown-runbook.md`](../b9-teardown-runbook.md) (teardown)
 - Spec + plans live in the PARENT workspace `docs/superpowers/` (not a git repo)
 
@@ -29,12 +29,16 @@ underneath it. Two dedicated files now own it:
 | Read this | For |
 |---|---|
 | **[`CURRENT-STATE.md`](CURRENT-STATE.md)** | **The situational snapshot — start here.** What just happened, what's live, what's residual |
-| **[`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md)** | The **active experiment** — Tier-1 plan, ripple-check evidence, and the ⬜ execution tracker |
+| **[`TIER1-CONCEALMENT.md`](TIER1-CONCEALMENT.md)** | The **active experiment** — Tier-1 plan, ripple-check evidence, and the ✅ execution tracker |
 
-**One-line status (2026-08-10):** 🔴 **the box was broken into** on 2026-08-08 (Logon Type 10 from
-`113.203.61.61`, 54 seconds, **zero impact**) — see
-[`INC-2026-001`](../incidents/INC-2026-001-first-interactive-intrusion.md), now **public** at tip
-`fd039a7`. ▶ **Next move: Tier-1 concealment, execution in progress.** B9 teardown deliberately undecided.
+**One-line status (2026-08-11):** 🔴 **two confirmed interactive intrusions, both zero impact.**
+[`INC-2026-001`](../incidents/INC-2026-001-first-interactive-intrusion.md) 2026-08-08 (`113.203.61.61`,
+54s, public at tip `fd039a7`) and
+[`INC-2026-002`](../incidents/INC-2026-002-credential-handoff-intrusion.md) 2026-08-11 (`185.180.222.178`,
+38.9s) — the second caught the **credential being handed off** between actors (T1650). ✅ **Tier-1
+concealment executed 2026-08-10, result NULL** (dwell went down, not up; n=1 vs n=1). ✅ **B9 DECIDED
+2026-08-11: no teardown, the box stays live.** ▶ Next lever under consideration: **Tier 2 (furnishing)**,
+USER's call, not started.
 
 **This file is the phase index** — the deliverable checklist across Phases 0-5. Per-session narrative and
 every live-measured fact live in `session-logs/` (dated handoffs) + `.superpowers/sdd/progress.md` (SDD

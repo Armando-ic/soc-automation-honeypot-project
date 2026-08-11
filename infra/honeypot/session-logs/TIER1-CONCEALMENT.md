@@ -9,8 +9,9 @@ self-contained artifact.
 - **Copy-paste procedure:** [`honeypot-opening-runbook.md`](../honeypot-opening-runbook.md) → **B8 → "NEXT: Tier-1 concealment"**
 - The incident that motivated it: [`INC-2026-001`](../incidents/INC-2026-001-first-interactive-intrusion.md)
 
-**Status:** approved 2026-08-08 · executed 2026-08-10 · **concealment IN PLACE — now watching for the next landing**
-**Last updated:** 2026-08-10
+**Status:** approved 2026-08-08 · executed 2026-08-10 · **RESULT 2026-08-11: NULL — the next operator stayed
+38.9s vs the 54.1s baseline. The hypothesis is not supported.** Concealment stays in place; see "The result".
+**Last updated:** 2026-08-11
 
 ---
 
@@ -41,8 +42,8 @@ This supersedes the original three-step summary.
 
 | # | Change | Status |
 |---|---|---|
-| 1 | **Windows host → `<neutral-hostname>`** — value-neutral and production-shaped. The **Azure VM name stays `vm-honeypot-win`**; only the in-guest computer name changes | In plan |
-| 2 | **Sysmon service, driver and binary → neutral names** — removes the loudest tell in Task Manager, no telemetry fidelity lost | In plan |
+| 1 | **Windows host → `<neutral-hostname>`** — value-neutral and production-shaped. The **Azure VM name stays `vm-honeypot-win`**; only the in-guest computer name changes | ✅ Done 2026-08-10 |
+| 2 | **Sysmon service, driver and binary → neutral names** — removes the loudest tell in Task Manager, no telemetry fidelity lost | ✅ Done 2026-08-10 |
 | 3 | ~~Rename the Splunk forwarder service display name~~ | **DROPPED** |
 
 **Why value-neutral and not value-suggesting.** A value-suggesting name (e.g. an accounting file server) would confound
@@ -83,7 +84,7 @@ The runbook says verify rather than assume. This was traced in the repo before a
    [TrustedSec SysmonCommunityGuide](https://github.com/trustedsec/SysmonCommunityGuide/blob/master/chapters/install_windows.md).
    **Still verified live after the reinstall rather than trusted on the doc.**
 
-## ⬜ Execution tracker
+## ✅ Execution tracker
 
 **One variable at a time, Phase B between each.** Detail and copy-paste commands live in the runbook; this
 is the state tracker, not the procedure.
@@ -114,13 +115,62 @@ is the state tracker, not the procedure.
   shows the predicted split — **`<neutral-hostname>` 2194 / `vm-honeypot-win` 80** at the boundary — the `host` field
   flipped as expected, nothing gated on it, data path fully intact. B4 unaffected: the saved searches live
   on the untouched search head, and the alarm fired live at **15:28 today** on `216.225.207.214`.
-- 🟢 **5. Baselines recorded; dwell-time watch is now PASSIVE.** New state: host `<neutral-hostname>`, Sysmon renamed,
-  service description neutralized, no Sysmon-named artifacts. **Success criterion = the next operator dwells
-  materially longer than 54s with the box otherwise unchanged.** Nothing to execute — just watch. A null
-  result (another sub-minute visit) is itself evidence for "the box was empty" and points at Tier 2.
+- ✅ **5. Watch CLOSED 2026-08-11 — a landing arrived, and the experiment returned a null.** State at the
+  moment of the landing: host `<neutral-hostname>`, Sysmon renamed, service description neutralized, no
+  Sysmon-named artifacts, data plane green. The next operator dwelled **38.9s against the 54.1s baseline**.
+  Full incident: [`INC-2026-002`](../incidents/INC-2026-002-credential-handoff-intrusion.md).
 
 **Sysmon first, host+reboot last** on purpose: the reboot re-validates that the Sysmon reinstall survives a
 boot, and a broken reinstall is caught at step 2 before anything else is disturbed.
+
+## 📊 The result — NULL (2026-08-11)
+
+**A landing arrived roughly 15 hours after the concealment went in. The operator stayed 38.9 seconds. The
+baseline was 54.1. The hypothesis is not supported.**
+
+Full incident write-up: [`INC-2026-002`](../incidents/INC-2026-002-credential-handoff-intrusion.md).
+
+| Phase | INC-2026-001 (instrumentation visible) | INC-2026-002 (instrumentation disguised) |
+|---|---|---|
+| Logon → shell (`explorer.exe`) | 3.95s | 3.67s |
+| Logon → first Task Manager | 15.07s | **24.27s** |
+| **First Task Manager → disconnect** | **39.04s** | **14.61s** |
+| **Total dwell** | **54.11s** | **38.88s** |
+
+The sharpest measure is the third row, because it controls for shell-load time: **after opening Task Manager
+on the disguised host, this operator left 2.7× faster than the one who saw `Sysmon64.exe` in plain sight.**
+
+### What this does and does not license us to say
+
+- ✅ **Defensible:** concealing the instrumentation produced **no lengthening of dwell time**. The
+  pre-registered success criterion was not met.
+- ❌ **Not defensible:** "concealment made it worse." This is **n=1 against n=1** — two different actors on
+  different days. A 15-second difference sits well inside the variation you would expect between two people.
+- ✅ **Defensible and more interesting than the original question:** the two sessions **replicated each
+  other almost exactly** — two Type 3 validations seconds apart, then a Type 10, clipboard redirection on,
+  shell in under four seconds, Task Manager twice via the shell, disconnect without logging off. Two
+  independent actors three days apart running the same ~40-second routine indicates a **standardised
+  access-triage procedure and probably shared tooling.**
+- ✅ **Defensible:** the credential was **handed off, not re-cracked**. Neither interactive actor ever
+  guessed a password on this host, and the original cracker re-validated the credential 3m34s before a
+  different address used it.
+
+### The better candidate for the real tell
+
+**Server Manager auto-launches on this host and presents a server with no roles and nothing configured** — it
+fired at +7.6s, before Task Manager was ever opened, and it explains why this operator took nine seconds
+longer to reach Task Manager than the last one. An empty Server Manager states "this box is worthless" far
+more loudly than a process list does.
+
+That points at **Tier 2 (furnishing)** as the next lever, exactly as the pre-registered decision rule said a
+null would. **Tier 2 remains out of scope until the USER explicitly chooses it.**
+
+### What the experiment was still worth
+
+The design held up even though the hypothesis did not. One variable moved, the control was measured first,
+the data plane was gated between every change, and the result is interpretable precisely *because* nothing
+else changed. A null from a clean experiment beats a positive from a muddy one — and the run produced two
+findings (the replication and the handoff) that are stronger than the thing it set out to measure.
 
 ## Known costs and honest limits
 
@@ -147,5 +197,19 @@ boot, and a broken reinstall is caught at step 2 before anything else is disturb
   renaming `Sysmon64.exe` → `<neutral-service>.exe` renames the service to `<neutral-service>`. The driver is renamed
   separately with `-i -d <name>` (8-char max) → `<neutral-driver>`. There is no in-place rename: it is uninstall
   (`-u force`) then reinstall. The event channel stays `Microsoft-Windows-Sysmon/Operational` throughout.
-- **A null result is still a result.** If the next operator also leaves fast, that is evidence for "the box
-  was empty" and points at Tier 2 as the next lever — which remains out of scope until deliberately chosen.
+- **A null result is still a result** — and that is what came back. See "The result" above.
+- **🔒 THE RENAME CREATED A NEW LEAK SURFACE INSIDE THE TELEMETRY. This one was not anticipated.** The
+  concealment identity is not merely a set of strings to keep out of prose — **it is now written into
+  `index=honeypot` itself**, from **2026-08-10 ~17:58 UTC** onward:
+  - **`4697` × 2 at 17:58:42** — the Sysmon reinstall, carrying the new service and driver names together
+    with their full binary paths in `Service_Name` / `Service_File_Name`.
+  - **`4698` at 18:39:59** — a Windows Defender scheduled-scan task whose Subject `Account Name` is the
+    **renamed machine account**, with the new hostname repeated inside the embedded task XML.
+  - **The Splunk `host` field** on every event after the reboot, plus the `User` field on every Sysmon
+    `EventCode=1` (`<neutral-hostname>\Administrator`).
+
+  **Consequence: any screenshot, dashboard export, Phase-5 fixture or red-team corpus sample drawn from
+  `index=honeypot` covering that window will leak the concealment identity.** A landed operator who found
+  the public repo could use it to confirm the host is the honeypot — which is precisely the risk the
+  placeholders exist to prevent. **Redact before publishing anything sourced from this index after
+  2026-08-10 17:58.** Treat the index window as part of the sensitive list, not just the strings.
